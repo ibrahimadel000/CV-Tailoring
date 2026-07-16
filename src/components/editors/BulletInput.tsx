@@ -68,8 +68,8 @@ export function BulletInput({
       </div>
 
       {!isLocked && (
-        <Button variant="ghost" onClick={onRemove} className="text-[var(--color-danger)] hover:text-[var(--color-danger)]/80 mt-1 p-2" title="Delete bullet">
-          <Trash2 size={18} />
+        <Button variant="danger" onClick={onRemove} className="mt-1 p-2" title="Delete bullet">
+          <Trash2 size={16} />
         </Button>
       )}
     </div>

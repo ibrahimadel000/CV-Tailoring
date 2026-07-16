@@ -18,9 +18,8 @@ export function ExperienceCardEditor() {
   if (!experience) return null;
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold">{experience.title}</h3>
+    <div>
+      <div className="flex items-center justify-end mb-4">
         {!experience.isLocked && (
           <Button variant="secondary" size="sm" onClick={addExperience}>
             <Plus size={16} /> Add Role
@@ -67,8 +66,8 @@ export function ExperienceCardEditor() {
                 />
               </div>
               {!experience.isLocked && (
-                <Button variant="ghost" onClick={() => removeExperience(exp.id)} className="text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 p-2">
-                  <Trash2 size={20} />
+                <Button variant="danger" onClick={() => removeExperience(exp.id)} className="p-2">
+                  <Trash2 size={18} />
                 </Button>
               )}
             </div>

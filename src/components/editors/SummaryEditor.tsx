@@ -17,12 +17,12 @@ export function SummaryEditor() {
   if (!summary) return null;
 
   return (
-    <Card locked={summary.isLocked} className="mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">{summary.title}</h3>
+    <div className={`w-full relative ${summary.isLocked ? 'opacity-60 cursor-not-allowed' : ''}`}>
+      <div className="flex justify-end mb-2">
         {summary.isLocked && (
-          <span className="text-xs font-medium px-2 py-1 bg-[oklch(0.25_0.06_155)] text-[var(--color-success)] rounded-full border border-[oklch(0.72_0.18_155/0.2)]">
-            Verified
+          <span className="text-xs font-semibold tracking-wide px-3 py-1 rounded-full"
+            style={{ background: 'rgba(34,211,238,0.1)', color: '#8aebff', border: '1px solid rgba(34,211,238,0.25)' }}>
+            ✓ Verified
           </span>
         )}
       </div>
@@ -32,9 +32,9 @@ export function SummaryEditor() {
         onChange={(e) => updateSummary(e.target.value)}
         disabled={summary.isLocked}
         placeholder="Write a brief professional summary..."
-        className={`input input--textarea w-full ${summary.isLocked ? 'opacity-60 cursor-not-allowed bg-transparent border-transparent px-0 resize-none' : ''}`}
+        className={`w-full bg-[#18181B] border border-black/20 rounded-xl p-4 text-slate-300 font-body-md text-[15px] resize-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all outline-none placeholder:text-slate-500 shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)] ${summary.isLocked ? 'bg-transparent border-transparent px-0 resize-none' : ''}`}
         rows={3}
       />
-    </Card>
+    </div>
   );
 }

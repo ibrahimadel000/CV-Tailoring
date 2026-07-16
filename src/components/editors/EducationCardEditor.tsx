@@ -10,9 +10,8 @@ export function EducationCardEditor() {
   if (!education) return null;
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold">{education.title}</h3>
+    <div>
+      <div className="flex items-center justify-end mb-4">
         {!education.isLocked && (
           <Button variant="secondary" size="sm" onClick={addEducation}>
             <Plus size={16} /> Add Degree
@@ -69,8 +68,8 @@ export function EducationCardEditor() {
                 </div>
               </div>
               {!education.isLocked && (
-                <Button variant="ghost" onClick={() => removeEducation(edu.id)} className="text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 p-2">
-                  <Trash2 size={20} />
+                <Button variant="danger" onClick={() => removeEducation(edu.id)} className="p-2">
+                  <Trash2 size={18} />
                 </Button>
               )}
             </div>

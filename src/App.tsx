@@ -19,7 +19,7 @@ function App() {
   const renderStepView = () => {
     if (!activeProfileId) return null;
     if (fontError) return <div className="p-10 text-red-500">Error loading fonts: {fontError}</div>;
-    if (!fontsLoaded) return <div className="p-10 text-white">Loading PDF Engine...</div>;
+    if (!fontsLoaded) return <div className="p-10 text-on-surface">Loading PDF Engine...</div>;
 
     return <DashboardView />;
   };

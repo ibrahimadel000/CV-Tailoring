@@ -54,7 +54,7 @@ export function ProfileBuilderView() {
       </div>
 
       {error && (
-        <div className="mb-6 p-4 rounded-xl glass-card border border-[rgba(255,180,171,0.25)] text-[#ffb4ab] text-sm font-medium flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-xl glass-card border border-danger/30 text-danger bg-danger/10 text-sm font-medium flex items-center justify-between">
           <span>{error}</span>
           <Button variant="ghost" size="sm" onClick={() => useAppStore.getState().setError(null)}>Dismiss</Button>
         </div>

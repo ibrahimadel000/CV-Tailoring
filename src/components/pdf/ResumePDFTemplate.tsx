@@ -5,7 +5,6 @@ import type { CVProfile } from '@/types/schema';
 const styles = StyleSheet.create({
   page: {
     padding: 40,
-    fontFamily: 'Inter',
     fontSize: 10,
     color: '#111827',
     lineHeight: 1.4,

@@ -1,10 +1,9 @@
 import { pdf } from '@react-pdf/renderer';
 import { ResumePDFTemplate } from '@/components/pdf/ResumePDFTemplate';
-import type { TailoredProfile, MasterProfile } from '@/types/schema';
+import type { CVProfile } from '@/types/schema';
 
 interface GenerateOptions {
-  tailoredProfile: TailoredProfile;
-  masterProfile: MasterProfile;
+  profile: CVProfile;
   name?: string;
   email?: string;
   phone?: string;
@@ -13,11 +12,9 @@ interface GenerateOptions {
 
 export function usePDFGeneration() {
   const generatePDF = async (options: GenerateOptions): Promise<Blob> => {
-    // We instantiate the PDF component as a document
     const doc = (
       <ResumePDFTemplate
-        tailoredProfile={options.tailoredProfile}
-        masterProfile={options.masterProfile}
+        profile={options.profile}
         name={options.name || 'John Doe'}
         email={options.email || ''}
         phone={options.phone || ''}
@@ -25,7 +22,6 @@ export function usePDFGeneration() {
       />
     );
 
-    // Run React-PDF's async generation
     const asPdf = pdf(doc);
     const blob = await asPdf.toBlob();
     return blob;
@@ -35,19 +31,18 @@ export function usePDFGeneration() {
     try {
       const blob = await generatePDF(options);
       const url = URL.createObjectURL(blob);
-      
+
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
-      
-      // Cleanup
+
       setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       }, 100);
-      
+
     } catch (err) {
       console.error('Failed to generate and download PDF:', err);
       throw err;

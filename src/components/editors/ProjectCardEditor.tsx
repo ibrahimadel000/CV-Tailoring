@@ -18,9 +18,8 @@ export function ProjectCardEditor() {
   if (!projects) return null;
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold">{projects.title}</h3>
+    <div>
+      <div className="flex items-center justify-end mb-4">
         {!projects.isLocked && (
           <Button variant="secondary" size="sm" onClick={addProject}>
             <Plus size={16} /> Add Project
@@ -61,8 +60,8 @@ export function ProjectCardEditor() {
                 </div>
               </div>
               {!projects.isLocked && (
-                <Button variant="ghost" onClick={() => removeProject(proj.id)} className="text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 p-2">
-                  <Trash2 size={20} />
+                <Button variant="danger" onClick={() => removeProject(proj.id)} className="p-2">
+                  <Trash2 size={18} />
                 </Button>
               )}
             </div>

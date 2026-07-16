@@ -33,12 +33,8 @@ export function SkillTagEditor() {
   };
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold">{skills.title}</h3>
-      </div>
-
-      <Card locked={skills.isLocked}>
+    <div>
+      <div className="flex flex-col gap-6">
         {!skills.isLocked && (
           <div className="flex flex-col md:flex-row gap-3 mb-6">
             <select
@@ -101,7 +97,7 @@ export function SkillTagEditor() {
             );
           })}
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

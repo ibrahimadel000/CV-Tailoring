@@ -20,7 +20,7 @@ export function ComparisonStudioView() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 bg-gradient-to-br from-[#f59e0b] to-[#22d3ee]" style={{ boxShadow: 'var(--shadow-glow)' }}>
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 bg-gradient-to-br from-primary-400 to-accent-400" style={{ boxShadow: 'var(--shadow-neon)' }}>
             <CheckCircle2 size={24} color="white" />
           </div>
           <h2 className="text-3xl font-bold gradient-text mb-2">Review &amp; Compare</h2>
@@ -41,7 +41,7 @@ export function ComparisonStudioView() {
               className="h-full transition-all duration-500"
               style={{
                 width: `${progressPct}%`,
-                background: 'linear-gradient(90deg, #f59e0b, #22d3ee)'
+                background: 'linear-gradient(90deg, var(--color-primary-500), var(--color-accent-400))'
               }}
             />
           </div>
@@ -50,7 +50,7 @@ export function ComparisonStudioView() {
 
       {/* Target JD Context Bar */}
       <div className="mb-10 p-4 rounded-xl glass-card flex gap-4 items-center">
-        <FileText className="text-primary-400 shrink-0" style={{ color: '#2fd9f4' }} />
+        <FileText className="text-accent-400 shrink-0" />
         <div>
           <p className="text-sm font-semibold text-on-surface">
             Tailoring for: {tailoredProfile.jobTitle || 'Target Role'}

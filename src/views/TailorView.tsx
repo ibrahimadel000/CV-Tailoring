@@ -83,7 +83,7 @@ export function TailorView() {
   return (
     <div className="max-w-3xl mx-auto pb-20" style={{ animation: 'var(--animate-fade-in)' }}>
       <div className="text-center mb-10">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 bg-gradient-to-br from-[#9333ea] to-[#22d3ee]" style={{ boxShadow: 'var(--shadow-glow)' }}>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 bg-gradient-to-br from-primary-500 to-accent-400" style={{ boxShadow: 'var(--shadow-neon)' }}>
           <Bot size={32} color="white" />
         </div>
         <h2 className="text-3xl font-bold gradient-text mb-4">Tailor Your Profile</h2>
@@ -96,8 +96,7 @@ export function TailorView() {
         <div className="flex items-center justify-between">
           <label className="text-sm font-semibold text-on-surface">Target Job Description</label>
           {extensionConnected && (
-            <span className="text-xs px-3 py-1 rounded-full border font-semibold tracking-wide"
-              style={{ background: 'rgba(34,211,238,0.1)', borderColor: 'rgba(34,211,238,0.25)', color: '#8aebff' }}>
+            <span className="text-xs px-3 py-1 rounded-full border border-accent-400/30 bg-accent-400/10 text-accent-400 font-semibold tracking-wide">
               Extension Connected
             </span>
           )}
@@ -112,7 +111,7 @@ export function TailorView() {
         />
 
         {error && (
-          <div className="flex gap-3 p-4 rounded-xl glass-card border border-[rgba(255,180,171,0.25)] text-[#ffb4ab] text-sm mt-2">
+          <div className="flex gap-3 p-4 rounded-xl glass-card border border-danger/30 text-danger bg-danger/10 text-sm mt-2">
             <AlertCircle size={18} className="shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-semibold mb-1">Generation Failed</p>

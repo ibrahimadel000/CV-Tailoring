@@ -7,31 +7,32 @@ import { useFontLoader } from '@/hooks/useFontLoader';
 import { useAppStore } from '@/store/useAppStore';
 
 export function ExportView() {
-  const { masterProfile, tailoredProfile, setStep, extensionConnected } = useAppStore();
+  const profiles = useAppStore((s) => s.profiles);
+  const activeProfileId = useAppStore((s) => s.activeProfileId);
+  const extensionConnected = useAppStore((s) => s.extensionConnected);
+
   const { isLoaded: fontsLoaded, error: fontError } = useFontLoader();
   const { downloadPDF, generatePDF } = usePDFGeneration();
-  
+
   const [showPreview, setShowPreview] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isSendingToExtension, setIsSendingToExtension] = useState(false);
 
-  // Temporary contact info state (In a real app, this goes in the master profile)
   const [name, setName] = useState('Alex Engineer');
   const [email, setEmail] = useState('alex@example.com');
   const [phone, setPhone] = useState('(555) 123-4567');
   const [linkedin, setLinkedin] = useState('linkedin.com/in/alex');
 
-  if (!masterProfile || !tailoredProfile) return null;
+  const activeProfile = profiles.find((p) => p.profileId === activeProfileId);
 
   const handleDownload = async () => {
+    if (!activeProfile) return;
     setIsExporting(true);
     try {
-      const filename = `${name.replace(/\s+/g, '_')}_${tailoredProfile.company.replace(/\s+/g, '_')}_Resume.pdf`;
-      await downloadPDF({
-        masterProfile,
-        tailoredProfile,
-        name, email, phone, linkedin
-      }, filename);
+      const safeName = name.replace(/\s+/g, '_');
+      const safeCompany = (activeProfile.targetJob || 'Resume').replace(/\s+/g, '_');
+      const filename = `${safeName}_${safeCompany}.pdf`;
+      await downloadPDF({ profile: activeProfile, name, email, phone, linkedin }, filename);
     } catch (err) {
       console.error(err);
       alert('Failed to generate PDF.');
@@ -41,12 +42,10 @@ export function ExportView() {
   };
 
   const handleSendToExtension = async () => {
+    if (!activeProfile) return;
     setIsSendingToExtension(true);
     try {
-      const blob = await generatePDF({
-        masterProfile, tailoredProfile, name, email, phone, linkedin
-      });
-      
+      const blob = await generatePDF({ profile: activeProfile, name, email, phone, linkedin });
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = () => {
@@ -54,7 +53,7 @@ export function ExportView() {
         window.postMessage({
           type: 'PDF_EXPORT_SYNC',
           payload: base64data,
-          filename: `${tailoredProfile.company}_Resume.pdf`
+          filename: `${(activeProfile.targetJob || 'Resume').replace(/\s+/g, '_')}.pdf`,
         }, '*');
         alert('Sent to extension successfully!');
       };
@@ -66,21 +65,21 @@ export function ExportView() {
     }
   };
 
+  if (!activeProfile) return null;
+
   return (
     <div className="max-w-2xl mx-auto pb-24" style={{ animation: 'var(--animate-fade-in)' }}>
       {showPreview && (
-        <PDFPreviewModal 
-          masterProfile={masterProfile}
-          tailoredProfile={tailoredProfile}
+        <PDFPreviewModal
+          profile={activeProfile}
           name={name} email={email} phone={phone} linkedin={linkedin}
           onClose={() => setShowPreview(false)}
         />
       )}
-
       <div className="mb-10 text-center">
         <div
-          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 bg-gradient-to-br from-[#22d3ee] to-[#a855f7]"
-          style={{ boxShadow: 'var(--shadow-glow)' }}
+          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 bg-gradient-to-br from-accent-400 to-primary-400"
+          style={{ boxShadow: 'var(--shadow-neon)' }}
         >
           <Download size={32} color="white" />
         </div>
@@ -91,52 +90,45 @@ export function ExportView() {
       </div>
 
       {/* Contact Info Card */}
-      <div className="glass-card rounded-xl p-6 mb-8">
-        <h3 className="text-lg font-bold mb-4 text-on-surface" style={{ fontFamily: 'Outfit, sans-serif' }}>Contact Information</h3>
+      <div className="glass-card flex flex-col gap-4 p-6 mb-8">
+        <h3 className="text-lg font-bold text-on-surface">
+          Contact Information
+        </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <input 
-            className="input" 
-            placeholder="Full Name" 
-            value={name} onChange={e => setName(e.target.value)} 
-          />
-          <input 
-            className="input" 
-            placeholder="Email" 
-            value={email} onChange={e => setEmail(e.target.value)} 
-          />
-          <input 
-            className="input" 
-            placeholder="Phone" 
-            value={phone} onChange={e => setPhone(e.target.value)} 
-          />
-          <input 
-            className="input" 
-            placeholder="LinkedIn / Portfolio" 
-            value={linkedin} onChange={e => setLinkedin(e.target.value)} 
-          />
+          <label className="flex flex-col gap-1 text-sm font-semibold text-on-surface">
+            Full Name
+            <input className="input" placeholder="e.g. Alex Engineer" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold text-on-surface">
+            Email Address
+            <input className="input" placeholder="e.g. alex@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold text-on-surface">
+            Phone Number
+            <input className="input" placeholder="e.g. (555) 123-4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold text-on-surface">
+            LinkedIn / Portfolio
+            <input className="input" placeholder="e.g. linkedin.com/in/alex" value={linkedin} onChange={(e) => setLinkedin(e.target.value)} />
+          </label>
         </div>
       </div>
 
       {fontError && (
-        <div className="p-4 rounded-xl glass-card border border-[rgba(255,180,171,0.25)] text-[#ffb4ab] text-sm mb-8">
+        <div className="p-4 rounded-xl glass-card border border-danger/30 text-danger bg-danger/10 text-sm mb-8 font-medium">
           {fontError}
         </div>
       )}
 
       <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-        <Button 
-          variant="secondary" 
-          size="lg" 
-          className="w-full sm:w-auto"
-          onClick={() => setStep('review')}
-        >
+        <Button variant="secondary" size="lg" className="w-full sm:w-auto">
           <ArrowLeft size={18} />
-          Back to Review
+          Back
         </Button>
-        
-        <Button 
-          variant="secondary" 
-          size="lg" 
+
+        <Button
+          variant="secondary"
+          size="lg"
           className="w-full sm:w-auto"
           onClick={() => setShowPreview(true)}
           disabled={!fontsLoaded}
@@ -145,8 +137,8 @@ export function ExportView() {
           Preview PDF
         </Button>
 
-        <Button 
-          size="lg" 
+        <Button
+          size="lg"
           className="w-full sm:w-auto"
           onClick={handleDownload}
           disabled={!fontsLoaded || isExporting}
@@ -157,17 +149,16 @@ export function ExportView() {
       </div>
 
       {extensionConnected && (
-        <div className="mt-8 p-6 rounded-xl glass-card border flex items-center justify-between"
-          style={{ borderColor: 'rgba(34,211,238,0.25)' }}>
+        <div className="mt-8 p-6 glass-card flex items-center justify-between border-accent-400/30">
           <div>
-            <h4 className="font-bold mb-1" style={{ color: '#8aebff', fontFamily: 'Outfit, sans-serif' }}>Extension Connected</h4>
-            <p className="text-xs text-on-surface-variant">Sync the generated PDF directly back to the extension for auto-uploading to the job board.</p>
+            <h4 className="font-bold mb-1 text-accent-400">
+              Extension Connected
+            </h4>
+            <p className="text-xs text-on-surface-variant">
+              Sync the generated PDF directly back to the extension for auto-uploading to the job board.
+            </p>
           </div>
-          <Button 
-            size="sm" 
-            onClick={handleSendToExtension}
-            disabled={!fontsLoaded || isSendingToExtension}
-          >
+          <Button size="sm" onClick={handleSendToExtension} disabled={!fontsLoaded || isSendingToExtension}>
             <Send size={16} />
             {isSendingToExtension ? 'Syncing...' : 'Sync PDF'}
           </Button>
