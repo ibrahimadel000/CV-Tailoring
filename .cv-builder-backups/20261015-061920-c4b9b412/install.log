@@ -1,0 +1,9 @@
+APPLIED src/index.css
+APPLIED src/types/schema.ts
+APPLIED src/components/builder/BuilderStudio.tsx
+APPLIED src/components/builder/SectionEditor.tsx
+APPLIED src/components/builder/ResumePaper.tsx
+APPLIED src/components/builder/resumeModel.ts
+APPLIED src/components/builder/BuilderPDF.tsx
+APPLIED src/components/builder/CustomSectionEditor.tsx
+APPLIED src/components/builder/SectionManager.tsx

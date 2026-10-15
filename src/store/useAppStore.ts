@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import { get as idbGet, set as idbSet } from 'idb-keyval';
+import { get as idbGet, setMany as idbSetMany } from 'idb-keyval';
 import { v4 as uuidv4 } from 'uuid';
+import { createSampleProfile } from '@/mock/profile';
+import { cvProfileSchema } from '@/types/schema';
 import type {
   CVProfile,
   ExperienceEntry,
@@ -9,28 +11,50 @@ import type {
   SkillTag,
   BulletPoint,
   AITailoredResponse,
+  ResumeHeader,
+  CertificationEntry,
 } from '@/types/schema';
 
-// ── Store Interface ──
+export interface DocumentTheme {
+  accentColor: string; // default '#b87373' (Dusty Rose from reference)
+  fontFamily: 'sans' | 'serif' | 'mono';
+  fontSize: 'small' | 'medium' | 'large';
+  lineSpacing: 'compact' | 'normal' | 'relaxed';
+  layoutStyle: 'modern' | 'split' | 'classic' | 'minimal';
+}
 
 interface AppStore {
   // State
   profiles: CVProfile[];
   activeProfileId: string | null;
+  documentTheme: DocumentTheme;
+  jobDescription: string;
   extensionConnected: boolean;
   extensionToken: string | null;
   isLoading: boolean;
   error: string | null;
 
+  setJobDescription: (jd: string) => void;
+
   // Profile Management
   createProfile: (name?: string) => string;
+  loadSampleProfile: () => string;
   cloneProfile: (sourceId: string, newName?: string, isTailored?: boolean, targetJob?: string, matchScore?: number) => string;
   setActiveProfile: (id: string) => void;
+  updateProfileName: (id: string, name: string) => void;
+  setDocumentTheme: (theme: Partial<DocumentTheme>) => void;
   deleteProfile: (id: string) => void;
   applyTailoredResponse: (response: AITailoredResponse) => void;
 
   // Active Profile Editors
+  updateResumeHeader: (updates: Partial<ResumeHeader>) => void;
+  updateHeadline: (text: string) => void;
   updateSummary: (text: string) => void;
+  
+  addCertification: () => void;
+  updateCertification: (id: string, updates: Partial<CertificationEntry>) => void;
+  removeCertification: (id: string) => void;
+
   addExperience: () => void;
   updateExperience: (id: string, updates: Partial<ExperienceEntry>) => void;
   removeExperience: (id: string) => void;
@@ -49,7 +73,8 @@ interface AppStore {
   updateProjectBullet: (projectId: string, bulletId: string, text: string) => void;
   removeProjectBullet: (projectId: string, bulletId: string) => void;
 
-  addSkill: (name: string, category: SkillTag['category']) => void;
+  addSkill: () => void;
+  updateSkill: (id: string, updates: Partial<SkillTag>) => void;
   removeSkill: (id: string) => void;
 
   // UI State
@@ -70,6 +95,23 @@ function createEmptyProfile(name: string = 'My Main CV'): CVProfile {
     profileName: name,
     version: 0,
     lastConfirmed: '',
+    resumeHeader: {
+      id: uuidv4(),
+      title: 'Resume Header',
+      isLocked: false,
+      data: { 
+        name: '', email: '', phone: '', linkedin: '', location: '',
+        suffixName: '', github: '', portfolio: '', otherUrl: '',
+        showLocation: true, showSuffixName: true, showPhone: true,
+        showLinkedin: true, showGithub: true, showPortfolio: true, showOtherUrl: true
+      },
+    },
+    headline: {
+      id: uuidv4(),
+      title: 'Headline',
+      isLocked: false,
+      data: '',
+    },
     summary: {
       id: uuidv4(),
       title: 'Professional Summary',
@@ -91,6 +133,12 @@ function createEmptyProfile(name: string = 'My Main CV'): CVProfile {
     education: {
       id: uuidv4(),
       title: 'Education',
+      isLocked: false,
+      data: [],
+    },
+    certifications: {
+      id: uuidv4(),
+      title: 'Certifications',
       isLocked: false,
       data: [],
     },
@@ -135,6 +183,15 @@ export const useAppStore = create<AppStore>((set, get) => {
     // Initial State
     profiles: [],
     activeProfileId: null,
+    documentTheme: {
+      accentColor: '#2557a7', // Builder default: deep blue
+      fontFamily: 'sans',
+      fontSize: 'medium',
+      lineSpacing: 'normal',
+      layoutStyle: 'modern',
+    },
+    jobDescription: '',
+    setJobDescription: (jd: string) => set({ jobDescription: jd }),
     extensionConnected: false,
     extensionToken: null,
     isLoading: false,
@@ -148,6 +205,15 @@ export const useAppStore = create<AppStore>((set, get) => {
         activeProfileId: newProfile.profileId
       }));
       return newProfile.profileId;
+    },
+
+    loadSampleProfile: () => {
+      const sample = createSampleProfile('Alex Morgan (Sample CV)');
+      set((state) => ({
+        profiles: [...state.profiles, sample],
+        activeProfileId: sample.profileId
+      }));
+      return sample.profileId;
     },
 
     cloneProfile: (sourceId, newName, isTailored, targetJob, matchScore) => {
@@ -176,6 +242,18 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     setActiveProfile: (id) => set({ activeProfileId: id }),
+
+    updateProfileName: (id, name) => {
+      set((state) => ({
+        profiles: state.profiles.map(p => p.profileId === id ? { ...p, profileName: name } : p)
+      }));
+    },
+
+    setDocumentTheme: (theme) => {
+      set((state) => ({
+        documentTheme: { ...state.documentTheme, ...theme }
+      }));
+    },
 
     deleteProfile: (id) => {
       set((state) => {
@@ -220,9 +298,48 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     // Active Profile Editors
+    updateResumeHeader: (updates) => {
+      updateActiveProfileData(p => ({
+        resumeHeader: { ...p.resumeHeader, data: { ...p.resumeHeader.data, ...updates } }
+      }));
+    },
+
+    updateHeadline: (text) => {
+      updateActiveProfileData(p => ({
+        headline: { ...p.headline, data: text }
+      }));
+    },
+
     updateSummary: (text) => {
       updateActiveProfileData(p => ({
         summary: { ...p.summary, data: text }
+      }));
+    },
+
+    addCertification: () => {
+      updateActiveProfileData(p => ({
+        certifications: {
+          ...p.certifications,
+          data: [...p.certifications.data, { id: uuidv4(), name: '', issuer: '', date: '' }]
+        }
+      }));
+    },
+
+    updateCertification: (id, updates) => {
+      updateActiveProfileData(p => ({
+        certifications: {
+          ...p.certifications,
+          data: p.certifications.data.map(cert => cert.id === id ? { ...cert, ...updates } : cert)
+        }
+      }));
+    },
+
+    removeCertification: (id) => {
+      updateActiveProfileData(p => ({
+        certifications: {
+          ...p.certifications,
+          data: p.certifications.data.filter(cert => cert.id !== id)
+        }
       }));
     },
 
@@ -389,11 +506,20 @@ export const useAppStore = create<AppStore>((set, get) => {
       }));
     },
 
-    addSkill: (name, category) => {
+    addSkill: () => {
       updateActiveProfileData(p => ({
         skills: {
           ...p.skills,
-          data: [...p.skills.data, { id: uuidv4(), name, category }]
+          data: [...p.skills.data, { id: uuidv4(), name: '', level: '', category: 'Technical' }]
+        }
+      }));
+    },
+
+    updateSkill: (id, updates) => {
+      updateActiveProfileData(p => ({
+        skills: {
+          ...p.skills,
+          data: p.skills.data.map(skill => skill.id === id ? { ...skill, ...updates } : skill)
         }
       }));
     },
@@ -416,32 +542,38 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     // Persistence
     loadFromStorage: async () => {
-      try {
-        const storedProfiles = await idbGet(STORAGE_KEY_PROFILES);
-        const storedActiveId = await idbGet(STORAGE_KEY_ACTIVE_ID);
-        
-        if (storedProfiles && Array.isArray(storedProfiles) && storedProfiles.length > 0) {
-          set({
-            profiles: storedProfiles,
-            activeProfileId: storedActiveId || storedProfiles[0].profileId,
-          });
-        } else {
-          get().createProfile();
-        }
-      } catch (err) {
-        console.error('Failed to load from storage:', err);
-        get().createProfile();
+      // Fail closed on storage errors: never overwrite data that failed to load.
+      const storedProfiles = await idbGet(STORAGE_KEY_PROFILES);
+      const storedActiveId = await idbGet(STORAGE_KEY_ACTIVE_ID);
+      const storedTheme = await idbGet('cv-tailor-builder-theme-v1');
+      if (storedProfiles !== undefined && !Array.isArray(storedProfiles)) {
+        throw new Error('Saved resume data is not a valid list.');
+      }
+      if (Array.isArray(storedProfiles)) {
+        if (!storedProfiles.every(p => cvProfileSchema.safeParse(p).success)) throw new Error('A saved resume could not be validated.');
+        set({ profiles: storedProfiles, activeProfileId: storedProfiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (storedProfiles[0]?.profileId || null) });
+      } else {
+        get().createProfile('My first resume');
+      }
+      if (storedTheme && typeof storedTheme === 'object') {
+        const safe: Partial<DocumentTheme> = {};
+        if (/^#[0-9a-f]{6}$/i.test(storedTheme.accentColor)) safe.accentColor = storedTheme.accentColor;
+        if (['sans', 'serif', 'mono'].includes(storedTheme.fontFamily)) safe.fontFamily = storedTheme.fontFamily;
+        if (['small', 'medium', 'large'].includes(storedTheme.fontSize)) safe.fontSize = storedTheme.fontSize;
+        if (['compact', 'normal', 'relaxed'].includes(storedTheme.lineSpacing)) safe.lineSpacing = storedTheme.lineSpacing;
+        if (['modern', 'classic', 'minimal'].includes(storedTheme.layoutStyle)) safe.layoutStyle = storedTheme.layoutStyle;
+        set({ documentTheme: { ...get().documentTheme, ...safe } });
       }
     },
 
     saveToStorage: async () => {
-      try {
-        const { profiles, activeProfileId } = get();
-        await idbSet(STORAGE_KEY_PROFILES, profiles);
-        await idbSet(STORAGE_KEY_ACTIVE_ID, activeProfileId);
-      } catch (err) {
-        console.error('Failed to save to storage:', err);
-      }
+      const { profiles, activeProfileId, documentTheme } = get();
+      // A single IndexedDB transaction keeps resume, active ID, and design in sync.
+      await idbSetMany([
+        [STORAGE_KEY_PROFILES, profiles],
+        [STORAGE_KEY_ACTIVE_ID, activeProfileId],
+        ['cv-tailor-builder-theme-v1', documentTheme],
+      ]);
     },
   };
 });

@@ -1,0 +1,30 @@
+﻿{
+    "created":  "2026-10-15T06:43:53.3479556+03:00",
+    "projectPath":  "E:\\cv tailor - Copy",
+    "files":  [
+                  {
+                      "path":  "src/index.css",
+                      "existed":  true,
+                      "oldSha256":  "b9471b674f11c5d1a598c7e6b499cde02748bd3573036f000642c780ca9fa50d",
+                      "installedSha256":  "ab2ef6d3b2b2a3bcd2610356fce24d78b4b1ad21444e573eb98a1d6736e2f1d9"
+                  },
+                  {
+                      "path":  "src/components/builder/BuilderStudio.tsx",
+                      "existed":  true,
+                      "oldSha256":  "f1ed751fab2a70d38475e5cdb8828580d73319e205bfa7c4039302ce73d94b5f",
+                      "installedSha256":  "0e2dd2c947a88444749578ff70046bfbf0d7db3847f9607a7459f639cf650d80"
+                  },
+                  {
+                      "path":  "src/components/builder/SectionWorkspace.tsx",
+                      "existed":  false,
+                      "oldSha256":  null,
+                      "installedSha256":  "81b40c1515d616f435655fde96e08e4f4154721c26e11af3d338ff16a23b07a1"
+                  },
+                  {
+                      "path":  "src/components/builder/useSectionDrag.ts",
+                      "existed":  false,
+                      "oldSha256":  null,
+                      "installedSha256":  "d805c1e7cf44c51711337777217a5c9179944e6cd4ecc6f2bebc0a889919cdd2"
+                  }
+              ]
+}

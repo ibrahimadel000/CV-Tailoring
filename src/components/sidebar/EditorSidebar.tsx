@@ -1,40 +1,66 @@
-import { User, Briefcase, GraduationCap, FolderDot, Code2 } from 'lucide-react';
+import { ResumeHeaderEditor } from '../editors/ResumeHeaderEditor';
 import { SummaryEditor } from '../editors/SummaryEditor';
-import { ExperienceCardEditor } from '../editors/ExperienceCardEditor';
 import { EducationCardEditor } from '../editors/EducationCardEditor';
+import { CertificationCardEditor } from '../editors/CertificationCardEditor';
+import { ExperienceCardEditor } from '../editors/ExperienceCardEditor';
 import { ProjectCardEditor } from '../editors/ProjectCardEditor';
 import { SkillTagEditor } from '../editors/SkillTagEditor';
 import { Accordion } from '../shared/Accordion';
+import { useAppStore } from '@/store/useAppStore';
 
 export function EditorSidebar() {
+  const activeProfileId = useAppStore((s) => s.activeProfileId);
+  const profiles = useAppStore((s) => s.profiles);
+  
+  const activeProfile = profiles.find(p => p.profileId === activeProfileId);
+  const header = activeProfile?.resumeHeader;
+  
+  const getHeaderBadgeCount = () => {
+    if (!header || header.isLocked) return 0;
+    let count = 0;
+    if (!header.data.name) count++;
+    if (!header.data.email) count++;
+    return count;
+  };
+
   return (
-    <>
-      <div className="p-6 border-b border-surface-container shrink-0 text-center">
-        <h2 className="font-headline-md text-headline-md font-bold gradient-text mb-1 tracking-wide">The Builder</h2>
-        <p className="font-body-md text-sm text-on-surface-variant">Edit your core information</p>
-      </div>
+    <div className="flex-1 flex flex-col bg-white overflow-y-auto custom-scrollbar divide-y divide-gray-100 select-text">
+      
+      {/* 1. Personal details (Matches reference screenshot) */}
+      <Accordion title="Personal details" defaultOpen={true} badgeCount={getHeaderBadgeCount()}>
+        <ResumeHeaderEditor />
+      </Accordion>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-transparent">
-        <Accordion title="Professional Summary" icon={<User size={18} />} defaultOpen={true}>
-          <SummaryEditor />
-        </Accordion>
+      {/* 2. Profile (Matches reference screenshot) */}
+      <Accordion title="Profile" defaultOpen={true}>
+        <SummaryEditor />
+      </Accordion>
 
-        <Accordion title="Work Experience" icon={<Briefcase size={18} />}>
-          <ExperienceCardEditor />
-        </Accordion>
+      {/* 3. Education (Matches reference screenshot) */}
+      <Accordion title="Education">
+        <EducationCardEditor />
+      </Accordion>
 
-        <Accordion title="Education" icon={<GraduationCap size={18} />}>
-          <EducationCardEditor />
-        </Accordion>
+      {/* 4. Employment (Matches reference screenshot) */}
+      <Accordion title="Employment">
+        <ExperienceCardEditor />
+      </Accordion>
 
-        <Accordion title="Projects" icon={<FolderDot size={18} />}>
-          <ProjectCardEditor />
-        </Accordion>
+      {/* 5. Skills (Matches reference screenshot) */}
+      <Accordion title="Skills">
+        <SkillTagEditor />
+      </Accordion>
 
-        <Accordion title="Skills" icon={<Code2 size={18} />}>
-          <SkillTagEditor />
-        </Accordion>
-      </div>
-    </>
+      {/* 6. Projects & Outside Experience */}
+      <Accordion title="Projects & Experience">
+        <ProjectCardEditor />
+      </Accordion>
+
+      {/* 7. Certifications */}
+      <Accordion title="Certifications">
+        <CertificationCardEditor />
+      </Accordion>
+
+    </div>
   );
 }

@@ -1,0 +1,131 @@
+PROJECT: cv tailor - Copy
+FILE STRUCTURE (maximum depth: 5)
+Dependency, build, and common secret paths are excluded.
+
+[DIR] .agents
+  [DIR] skills
+    [DIR] ui-ux-pro-max-skill
+      [DIR] .claude
+        [DIR] skills
+      [DIR] .claude-plugin
+        marketplace.json
+        plugin.json
+      [DIR] .github
+        [DIR] ISSUE_TEMPLATE
+        [DIR] workflows
+        PULL_REQUEST_TEMPLATE.md
+      [DIR] cli
+        [DIR] assets
+        [DIR] scripts
+        [DIR] src
+        [DIR] tests
+        .gitignore
+        .npmignore
+        bun.lock
+        package-lock.json
+        package.json
+        playwright.config.ts
+        README.md
+        tsconfig.json
+      [DIR] docs
+        三个 data-scripts-templates 的区别.md
+      [DIR] preview
+        xiaomaomi-app.html
+      [DIR] projects
+        [DIR] healthcare-dashboard
+        [DIR] portfolio-dark
+        [DIR] saas-landing
+      [DIR] screenshots
+        website.png
+      [DIR] scripts
+        smoke-domains.sh
+        smoke-stacks.sh
+        sync-release-version.mjs
+        validate-csv.py
+      [DIR] src
+        [DIR] ui-ux-pro-max
+      .gitignore
+      .releaserc.json
+      CLAUDE.md
+      CODE_OF_CONDUCT.md
+      CONTRIBUTING.md
+      LICENSE
+      README.md
+      README.zh.md
+      SECURITY.md
+      skill.json
+      SKILL.md
+[DIR] public
+  [DIR] fonts
+    Inter-Bold.ttf
+    Inter-Medium.ttf
+    Inter-Regular.ttf
+[DIR] scripts
+  download-fonts.js
+[DIR] src
+  [DIR] components
+    [DIR] canvas
+      LivePreviewCanvas.tsx
+      ResumeHTMLDocument.tsx
+    [DIR] editors
+      BulletInput.tsx
+      CertificationCardEditor.tsx
+      EducationCardEditor.tsx
+      ExperienceCardEditor.tsx
+      HeadlineEditor.tsx
+      ProjectCardEditor.tsx
+      ResumeHeaderEditor.tsx
+      RichTextEditor.tsx
+      SkillTagEditor.tsx
+      SummaryEditor.tsx
+    [DIR] layout
+      AppShell.tsx
+      StepIndicator.tsx
+    [DIR] pdf
+      PDFPreviewModal.tsx
+      ResumePDFTemplate.tsx
+    [DIR] shared
+      Accordion.tsx
+      Button.tsx
+      Card.tsx
+      EmptyState.tsx
+    [DIR] sidebar
+      AIPanel.tsx
+      EditorSidebar.tsx
+  [DIR] hooks
+    useExtensionBridge.ts
+    useFontLoader.ts
+    usePDFGeneration.tsx
+  [DIR] lib
+    utils.ts
+  [DIR] mock
+    profile.ts
+  [DIR] services
+    aiResponseCleaner.ts
+    aiTailor.ts
+    bulletSplitter.ts
+    diffEngine.ts
+    entityExtractor.ts
+    extensionBridge.ts
+    pdfParser.ts
+    validator.ts
+  [DIR] store
+    useAppStore.ts
+  [DIR] types
+    schema.ts
+  [DIR] views
+    DashboardView.tsx
+    ExportView.tsx
+  App.tsx
+  index.css
+  main.tsx
+  vite-env.d.ts
+.gitignore
+implementation_plan.md
+index.html
+package-lock.json
+package.json
+project_bundle.txt
+tsconfig.app.json
+tsconfig.json
+vite.config.ts

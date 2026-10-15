@@ -53,68 +53,61 @@ export function AIPanel() {
 
   return (
     <>
-      <div className="p-6 border-b border-surface-container flex justify-between items-center shrink-0">
+      <div className="p-5 border-b border-gray-200 flex justify-between items-center shrink-0 bg-white">
         <div>
-          <h2 className="font-headline-md text-headline-md font-bold text-on-surface flex items-center gap-2">
-            <span className="material-symbols-outlined text-accent-400" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <span>AI Studio</span>
+          <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary-600" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+            <span>AI Tailor Studio</span>
           </h2>
+          <p className="text-xs text-gray-500 mt-0.5">Keyword optimization & ATS alignment</p>
         </div>
       </div>
 
-      <div className="flex-1 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar bg-white">
         {/* Score Ring (only if this profile is tailored) */}
         {activeProfile?.targetJob && (
-          <div className="flex flex-col items-center justify-center">
-            <div className="relative w-32 h-32">
+          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-gray-50 border border-gray-200">
+            <div className="relative w-28 h-28">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <defs>
-                  <linearGradient id="gradient" x1="0%" x2="100%" y1="0%" y2="0%">
-                    <stop offset="0%" stopColor="var(--color-primary-container)" />
-                    <stop offset="100%" stopColor="var(--color-secondary-container)" />
-                  </linearGradient>
-                </defs>
-                <circle cx="50" cy="50" fill="none" r="45" stroke="rgba(0,0,0,0.05)" strokeWidth="8" />
+                <circle cx="50" cy="50" fill="none" r="45" stroke="#e5e7eb" strokeWidth="8" />
                 <circle 
-                  className="score-ring transition-all duration-1000 ease-out" 
+                  className="transition-all duration-1000 ease-out" 
                   cx="50" cy="50" fill="none" r="45" 
                   strokeDasharray={circumference} 
                   strokeDashoffset={strokeDashoffset} 
                   strokeLinecap="round" strokeWidth="8" 
-                  stroke="url(#gradient)"
+                  stroke="#7c3aed"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-display-lg-mobile text-display-lg-mobile font-bold text-on-surface">{score}</span>
-                <span className="font-label-sm text-label-sm text-on-surface-variant">/100</span>
+                <span className="text-2xl font-bold text-gray-900">{score}</span>
+                <span className="text-[11px] font-medium text-gray-500">/100</span>
               </div>
             </div>
-            <p className="mt-4 font-body-md text-body-md text-primary-400 text-center">
+            <p className="mt-3 text-xs font-semibold text-primary-700 text-center">
               Targeting: {activeProfile.targetJob}
             </p>
           </div>
         )}
 
         {/* Job Description Card */}
-        <div className="glass-card flex flex-col gap-3 p-4 mt-auto">
-          <label className="font-semibold text-[15px] text-on-surface">Job Description</label>
+        <div className="flex flex-col gap-3 p-4 rounded-xl bg-gray-50 border border-gray-200 mt-auto">
+          <label className="font-semibold text-xs text-gray-700 uppercase tracking-wider">Job Description</label>
           <textarea 
             value={jobDescription || ''}
             onChange={(e) => setJobDescription(e.target.value)}
-            className="input input--textarea" 
-            placeholder="Paste the job description here to get tailored suggestions..." 
+            className="input input--textarea text-xs h-32 bg-white" 
+            placeholder="Paste target job description to match skills and keywords..." 
           />
           <button 
             onClick={handleGenerate}
             disabled={!jobDescription || isGenerating}
-            className="btn btn--primary w-full"
+            className="btn btn--primary w-full text-xs font-semibold py-2.5 shadow-sm"
           >
-            {isGenerating ? 'Working...' : 'Done'}
+            {isGenerating ? 'Analyzing & Tailoring...' : 'Optimize Resume with AI'}
           </button>
         </div>
       </div>
-
-
     </>
   );
 }

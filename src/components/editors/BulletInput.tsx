@@ -33,28 +33,28 @@ export function BulletInput({
 
   return (
     <div className="flex gap-2 items-start group">
-      <div className="flex flex-col gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex flex-col gap-0.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button 
           onClick={onMoveUp} 
           disabled={!onMoveUp || isLocked} 
-          className="text-[var(--color-surface-200)] hover:text-[var(--color-surface-100)] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
           title="Move up"
         >
-          <ChevronUp size={16} />
+          <ChevronUp size={14} />
         </button>
         <button 
           onClick={onMoveDown} 
           disabled={!onMoveDown || isLocked} 
-          className="text-[var(--color-surface-200)] hover:text-[var(--color-surface-100)] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
           title="Move down"
         >
-          <ChevronDown size={16} />
+          <ChevronDown size={14} />
         </button>
       </div>
       
       <div className="relative flex-1">
-        <div className="absolute top-[10px] left-3 text-[var(--color-surface-200)] pointer-events-none">
-          <span className="text-xl leading-none">&bull;</span>
+        <div className="absolute top-[10px] left-3 text-gray-400 pointer-events-none">
+          <span className="text-lg leading-none">&bull;</span>
         </div>
         <textarea
           ref={textareaRef}

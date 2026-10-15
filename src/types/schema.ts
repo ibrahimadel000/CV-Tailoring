@@ -18,8 +18,10 @@ export interface ExperienceEntry {
   id: string;
   roleTitle: string;
   companyName: string;
+  city?: string;
   startDate: string;
   endDate: string;
+  description?: string;
   bullets: BulletPoint[];
 }
 
@@ -27,8 +29,10 @@ export const experienceEntrySchema = z.object({
   id: z.string().uuid(),
   roleTitle: z.string(),
   companyName: z.string(),
+  city: z.string().optional(),
   startDate: z.string(),
   endDate: z.string(),
+  description: z.string().optional(),
   bullets: z.array(bulletPointSchema),
 });
 
@@ -36,7 +40,11 @@ export interface EducationEntry {
   id: string;
   degree: string;
   institution: string;
-  graduationDate: string;
+  city?: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+  graduationDate?: string;
   gpa?: string;
   honors?: string[];
 }
@@ -45,9 +53,75 @@ export const educationEntrySchema = z.object({
   id: z.string().uuid(),
   degree: z.string(),
   institution: z.string(),
-  graduationDate: z.string(),
+  city: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  description: z.string().optional(),
+  graduationDate: z.string().optional(),
   gpa: z.string().optional(),
   honors: z.array(z.string()).optional(),
+});
+
+export interface ResumeHeader {
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  desiredJobPosition?: string;
+  useAsHeadline?: boolean;
+  photoUrl?: string;
+  email: string;
+  phone: string;
+  linkedin: string;
+  location?: string;
+  suffixName?: string;
+  github?: string;
+  portfolio?: string;
+  otherUrl?: string;
+  showLocation?: boolean;
+  showSuffixName?: boolean;
+  showPhone?: boolean;
+  showLinkedin?: boolean;
+  showGithub?: boolean;
+  showPortfolio?: boolean;
+  showOtherUrl?: boolean;
+}
+
+export const resumeHeaderDataSchema = z.object({
+  name: z.string(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  desiredJobPosition: z.string().optional(),
+  useAsHeadline: z.boolean().optional(),
+  photoUrl: z.string().optional(),
+  email: z.string(),
+  phone: z.string(),
+  linkedin: z.string(),
+  location: z.string().optional(),
+  suffixName: z.string().optional(),
+  github: z.string().optional(),
+  portfolio: z.string().optional(),
+  otherUrl: z.string().optional(),
+  showLocation: z.boolean().optional(),
+  showSuffixName: z.boolean().optional(),
+  showPhone: z.boolean().optional(),
+  showLinkedin: z.boolean().optional(),
+  showGithub: z.boolean().optional(),
+  showPortfolio: z.boolean().optional(),
+  showOtherUrl: z.boolean().optional(),
+});
+
+export interface CertificationEntry {
+  id: string;
+  name: string;
+  issuer: string;
+  date: string;
+}
+
+export const certificationEntrySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  issuer: z.string(),
+  date: z.string(),
 });
 
 export interface ProjectEntry {
@@ -69,12 +143,14 @@ export const projectEntrySchema = z.object({
 export interface SkillTag {
   id: string;
   name: string;
+  level?: string;
   category: 'Technical' | 'Soft' | 'Tools' | 'Languages';
 }
 
 export const skillTagSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  level: z.string().optional(),
   category: z.enum(['Technical', 'Soft', 'Tools', 'Languages']),
 });
 
@@ -93,6 +169,27 @@ export const summarySectionSchema = z.object({
   title: z.string(),
   isLocked: z.boolean(),
   data: z.string(),
+});
+
+export const resumeHeaderSectionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  isLocked: z.boolean(),
+  data: resumeHeaderDataSchema,
+});
+
+export const headlineSectionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  isLocked: z.boolean(),
+  data: z.string(),
+});
+
+export const certificationsSectionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  isLocked: z.boolean(),
+  data: z.array(certificationEntrySchema),
 });
 
 export const experienceSectionSchema = z.object({
@@ -123,24 +220,42 @@ export const projectsSectionSchema = z.object({
   data: z.array(projectEntrySchema),
 });
 
+export interface CustomResumeSection {
+  id: string;
+  title: string;
+  paragraphs: string[];
+}
+export const customResumeSectionSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  paragraphs: z.array(z.string()),
+});
+
 // ── CV Profile (A Single Document Version) ──
 
 export interface CVProfile {
   profileId: string;
+  customSections?: CustomResumeSection[];
+  sectionOrder?: string[];
   profileName: string; // e.g., "My Main CV" or "Tailored for Google"
   baseProfileId?: string; // If this was cloned from another CV
   targetJob?: string; // Job description if tailored
   matchScore?: number; // AI score if tailored
   version: number;
   lastConfirmed: string;
+  resumeHeader: SectionBlock<ResumeHeader>;
+  headline: SectionBlock<string>;
   summary: SectionBlock<string>;
-  experience: SectionBlock<ExperienceEntry[]>;
-  skills: SectionBlock<SkillTag[]>;
   education: SectionBlock<EducationEntry[]>;
+  certifications: SectionBlock<CertificationEntry[]>;
+  experience: SectionBlock<ExperienceEntry[]>;
   projects: SectionBlock<ProjectEntry[]>;
+  skills: SectionBlock<SkillTag[]>;
 }
 
 export const cvProfileSchema = z.object({
+  customSections: z.array(customResumeSectionSchema).optional(),
+  sectionOrder: z.array(z.string()).optional(),
   profileId: z.string().uuid(),
   profileName: z.string(),
   baseProfileId: z.string().uuid().optional(),
@@ -148,11 +263,14 @@ export const cvProfileSchema = z.object({
   matchScore: z.number().optional(),
   version: z.number().int().min(0),
   lastConfirmed: z.string(),
+  resumeHeader: resumeHeaderSectionSchema,
+  headline: headlineSectionSchema,
   summary: summarySectionSchema,
-  experience: experienceSectionSchema,
-  skills: skillsSectionSchema,
   education: educationSectionSchema,
+  certifications: certificationsSectionSchema,
+  experience: experienceSectionSchema,
   projects: projectsSectionSchema,
+  skills: skillsSectionSchema,
 });
 
 // ── Entity Whitelist (Extracted from locked MasterProfile) ──
@@ -223,4 +341,42 @@ export interface AppState {
   activeProfileId: string | null;
   extensionConnected: boolean;
   extensionToken: string | null;
+}
+
+// ── Backwards Compatibility Types ──
+export type MasterProfile = CVProfile;
+
+export interface DiffToken {
+  type: 'unchanged' | 'added' | 'removed';
+  text?: string;
+  value?: string;
+}
+
+export interface ValidationFlag {
+  type: 'fabricated_metric' | 'unknown_proper_noun' | 'unknown_technology' | 'substantially_altered' | string;
+  value?: string;
+  severity?: 'critical' | 'warning' | 'info';
+  dismissed?: boolean;
+  message?: string;
+}
+
+export interface ReviewBulletState {
+  id: string;
+  sourceBulletId?: string;
+  original: string;
+  suggested?: string;
+  aiTailored?: string;
+  userEdited: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  flags?: ValidationFlag[];
+  validationFlags?: ValidationFlag[];
+  diffTokens: DiffToken[];
+}
+
+export interface TailoredProfile {
+  id?: string;
+  profileId: string;
+  jobTitle: string;
+  matchScore: number;
+  bullets: any;
 }

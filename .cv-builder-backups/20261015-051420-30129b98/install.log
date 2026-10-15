@@ -1,0 +1,13 @@
+APPLIED index.html
+APPLIED public/folio-mark.svg
+APPLIED src/App.tsx
+APPLIED src/index.css
+APPLIED src/store/useAppStore.ts
+APPLIED src/components/builder/BuilderPDF.tsx
+APPLIED src/components/builder/BuilderStudio.tsx
+APPLIED src/components/builder/DesignPanel.tsx
+APPLIED src/components/builder/PDFInspection.tsx
+APPLIED src/components/builder/ResumePaper.tsx
+APPLIED src/components/builder/SectionEditor.tsx
+APPLIED src/components/builder/resumeModel.ts
+APPLIED src/components/builder/useBuilderPersistence.ts
