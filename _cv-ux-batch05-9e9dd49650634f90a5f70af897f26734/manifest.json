@@ -1,0 +1,41 @@
+{
+  "release": "CV Builder UX Batch 05 — contextual editing and typed sections (requires Batch 04)",
+  "packageSha256": "dd7da1d6af0932856d069b303af646115cba7ae6b68c11b6b1a8340147ef42dd",
+  "files": [
+    {
+      "path": "src/index.css",
+      "oldSha256": "69f83023999304414c2beac6610a953be88280b05c84f6fae327698030f214be",
+      "newSha256": "0dc54444352a3b99c18db82f3e66b54ce8f00ba83d140167b590db0c34ba6bc9"
+    },
+    {
+      "path": "src/types/schema.ts",
+      "oldSha256": "9697b8042527e146ca3df376a6d7e799c78c3620c89b7e403bdcead480384ed2",
+      "newSha256": "8521e3e2d0a01bd211e206b039c6347584c7bcd0184f844b06f07bb1fc4bb773"
+    },
+    {
+      "path": "src/components/builder/SectionWorkspace.tsx",
+      "oldSha256": "700be159845c013c682973cd226e3224b81eb3c741f5f2c4f53ea53a03ed23f2",
+      "newSha256": "81497cff2c8091eee2c1bf64ccb00dbcab7f3cda3c98079afb389d776f19fd7c"
+    },
+    {
+      "path": "src/components/builder/SectionEditor.tsx",
+      "oldSha256": "2ddcb796ca06166405291fa4db82d6ee09a4f8bcd6c9f58361b3b6c2d7b423fb",
+      "newSha256": "443e3b2cb2583b6c7a9fdce21fd9795706bc2410037cea23e8e4209eba67ac9b"
+    },
+    {
+      "path": "src/components/builder/CustomSectionEditor.tsx",
+      "oldSha256": "ce9c9a776ee04363db1afaa0847a10f86a21b52017f858190361094a6f37bd50",
+      "newSha256": "dae6e967110ee061ea02f8f35494b4093c4d4820494a9c0b4c2d38009ec55dae"
+    },
+    {
+      "path": "src/components/builder/EditorControls.tsx",
+      "oldSha256": null,
+      "newSha256": "d15188f59d08cb126f55e24be0a8de0ab98758462c34de2fb7c7997b6b70367e"
+    },
+    {
+      "path": "src/components/builder/resumeModel.ts",
+      "oldSha256": "89d1c7f69abf42f22a5a2c784cae65a6d5e2fe0d9e1e9e5e695f7a2bc786733c",
+      "newSha256": "8dad41d456c362966cec0db17cefae20956a6fe091d55d164a2c4c45a0217694"
+    }
+  ]
+}

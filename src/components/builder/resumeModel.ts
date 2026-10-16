@@ -31,7 +31,10 @@ export function headline(p: CVProfile): string {
 export function sectionCount(p: CVProfile, id: SectionId): number {
   if (id === 'personal') return fullName(p) || p.resumeHeader.data.email ? 1 : 0;
   if (id === 'summary') return p.summary.data.trim() ? 1 : 0;
-  if (id.startsWith('custom:')) return p.customSections?.find(x => `custom:${x.id}` === id)?.paragraphs.filter(x => x.trim()).length || 0;
+  if (id.startsWith('custom:')) {
+    const data = p.customSections?.find(x => `custom:${x.id}` === id);
+    return data?.kind === 'experience' ? (data.entries || []).filter(e => e.title.trim() || e.organization.trim() || e.description.trim()).length : data?.paragraphs.filter(x => x.trim()).length || 0;
+  }
   return p[id as Exclude<BuiltInSectionId, 'personal' | 'summary'>].data.length;
 }
 export function essentials(p: CVProfile) {
@@ -43,23 +46,28 @@ export function essentials(p: CVProfile) {
     { label: 'Relevant skills', done: p.skills.data.some(s => Boolean(s.name.trim())) },
   ];
 }
-export interface ResumeBlock { id: SectionId; title: string; items: { title?: string; subtitle?: string; date?: string; text?: string; bullets?: string[] }[] }
+export interface ResumeBlock { id: SectionId; title: string; items: { entryId?: string; title?: string; subtitle?: string; date?: string; text?: string; bullets?: string[] }[] }
 export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   const blocks: ResumeBlock[] = [];
   if (plainText(p.summary.data)) blocks.push({ id: 'summary', title: 'Profile', items: [{ text: plainText(p.summary.data) }] });
   const experience = p.experience.data.filter(e => e.roleTitle.trim() || e.companyName.trim() || e.description?.trim() || e.bullets.some(b => b.text.trim()));
-  if (experience.length) blocks.push({ id: 'experience', title: 'Experience', items: experience.map(e => ({ title: e.roleTitle, subtitle: [e.companyName, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
+  if (experience.length) blocks.push({ id: 'experience', title: 'Experience', items: experience.map(e => ({ entryId: e.id, title: e.roleTitle, subtitle: [e.companyName, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
   const education = p.education.data.filter(e => e.degree.trim() || e.institution.trim() || e.description?.trim());
-  if (education.length) blocks.push({ id: 'education', title: 'Education', items: education.map(e => ({ title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – ') || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.join(' · ')].filter(Boolean).join('\n') })) });
+  if (education.length) blocks.push({ id: 'education', title: 'Education', items: education.map(e => ({ entryId: e.id, title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – ') || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.join(' · ')].filter(Boolean).join('\n') })) });
   const skills = ['Technical', 'Tools', 'Soft', 'Languages'].map(category => ({ title: category === 'Soft' ? 'Interpersonal' : category, text: p.skills.data.filter(s => s.category === category).map(s => s.name.trim()).filter(Boolean).join(' · ') })).filter(s => s.text);
   if (skills.length) blocks.push({ id: 'skills', title: 'Skills', items: skills });
   const projects = p.projects.data.filter(e => e.name.trim() || e.bullets.some(b => b.text.trim()));
-  if (projects.length) blocks.push({ id: 'projects', title: 'Projects', items: projects.map(e => ({ title: e.name, subtitle: [e.role, e.url].filter(Boolean).join(' · '), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
+  if (projects.length) blocks.push({ id: 'projects', title: 'Projects', items: projects.map(e => ({ entryId: e.id, title: e.name, subtitle: [e.role, e.url].filter(Boolean).join(' · '), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
   const certs = p.certifications.data.filter(e => e.name.trim());
-  if (certs.length) blocks.push({ id: 'certifications', title: 'Certifications', items: certs.map(e => ({ title: e.name, subtitle: e.issuer, date: e.date })) });
+  if (certs.length) blocks.push({ id: 'certifications', title: 'Certifications', items: certs.map(e => ({ entryId: e.id, title: e.name, subtitle: e.issuer, date: e.date })) });
   for (const custom of p.customSections || []) {
     const paragraphs = custom.paragraphs.map(x => plainText(x)).filter(Boolean);
-    if (paragraphs.length) blocks.push({ id: `custom:${custom.id}`, title: custom.title.trim() || 'Additional information', items: paragraphs.map(text => ({ text })) });
+    const items: ResumeBlock['items'] = custom.kind === 'experience'
+      ? (custom.entries || []).filter(e => e.title.trim() || e.organization.trim() || e.description.trim()).map(e => ({ entryId: e.id, title: plainText(e.title), subtitle: [plainText(e.organization), plainText(e.location)].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description) }))
+      : custom.kind === 'list' ? (paragraphs.length ? [{ bullets: paragraphs }] : [])
+      : custom.kind === 'skills' ? (paragraphs.length ? [{ text: paragraphs.join(' · ') }] : [])
+      : paragraphs.map(text => ({ text }));
+    if (items.length) blocks.push({ id: `custom:${custom.id}`, title: custom.title.trim() || 'Additional information', items });
   }
   const order = orderedSections(p).map(s => s.id);
   return blocks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));

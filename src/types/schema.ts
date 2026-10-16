@@ -220,20 +220,44 @@ export const projectsSectionSchema = z.object({
   data: z.array(projectEntrySchema),
 });
 
+export type CustomSectionKind = 'text' | 'experience' | 'list' | 'skills';
+export interface CustomExperienceEntry {
+  id: string;
+  title: string;
+  organization: string;
+  location?: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+}
+const customExperienceEntrySchema = z.object({
+  id: z.string().uuid(), title: z.string(), organization: z.string(),
+  location: z.string().optional(), startDate: z.string(), endDate: z.string(), description: z.string(),
+});
 export interface CustomResumeSection {
   id: string;
   title: string;
   paragraphs: string[];
+  kind?: CustomSectionKind;
+  entries?: CustomExperienceEntry[];
 }
 export const customResumeSectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   paragraphs: z.array(z.string()),
+  kind: z.enum(['text', 'experience', 'list', 'skills']).optional(),
+  entries: z.array(customExperienceEntrySchema).optional(),
 });
 
 // ── CV Profile (A Single Document Version) ──
 
+export type EntryPageLayout = 'auto' | 'together' | 'new-page';
+export interface ResumePageLayout {
+  sections?: Record<string, 'new-page'>;
+  entries?: Record<string, EntryPageLayout>;
+}
 export interface CVProfile {
+  pageLayout?: ResumePageLayout;
   profileId: string;
   customSections?: CustomResumeSection[];
   sectionOrder?: string[];
@@ -254,6 +278,10 @@ export interface CVProfile {
 }
 
 export const cvProfileSchema = z.object({
+  pageLayout: z.object({
+    sections: z.record(z.literal('new-page')).optional(),
+    entries: z.record(z.enum(['auto', 'together', 'new-page'])).optional(),
+  }).optional(),
   customSections: z.array(customResumeSectionSchema).optional(),
   sectionOrder: z.array(z.string()).optional(),
   profileId: z.string().uuid(),

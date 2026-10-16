@@ -1,14 +1,15 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { FileText, Maximize2, Minimize2, Download, Plus, Copy, Trash2, X, Upload, CheckCircle2, SlidersHorizontal, Eye, ArrowLeft, Minus, Info, AlertCircle, Loader2, PencilLine, HardDrive, MoreHorizontal } from 'lucide-react';
 import { v4 as uuid } from 'uuid';
 import { useAppStore } from '@/store/useAppStore';
 import { cvProfileSchema } from '@/types/schema';
 import { SectionWorkspace } from './SectionWorkspace';
-import { ResumePaper } from './ResumePaper';
+import { getResumePDF } from './pdfPipeline';
 import { DesignPanel } from './DesignPanel';
-import { essentials, fullName, hasUnsupportedPDFText, resumeBlocks, type SectionId } from './resumeModel';
+import { essentials, fullName, hasUnsupportedPDFText, type SectionId } from './resumeModel';
 import { useBuilderPersistence } from './useBuilderPersistence';
 const PDFInspection = lazy(() => import('./PDFInspection'));
+const PaginatedPreview = lazy(() => import('./PaginatedPreview'));
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
@@ -33,14 +34,10 @@ export function BuilderStudio() {
   const [previewFocused, setPreviewFocused] = useState(false);
   const [zoom, setZoom] = useState<number | null>(null);
   const [stageWidth, setStageWidth] = useState(700);
-  const [paperHeight, setPaperHeight] = useState(1123);
-  const stage = useRef<HTMLDivElement>(null);
-  const paper = useRef<HTMLDivElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const editor = useRef<HTMLDivElement>(null);
   const options = useRef<HTMLDetailsElement>(null);
   const profile = s.profiles.find(p => p.profileId === s.activeProfileId);
-  const hasPreviewSection = profile ? (section === 'personal' || resumeBlocks(profile).some(b => b.id === section)) : false;
   const checklist = profile ? essentials(profile) : [];
   const fitWidth = Math.min(1, Math.max(0.2, (stageWidth - 48) / 794));
   const scale = zoom ?? fitWidth;
@@ -48,25 +45,7 @@ export function BuilderStudio() {
   const selectedTemplate = ({ modern: 'Essential', classic: 'Editorial', minimal: 'Compact', split: 'Essential' })[s.documentTheme.layoutStyle];
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(''), 6500); return () => clearTimeout(t); } }, [toast]);
   useEffect(() => { const close = (e: PointerEvent) => { if (options.current && !options.current.contains(e.target as Node)) options.current.open = false; }; document.addEventListener('pointerdown', close); return () => document.removeEventListener('pointerdown', close); }, []);
-  useLayoutEffect(() => {
-    const a = stage.current; const b = paper.current;
-    if (!a || !b) return;
-    const measure = () => { if (a.clientWidth > 0 && a.clientHeight > 0 && b.scrollHeight > 0) { setStageWidth(a.clientWidth); setPaperHeight(b.scrollHeight); } };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(a); observer.observe(b);
-    return () => observer.disconnect();
-  }, [ready, profile?.profileId, mobile]);
   useEffect(() => { setSection('personal'); setExpanded(profile && !fullName(profile) ? 'personal' : null); setPreviewFocused(false); editor.current?.scrollTo({ top: 0 }); }, [profile?.profileId]);
-  useEffect(() => {
-    if (!hasPreviewSection || modal === 'design') return;
-    const frame = requestAnimationFrame(() => {
-      const container = stage.current;
-      const target = paper.current?.querySelector<HTMLElement>(`[data-resume-section="${section}"]`);
-      if (container && target) container.scrollTo({ top: Math.max(0, container.scrollTop + target.getBoundingClientRect().top - container.getBoundingClientRect().top - 24), behavior: 'instant' });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [section, hasPreviewSection, scale, mobile]);
   const selectSection = (id: SectionId) => {
     setSection(id); setExpanded(id); setMobile('edit'); setPreviewFocused(false);
     requestAnimationFrame(() => {
@@ -107,10 +86,9 @@ export function BuilderStudio() {
     if (unsupportedPDF) { setModal(null); setToast('This release uses Latin PDF fonts. Arabic and other non-Latin PDF export needs a dedicated font/shaping pass; your content is saved and can be backed up as JSON.'); return; }
     setExporting(true);
     try {
-      const [{ pdf }, { BuilderPDF }] = await Promise.all([import('@react-pdf/renderer'), import('./BuilderPDF')]);
-      const blob = await pdf(<BuilderPDF profile={profile} theme={s.documentTheme} />).toBlob();
+      const blob = await getResumePDF(profile, s.documentTheme);
       download(blob, `${safeName(fullName(profile) || profile.profileName)}_Resume.pdf`);
-      setToast('Your PDF is ready. Check the final page breaks before sending it.');
+      setToast('Your PDF is ready. Its pages match the live preview.');
       setModal(null);
     } catch { setModal(null); setToast('Could not generate the PDF. Your resume is unchanged. Try again or download a JSON backup.'); }
     finally { setExporting(false); }
@@ -127,7 +105,7 @@ export function BuilderStudio() {
       <div className="mobile-workspace-tabs"><button className={mobile === 'edit' ? 'active' : ''} onClick={() => { setMobile('edit'); setPreviewFocused(false); }}><PencilLine size={16} /> Edit resume</button><button className={mobile === 'preview' ? 'active' : ''} onClick={() => setMobile('preview')}><Eye size={16} /> Live preview</button></div>
       <main className={`studio-workspace clean-workspace mobile-${mobile} ${previewFocused ? 'preview-focused' : ''}`}>
         <section className="editor-pane" aria-label="Resume editor"><div className="clean-editor-heading"><h1>Resume content</h1><button className="text-button" onClick={showAdd}><Plus size={17} />Add section</button></div><div className="editor-scroll" ref={editor}><SectionWorkspace key={profile.profileId} profile={profile} expanded={expanded} onExpand={setExpanded} onSelect={setSection} /></div></section>
-        <section className="preview-pane" aria-label="Resume preview workspace"><div className="preview-stage" ref={stage}><div className="scaled-paper" style={{ width: 794 * scale, height: paperHeight * scale }}><div ref={paper} style={{ width: 794, transform: `scale(${scale})`, transformOrigin: 'top left' }}><ResumePaper profile={profile} theme={s.documentTheme} onEdit={selectSection} /></div></div><p className="preview-footnote">Live preview · Open PDF preview to check page breaks</p></div><footer className="preview-toolbar clean-preview-toolbar"><button className="text-button design-trigger" onClick={() => setModal('design')}><SlidersHorizontal size={17} />Design<span className="toolbar-template">{selectedTemplate}</span></button><div className="zoom-controls"><button className="icon-button" aria-label="Zoom out" onClick={() => { setZoom(Math.max(0.15, scale - 0.1)); }}><Minus size={16} /></button><span>{Math.round(scale * 100)}%</span><button className="icon-button" aria-label="Zoom in" onClick={() => { setZoom(Math.min(1.4, scale + 0.1)); }}><Plus size={16} /></button><button className={`text-button ${zoom === null ? 'fit-active' : ''}`} onClick={() => { setZoom(null); }} aria-label="Fit preview to width">Fit</button></div><div className="preview-file-actions"><button className="text-button pdf-trigger" aria-label="PDF preview" title="PDF preview" onClick={() => setModal('pdf')}><Eye size={17} /><span>PDF preview</span></button><button className="icon-button desktop-only" aria-label={previewFocused ? 'Exit focus preview' : 'Focus preview'} title={previewFocused ? 'Return to editor' : 'Focus preview'} onClick={() => { setPreviewFocused(!previewFocused); setMobile('preview'); }}>{previewFocused ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button></div></footer></section>
+        <section className="preview-pane" aria-label="Resume preview workspace"><Suspense fallback={<div className="pdf-loading"><Loader2 className="spin" size={24} />Loading page preview…</div>}><PaginatedPreview key={profile.profileId} profile={profile} theme={s.documentTheme} scale={scale} section={section} visible={mobile === 'preview'} onWidth={setStageWidth} onEdit={selectSection} /></Suspense><footer className="preview-toolbar clean-preview-toolbar"><button className="text-button design-trigger" onClick={() => setModal('design')}><SlidersHorizontal size={17} />Design<span className="toolbar-template">{selectedTemplate}</span></button><div className="zoom-controls"><button className="icon-button" aria-label="Zoom out" onClick={() => { setZoom(Math.max(0.15, scale - 0.1)); }}><Minus size={16} /></button><span>{Math.round(scale * 100)}%</span><button className="icon-button" aria-label="Zoom in" onClick={() => { setZoom(Math.min(1.4, scale + 0.1)); }}><Plus size={16} /></button><button className={`text-button ${zoom === null ? 'fit-active' : ''}`} onClick={() => { setZoom(null); }} aria-label="Fit preview to width">Fit</button></div><div className="preview-file-actions"><button className="text-button pdf-trigger" aria-label="PDF preview" title="PDF preview" onClick={() => setModal('pdf')}><Eye size={17} /><span>PDF preview</span></button><button className="icon-button desktop-only" aria-label={previewFocused ? 'Exit focus preview' : 'Focus preview'} title={previewFocused ? 'Return to editor' : 'Focus preview'} onClick={() => { setPreviewFocused(!previewFocused); setMobile('preview'); }}>{previewFocused ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button></div></footer></section>
       </main>
     </>}
     <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={e => void importBackup(e.target.files?.[0])} />

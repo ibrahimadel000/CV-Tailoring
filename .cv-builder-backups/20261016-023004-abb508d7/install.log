@@ -1,0 +1,10 @@
+APPLIED src/components/builder/BuilderPDF.tsx
+APPLIED src/components/builder/CustomSectionEditor.tsx
+APPLIED src/components/builder/EditorControls.tsx
+APPLIED src/components/builder/PageLayoutControls.tsx
+APPLIED src/components/builder/SectionEditor.tsx
+APPLIED src/components/builder/SectionWorkspace.tsx
+APPLIED src/components/builder/pdfPipeline.tsx
+APPLIED src/components/builder/resumeModel.ts
+APPLIED src/index.css
+APPLIED src/types/schema.ts

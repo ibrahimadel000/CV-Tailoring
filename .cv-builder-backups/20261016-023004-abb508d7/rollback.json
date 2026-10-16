@@ -1,0 +1,66 @@
+﻿{
+    "created":  "2026-10-16T02:30:04.6656810+03:00",
+    "projectPath":  "E:\\cv tailor - Copy",
+    "files":  [
+                  {
+                      "path":  "src/components/builder/BuilderPDF.tsx",
+                      "existed":  true,
+                      "oldSha256":  "a1c2913b959a75d3d80fd8f4648e46d468e594082b8234e95ab845df1b936e1c",
+                      "installedSha256":  "0181ad1667a0f309e826a7ce7727f8845fd7e039ad5443afaf4d7ccae4722843"
+                  },
+                  {
+                      "path":  "src/components/builder/CustomSectionEditor.tsx",
+                      "existed":  true,
+                      "oldSha256":  "dae6e967110ee061ea02f8f35494b4093c4d4820494a9c0b4c2d38009ec55dae",
+                      "installedSha256":  "7e6903b2364c3530d2f221a8317b1daf9b1b4e7a43827d27f0201ad7c08f1876"
+                  },
+                  {
+                      "path":  "src/components/builder/EditorControls.tsx",
+                      "existed":  true,
+                      "oldSha256":  "d15188f59d08cb126f55e24be0a8de0ab98758462c34de2fb7c7997b6b70367e",
+                      "installedSha256":  "372e4a5278d60a7bec60944b7fe1402df0fa99d80ed4c9cf0ebd187f331e2d26"
+                  },
+                  {
+                      "path":  "src/components/builder/PageLayoutControls.tsx",
+                      "existed":  false,
+                      "oldSha256":  null,
+                      "installedSha256":  "bde31ab514769140c2d25fc60342d0aceb9b24295a49bb2b2ef99d5961ff9de8"
+                  },
+                  {
+                      "path":  "src/components/builder/SectionEditor.tsx",
+                      "existed":  true,
+                      "oldSha256":  "443e3b2cb2583b6c7a9fdce21fd9795706bc2410037cea23e8e4209eba67ac9b",
+                      "installedSha256":  "e9bb3f0ba8744a38aa8fd939d48fdfeb6c3c4ec4eaa99b2731475779652167ba"
+                  },
+                  {
+                      "path":  "src/components/builder/SectionWorkspace.tsx",
+                      "existed":  true,
+                      "oldSha256":  "81497cff2c8091eee2c1bf64ccb00dbcab7f3cda3c98079afb389d776f19fd7c",
+                      "installedSha256":  "8a4078ac737303728cafdcfd6aa4b6a14affd119ea7bfb33261dfa88781167e1"
+                  },
+                  {
+                      "path":  "src/components/builder/pdfPipeline.tsx",
+                      "existed":  true,
+                      "oldSha256":  "3d7272215f10750bf194f3c0b1ca5f45e7a842d63e542da3dd67a3e9dc8b3068",
+                      "installedSha256":  "2366faed07bb45292edeee1edf9298a3005b0884780a2ce7f8753015702a9ad1"
+                  },
+                  {
+                      "path":  "src/components/builder/resumeModel.ts",
+                      "existed":  true,
+                      "oldSha256":  "8dad41d456c362966cec0db17cefae20956a6fe091d55d164a2c4c45a0217694",
+                      "installedSha256":  "d79311489b90b60b567663a0206f741afb2302d40df960830e13bd54b29e9f56"
+                  },
+                  {
+                      "path":  "src/index.css",
+                      "existed":  true,
+                      "oldSha256":  "e8a9a97eab97eb2d77a91e3b76a0ad86a750d89fd4743f64d6717fcb5ca95509",
+                      "installedSha256":  "4a251d7b04248e2cda7529123ebad99df477909769ea041fa8b0ec40dab5c1d8"
+                  },
+                  {
+                      "path":  "src/types/schema.ts",
+                      "existed":  true,
+                      "oldSha256":  "8521e3e2d0a01bd211e206b039c6347584c7bcd0184f844b06f07bb1fc4bb773",
+                      "installedSha256":  "dd23ccf87f640b4f4d9fcb2228495547b87fb1b4ca9f53b1a3756ac854244280"
+                  }
+              ]
+}

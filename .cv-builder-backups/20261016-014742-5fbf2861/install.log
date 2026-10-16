@@ -1,0 +1,6 @@
+APPLIED src/index.css
+APPLIED src/components/builder/BuilderStudio.tsx
+APPLIED src/components/builder/BuilderPDF.tsx
+APPLIED src/components/builder/PDFInspection.tsx
+APPLIED src/components/builder/PaginatedPreview.tsx
+APPLIED src/components/builder/pdfPipeline.tsx

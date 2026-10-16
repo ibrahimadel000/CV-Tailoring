@@ -540,3 +540,155 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 @media (max-width: 1050px) and (min-width: 901px) { .clean-preview-toolbar .pdf-trigger span { display: none; } }
 @media (max-width: 900px) { .clean-builder .clean-workspace { grid-template-columns: minmax(0, 1fr); } .clean-builder .clean-topbar { padding: 0 20px; gap: 16px; height: 64px; min-height: 64px; } .clean-builder .mobile-workspace-tabs { background: #f7f6f2; min-height: 48px; gap: 28px; padding: 0 24px; border-color: #d7e0e5; } .clean-builder .mobile-workspace-tabs button { min-height: 48px; font-size: 14px; } .clean-builder .editor-pane { border-right: 0; } .clean-builder .editor-scroll { padding: 8px 24px 32px; } .clean-editor-heading { padding: 8px 24px 0; min-height: 60px; } .clean-builder .section-accordion-body { padding-left: 10px; padding-right: 0; } .clean-builder .quick-add-sections { padding-left: 10px; } .clean-builder .clean-workspace.preview-focused .editor-pane { display: none; } .clean-builder .clean-preview-toolbar { padding: 8px 12px; gap: 8px; min-height: 60px; } .toolbar-template { display: none; } .design-sheet { inset: 64px 0 0 0; width: 100%; max-width: none; height: calc(100dvh - 64px); max-height: none; } .design-sheet .modal-heading { padding: 16px 24px; } .design-sheet-body { padding: 20px 24px; } .design-sheet-footer { padding: 12px 24px; } }
 @media (max-width: 600px) { .clean-builder .clean-topbar { padding: 0 12px; gap: 8px; } .resume-back { width: 44px; padding: 8px; } .resume-back span { display: none; } .clean-document { padding-left: 4px; border: 0; } .clean-topbar .document-title { min-height: 24px; font-size: 14px; max-width: 100%; width: 100%; } .clean-header-actions { gap: 4px; } .clean-export { min-width: 44px; width: 44px; padding: 10px; } .clean-export span { display: none; } .clean-topbar .save-state { font-size: 10px; } .document-options-menu { right: -48px; width: 270px; } .clean-builder .editor-scroll { padding: 8px 20px 32px; } .clean-editor-heading { padding-left: 20px; padding-right: 20px; } .clean-editor-heading h1 { font-size: 17px; } .clean-builder .section-accordion-heading { min-height: 80px; gap: 4px; } .clean-builder .section-accordion-toggle strong { font-size: 19px; } .clean-builder .section-accordion-body { padding-left: 0; } .clean-builder .quick-add-sections { padding-left: 0; } .clean-builder .builder-field input, .clean-builder .builder-field select, .clean-builder .builder-field textarea { font-size: 16px; } .clean-builder .form-grid { gap: 12px; } .clean-builder .visibility-grid { grid-template-columns: 1fr; } .clean-builder .entry-heading { flex-wrap: wrap; gap: 2px; } .clean-builder .entry-toggle { min-width: 160px; } .clean-builder .entry-actions { margin-left: auto; } .clean-builder .entry-form { padding: 16px; } .clean-builder .entry-actions .icon-button { min-width: 36px; } .clean-builder .clean-preview-toolbar { padding: 6px 8px; gap: 4px; } .clean-preview-toolbar .text-button { font-size: 13px; padding: 8px 6px; } .clean-preview-toolbar .icon-button { min-width: 36px; } .clean-preview-toolbar .pdf-trigger span { display: none; } .clean-preview-toolbar .pdf-trigger { min-width: 44px; } .clean-builder .preview-stage { padding: 20px 16px; } .design-sheet .design-controls { grid-template-columns: 1fr; } .design-sheet .design-controls > :first-child { grid-column: auto; } }
+
+/* Batch 05 — contextual fields, clear editing lifecycle, purpose-built additions. */
+.clean-builder .field-label-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 8px; min-height: 22px; }
+.clean-builder .field-label-row > label { font-size: 14px; font-weight: 400; color: #3f5363; }
+.clean-builder .field-label-row .field-visibility { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; min-height: 44px; font-size: 12px; color: #425969; }
+.clean-builder .field-visibility input { appearance: auto; width: 14px; height: 14px; min-height: 0; padding: 0; margin: 0; accent-color: #285ba1; }
+.clean-builder .field-not-shown > input { background: #f4f5f3; border-style: dashed; }
+.clean-builder .add-detail-group { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #d9e0e4; padding-top: 20px; }
+.add-detail-group > span { color: #526674; font-size: 14px; }
+.clean-builder .entry-toggle > .entry-edit-label { flex: 0 0 auto; font-size: 13px; color: #285b91; margin-left: 8px; }
+.clean-builder .entry-is-editing { border-color: #99adc0; }
+.clean-builder .entry-form-footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; border-top: 1px solid #e1e6e9; padding-top: 16px; margin-top: 4px; }
+.entry-secondary-actions { display: flex; }
+.clean-builder .entry-secondary-actions .icon-button { min-width: 44px; min-height: 44px; }
+.clean-builder .entry-done { padding: 9px 18px; min-height: 44px; }
+.custom-format-note { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; color: #405a70; }
+.custom-format-note > span { font-size: 12px; color: #5d6e7a; margin-left: auto; }
+.clean-builder .custom-section-editor .builder-field textarea { min-height: 160px; }
+.custom-skill-add { display: flex; align-items: flex-end; gap: 8px; }
+.custom-skill-add .builder-field { flex: 1; min-width: 0; }
+.custom-skill-add .secondary-button { min-height: 46px; }
+.custom-skill-tags:empty { display: none; }
+.clean-builder .custom-skill-tags button { min-height: 36px; min-width: 36px; }
+.section-format-picker { padding: 16px; border: 1px solid #bac9d3; border-radius: 8px; background: #fff; margin-top: 4px; }
+.format-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.format-picker-heading strong { font-size: 14px; color: #263f53; }
+.section-format-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.section-format-options > button { text-align: left; border: 1px solid #d4dde3; background: #f8fafb; border-radius: 6px; padding: 14px 12px; min-height: 88px; color: #263f53; }
+.section-format-options > button:hover { background: #edf3fa; border-color: #6e92b8; }
+.section-format-options strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.section-format-options span { display: block; font-size: 13px; line-height: 1.5; color: #526777; }
+.section-format-options > button:focus-visible, .entry-toggle:focus-visible { outline: 2px solid #285ba1; outline-offset: 2px; }
+@media (max-width: 600px) {
+ .clean-builder .field-label-row { gap: 0 4px; }
+ .clean-builder .field-label-row > label { font-size: 13px; }
+ .clean-builder .field-label-row .field-visibility { font-size: 12px; }
+ .clean-builder .entry-toggle { min-width: 0; }
+ .clean-builder .entry-toggle > .entry-edit-label { margin-left: 0; }
+ .clean-builder .custom-format-note > span { width: 100%; margin-left: 0; }
+ .section-format-picker { padding: 12px; }
+ .section-format-options { grid-template-columns: 1fr; }
+ .section-format-options > button { min-height: 72px; }
+}
+
+.clean-builder .custom-format-note { margin-top: 0; min-height: 44px; }
+.clean-builder .custom-format-note > .icon-button { margin-left: auto; min-width: 44px; min-height: 44px; }
+@media (max-width: 360px) { .clean-builder .form-grid { grid-template-columns: 1fr; } }
+
+/* Batch 06 — real PDF-backed A4 pages, not estimated HTML page breaks. */
+.pagination-status { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 4px 20px; flex-shrink: 0; border-bottom: 1px solid #cad3d9; background: #eef2f4; color: #3e5667; font-size: 12px; }
+.pagination-status strong { font-weight: 600; }
+.pagination-detail { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; color: #526776; }
+.pagination-warning { color: #775320; background: #fff5e7; flex-wrap: wrap; }
+.pagination-status .text-button { min-height: 32px; padding: 2px 8px; font-size: 12px; margin-left: auto; }
+.pdf-preview-page { margin: 0 auto 20px; }
+.pdf-preview-page:last-child { margin-bottom: 0; }
+.pdf-page-surface { position: relative; background: white; box-shadow: 0 1px 3px #17233716, 0 6px 20px #1723370c; }
+.pdf-page-surface canvas { display: block; }
+.pdf-preview-page figcaption { text-align: center; color: #465d6f; font-size: 12px; line-height: 20px; padding-top: 8px; }
+.pdf-text-layer { position: absolute; text-align: initial; inset: 0; overflow: clip; opacity: 1; line-height: 1; text-size-adjust: none; -webkit-text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 1; }
+.pdf-text-layer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0 0; }
+.pdf-text-layer > :not(.markedContent), .pdf-text-layer .markedContent span:not(.markedContent) { z-index: 1; }
+.pdf-text-layer span.markedContent { top: 0; height: 0; }
+.pdf-text-layer ::selection { background: #3c7cdc55; }
+.pdf-text-layer br::selection { background: transparent; }
+.pdf-section-edit { position: absolute; z-index: 2; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: 2px; }
+.pdf-section-edit:hover { background: #285ba10c; outline: 1px solid #285ba155; }
+.pdf-section-edit:focus-visible { outline: 2px solid #285ba1; outline-offset: 2px; }
+.preview-is-updating .pdf-page-surface { opacity: .75; }
+.page-preview-placeholder { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; background: #fff; margin: 0 auto; color: #526776; padding: 24px; text-align: center; box-shadow: 0 1px 5px #17233714; }
+.page-preview-placeholder p { font-size: 14px; max-width: 260px; }
+.pdf-page-error { position: absolute; inset: 0; z-index: 3; background: #ffffffef; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; padding: 20px; text-align: center; font-size: 14px; color: #526776; }
+.pagination-fallback-note { max-width: 560px; font-size: 14px; color: #775320; margin: 0 auto 20px; }
+@media (max-width: 600px) { .pagination-status { padding: 4px 16px; min-height: 36px; } .pagination-detail { font-size: 11px; } .pdf-preview-page { margin-bottom: 16px; } }
+@media print { .pagination-status, .pdf-preview-page figcaption { display: none !important; } .pdf-preview-page { break-after: page; } }
+
+.preview-is-updating .pdf-section-edit { pointer-events: none; }
+
+/* Pagination options stay secondary to writing. Indicators never enter the PDF. */
+.page-layout-controls { margin: 16px 0; border-top: 1px solid var(--border, #d4dde5); padding-top: 12px; font-size: 13px; }
+.page-layout-controls summary { cursor: pointer; color: #405a72; min-height: 28px; }
+.page-layout-controls summary span { display: inline-block; margin-left: 10px; font-size: 11px; color: #2459a5; }
+.page-layout-controls fieldset { border: 0; padding: 10px 0 0; margin: 0; min-width: 0; }
+.page-layout-controls label { display: block; margin-bottom: 8px; }
+.page-layout-controls select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #bccbd9; border-radius: 6px; color: #243951; background: white; font: inherit; }
+.page-layout-controls p { font-size: 12px; line-height: 1.6; color: #5a7085; margin: 9px 0; }
+.entry-toggle .entry-layout-note { color: #2459a5; font-size: 11px; margin-top: 4px; }
+
+/* Batch 08 — quiet inputs, clear groups, and an unmistakable editing state. */
+.clean-builder .editor-pane, .clean-builder .editor-pane .entry-heading { background: #fff; }
+.clean-builder .editor-pane .section-accordion-body { container-type: inline-size; container-name: resume-form; }
+.clean-builder .section-fieldset, .clean-builder .custom-section-editor, .clean-builder .entry-form { gap: 24px; }
+.clean-builder .builder-field { gap: 12px; }
+.clean-builder .field-label-row { min-height: 24px; align-items: center; gap: 4px 10px; }
+.clean-builder .field-label-row > label, .clean-builder .builder-field > label, .clean-builder .builder-field > span { color: #374151; font-size: 14px; font-weight: 500; line-height: 1.5; }
+.clean-builder .builder-field input:not([type="checkbox"]), .clean-builder .builder-field textarea, .clean-builder .builder-field select, .clean-builder .bullet-row textarea, .clean-builder .page-layout-controls select {
+  min-height: 52px; padding: 13px 14px; border: 1px solid transparent; border-bottom-color: #7f8b9b; border-radius: 6px; background: #f3f4f6; color: #202c3d; font-size: 16px; line-height: 1.5; box-shadow: none; transition: background-color .15s, border-color .15s, box-shadow .15s;
+}
+.clean-builder .builder-field textarea { min-height: 156px; resize: vertical; overflow-y: auto; }
+.clean-builder .builder-field input::placeholder, .clean-builder .builder-field textarea::placeholder, .clean-builder .bullet-row textarea::placeholder { font-size: 15px; color: #667085; opacity: 1; }
+.clean-builder .builder-field input:not([type="checkbox"]):hover:not(:disabled), .clean-builder .builder-field textarea:hover:not(:disabled), .clean-builder .builder-field select:hover:not(:disabled), .clean-builder .bullet-row textarea:hover:not(:disabled), .clean-builder .page-layout-controls select:hover:not(:disabled) { background: #eef0f3; border-color: #b9c3d0; border-bottom-color: #6b7b90; }
+.clean-builder .builder-field input:not([type="checkbox"]):focus, .clean-builder .builder-field textarea:focus, .clean-builder .builder-field select:focus, .clean-builder .bullet-row textarea:focus, .clean-builder .page-layout-controls select:focus { outline: 2px solid #285ba1; outline-offset: 1px; border-color: #285ba1; box-shadow: 0 0 0 4px #285ba110; background: #fff; }
+.clean-builder .builder-field input:disabled, .clean-builder .builder-field textarea:disabled, .clean-builder .builder-field select:disabled { background: #eceef1; color: #667085; cursor: not-allowed; opacity: 1; }
+.clean-builder .builder-field small { font-size: 13px; color: #5f6b7b; line-height: 1.6; }
+.clean-builder .builder-field .field-error { margin: 0; color: #a12622; }
+.clean-builder .field-is-invalid input:not([type="checkbox"]) { border-color: #b42318; background: #fff7f6; }
+.clean-builder .field-is-invalid input:focus { outline-color: #b42318; border-color: #b42318; }
+.clean-builder .field-not-shown > input:not([type="checkbox"]) { border-style: dashed; border-color: #7f8b9b; background: #f8f9fa; }
+.clean-builder .field-label-row .field-visibility { min-height: 44px; margin-block: -10px; gap: 7px; font-size: 12px; color: #475467; flex: 0 0 auto; font-weight: 400; }
+.clean-builder .field-visibility input[role="switch"] { appearance: none; width: 32px; height: 20px; min-height: 20px; padding: 2px; border: 0; border-radius: 12px; background: #7b8491; cursor: pointer; position: relative; box-shadow: none; transition: background-color .15s; }
+.clean-builder .field-visibility input[role="switch"]::before { content: ''; display: block; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.clean-builder .field-visibility input[role="switch"]:checked { background: #285ba1; }
+.clean-builder .field-visibility input[role="switch"]:checked::before { transform: translateX(12px); }
+.clean-builder .field-visibility input[role="switch"]:focus-visible, .clean-builder .check-field input:focus-visible { outline: 2px solid #285ba1; outline-offset: 3px; }
+.clean-builder .field-visibility input[role="switch"]:disabled { background: #9da6b1; cursor: not-allowed; }
+.clean-builder .form-section { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.clean-builder .form-section-labelled { border-top: 1px solid #e5e7eb; padding-top: 24px; }
+.clean-builder .form-section h3 { font-size: 14px; font-weight: 650; line-height: 1.5; color: #253448; margin: 0 0 -2px; }
+.clean-builder .form-grid { align-items: start; gap: 20px; }
+.clean-builder .date-range-fields { display: flex; flex-direction: column; gap: 6px; }
+.clean-builder .date-current-row { display: flex; justify-content: flex-end; }
+.clean-builder .check-field { color: #475467; font-size: 14px; gap: 8px; }
+.clean-builder .check-field input { width: 16px; height: 16px; accent-color: #285ba1; }
+.clean-builder .add-detail-group { border: 0; padding-top: 0; gap: 12px; }
+.clean-builder .add-detail-group > span { color: #667085; font-size: 13px; }
+.clean-builder .add-detail-group .section-chip { border-color: #d0d5dd; font-size: 14px; border-radius: 6px; }
+.clean-builder .bullet-editor { display: flex; flex-direction: column; gap: 12px; }
+.clean-builder .bullet-editor h4 { color: #374151; font-size: 14px; font-weight: 600; line-height: 1.5; margin: 0; }
+.clean-builder .bullet-editor p { margin: -5px 0 2px; font-size: 13px; color: #5f6b7b; line-height: 1.6; }
+.clean-builder .bullet-row { gap: 8px; }
+.clean-builder .bullet-row > span { margin-top: 15px; color: #667085; }
+.clean-builder .bullet-row textarea { min-height: 84px; width: 0; flex: 1; resize: vertical; overflow-y: auto; }
+.clean-builder .bullet-row .icon-button { min-width: 44px; min-height: 44px; padding: 10px; margin-top: 4px; }
+.clean-builder .bullet-editor > .text-button { align-self: flex-start; min-height: 44px; font-size: 14px; }
+.clean-builder .skill-add { border: 0; padding: 0; background: transparent; gap: 16px; }
+.clean-builder .page-layout-controls { margin: 0; padding-top: 16px; border-color: #e5e7eb; }
+.clean-builder .page-layout-controls > summary { min-height: 44px; padding: 10px 0; font-size: 13px; }
+.clean-builder .page-layout-controls fieldset { padding-top: 6px; }
+@container resume-form (max-width: 440px) { .clean-builder .form-grid { grid-template-columns: minmax(0, 1fr); } .clean-builder .date-current-row { justify-content: flex-start; } }
+@media (max-width: 600px) {
+  .clean-builder .form-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .clean-builder .section-fieldset, .clean-builder .entry-form { gap: 24px; }
+  .clean-builder .date-current-row { justify-content: flex-start; }
+  .clean-builder .field-label-row > label { font-size: 14px; }
+  .clean-builder .bullet-row { gap: 5px; }
+  .clean-builder .bullet-row > span { display: none; }
+  .clean-builder .entry-form { padding: 18px 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .clean-builder .builder-field *, .clean-builder .bullet-row textarea, .clean-builder .field-visibility input[role="switch"]::before { transition: none !important; } }
+@media (forced-colors: active) { .clean-builder .builder-field input, .clean-builder .builder-field textarea, .clean-builder .builder-field select, .clean-builder .bullet-row textarea, .clean-builder .page-layout-controls select { border: 1px solid CanvasText; } .clean-builder .field-visibility input[role="switch"] { appearance: auto; } .clean-builder .field-visibility input[role="switch"]::before { display: none; } }
+.clean-builder .optional-area-field { min-width: 0; }
+.clean-builder .optional-area-field > .text-button { min-height: 44px; font-size: 14px; padding-left: 0; }

@@ -1,0 +1,4 @@
+APPLIED src/components/builder/CustomSectionEditor.tsx
+APPLIED src/components/builder/EditorControls.tsx
+APPLIED src/components/builder/SectionEditor.tsx
+APPLIED src/index.css
