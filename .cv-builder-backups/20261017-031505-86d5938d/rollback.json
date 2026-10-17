@@ -1,0 +1,24 @@
+﻿{
+    "created":  "2026-10-17T03:15:05.2598568+03:00",
+    "projectPath":  "E:\\cv tailor - Copy",
+    "files":  [
+                  {
+                      "path":  "src/components/builder/BuilderStudio.tsx",
+                      "existed":  true,
+                      "oldSha256":  "fa6e4d92e34bbc2339e046fd165876887b13e89d9d45d60d16041363c139a770",
+                      "installedSha256":  "d053c2693dc8dac2b67510752f963257b2ea1258868205c4c968310f9af6f27d"
+                  },
+                  {
+                      "path":  "src/components/builder/PaginatedPreview.tsx",
+                      "existed":  true,
+                      "oldSha256":  "2451a3967794aa635b9123b178641c7f0b5de6681f2ebefab0f28e5d6303d124",
+                      "installedSha256":  "171955f6e117db392a60facbf3a30acbfc5b12f239066d59259e375c6c6200cf"
+                  },
+                  {
+                      "path":  "src/index.css",
+                      "existed":  true,
+                      "oldSha256":  "9b777e99e348acb35834224002987bae5dd1545400b998ad5a6899a884f79147",
+                      "installedSha256":  "5cf97b6541a764493b0605e35e384ba4c52acb5a39d20c4aa847589fe3729b3b"
+                  }
+              ]
+}

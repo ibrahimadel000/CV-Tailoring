@@ -1,0 +1,21 @@
+{
+  "release": "CV Builder Design Preview Scroll Batch 12 (requires Batch 11)",
+  "packageSha256": "dd7da1d6af0932856d069b303af646115cba7ae6b68c11b6b1a8340147ef42dd",
+  "files": [
+    {
+      "path": "src/components/builder/BuilderStudio.tsx",
+      "oldSha256": "fa6e4d92e34bbc2339e046fd165876887b13e89d9d45d60d16041363c139a770",
+      "newSha256": "d053c2693dc8dac2b67510752f963257b2ea1258868205c4c968310f9af6f27d"
+    },
+    {
+      "path": "src/components/builder/PaginatedPreview.tsx",
+      "oldSha256": "2451a3967794aa635b9123b178641c7f0b5de6681f2ebefab0f28e5d6303d124",
+      "newSha256": "171955f6e117db392a60facbf3a30acbfc5b12f239066d59259e375c6c6200cf"
+    },
+    {
+      "path": "src/index.css",
+      "oldSha256": "9b777e99e348acb35834224002987bae5dd1545400b998ad5a6899a884f79147",
+      "newSha256": "5cf97b6541a764493b0605e35e384ba4c52acb5a39d20c4aa847589fe3729b3b"
+    }
+  ]
+}
