@@ -1,0 +1,8 @@
+APPLIED src/components/builder/BuilderPDF.tsx
+APPLIED src/components/builder/PhotoField.tsx
+APPLIED src/components/builder/ResumePaper.tsx
+APPLIED src/components/builder/SectionEditor.tsx
+APPLIED src/components/builder/pdfPipeline.tsx
+APPLIED src/components/builder/photoModel.ts
+APPLIED src/index.css
+APPLIED src/types/schema.ts

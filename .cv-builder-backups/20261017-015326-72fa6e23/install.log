@@ -1,0 +1,5 @@
+APPLIED src/components/builder/BuilderStudio.tsx
+APPLIED src/components/builder/SectionWorkspace.tsx
+APPLIED src/components/builder/useSectionDrag.ts
+APPLIED src/components/builder/useBuilderPersistence.ts
+APPLIED src/index.css

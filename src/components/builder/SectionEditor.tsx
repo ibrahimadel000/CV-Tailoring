@@ -4,6 +4,7 @@ import { v4 as uuid } from 'uuid';
 import { useAppStore } from '@/store/useAppStore';
 import type { BulletPoint, CVProfile, ResumeHeader, SkillTag } from '@/types/schema';
 import type { BuiltInSectionId } from './resumeModel';
+import { PhotoField } from './PhotoField';
 import { PageLayoutControls } from './PageLayoutControls';
 import { Field, DateRangeFields, FormSection, GrowingTextarea, OptionalAreaField, EntryCard, EntryGroup } from './EditorControls';
 
@@ -53,9 +54,10 @@ export function SectionEditor({ section, profile }: { section: BuiltInSectionId;
   return <EntryGroup><fieldset ref={form} className="section-fieldset" disabled={locked}>
     {locked && <p className="locked-notice">This section is locked in your existing profile.</p>}
     {section === 'personal' && <>
+      <PhotoField key={profile.profileId} header={h} onChange={updateHeader} />
       <FormSection>
         <div className="form-grid name-grid"><Field label="First name" value={h.firstName ?? h.name.split(' ')[0]} autoComplete="given-name" placeholder="e.g. Alex" onChange={v => updateHeader({ firstName: v, name: `${v} ${h.lastName ?? h.name.split(' ').slice(1).join(' ')}`.trim() })} /><Field label="Last name" value={h.lastName ?? h.name.split(' ').slice(1).join(' ')} autoComplete="family-name" placeholder="e.g. Morgan" onChange={v => updateHeader({ lastName: v, name: `${h.firstName ?? h.name.split(' ')[0]} ${v}`.trim() })} /></div>
-        <Field visibility={{ label: 'Show professional title', text: 'Use as headline', checked: h.useAsHeadline !== false, onChange: v => updateHeader({ useAsHeadline: v }) }} label="Professional title" value={h.desiredJobPosition} autoComplete="organization-title" placeholder="e.g. Product Designer" onChange={v => updateHeader({ desiredJobPosition: v })} />
+        <Field visibility={{ label: 'Show professional title', text: 'Use as headline', checked: h.useAsHeadline !== false, onChange: v => updateHeader({ useAsHeadline: v }) }} label="Professional title" value={h.desiredJobPosition ?? profile.headline.data} autoComplete="organization-title" placeholder="e.g. Product Designer" onChange={v => updateHeader({ desiredJobPosition: v })} />
       </FormSection>
       <FormSection title="Contact information">
         <div className="form-grid contact-grid"><Field label="Email address" type="email" autoComplete="email" value={h.email} placeholder="alex@example.com" onChange={v => updateHeader({ email: v })} error={h.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(h.email) ? 'Enter an email address like name@example.com.' : undefined} /><Field visibility={{ label: 'Show phone', checked: h.showPhone !== false, onChange: v => updateHeader({ showPhone: v }) }} label="Phone number" type="tel" autoComplete="tel" value={h.phone} placeholder="+1 555 012 3456" onChange={v => updateHeader({ phone: v })} /></div>

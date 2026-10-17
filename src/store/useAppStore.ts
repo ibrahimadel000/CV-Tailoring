@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { get as idbGet, setMany as idbSetMany } from 'idb-keyval';
 import { v4 as uuidv4 } from 'uuid';
 import { createSampleProfile } from '@/mock/profile';
-import { cvProfileSchema } from '@/types/schema';
+import { cvProfileSchema, documentThemeSchema } from '@/types/schema';
+import type { DocumentTheme } from '@/types/schema';
+export type { DocumentTheme } from '@/types/schema';
 import type {
   CVProfile,
   ExperienceEntry,
@@ -15,12 +17,21 @@ import type {
   CertificationEntry,
 } from '@/types/schema';
 
-export interface DocumentTheme {
-  accentColor: string; // default '#b87373' (Dusty Rose from reference)
-  fontFamily: 'sans' | 'serif' | 'mono';
-  fontSize: 'small' | 'medium' | 'large';
-  lineSpacing: 'compact' | 'normal' | 'relaxed';
-  layoutStyle: 'modern' | 'split' | 'classic' | 'minimal';
+export const DEFAULT_DOCUMENT_THEME: DocumentTheme = {
+  accentColor: '#2557a7', fontFamily: 'sans', fontSize: 'medium',
+  lineSpacing: 'normal', layoutStyle: 'modern',
+};
+
+// Older releases stored one shared theme. Migrate that appearance once into
+// each existing resume, never silently replace content or an invalid document.
+function legacyTheme(value: unknown): DocumentTheme {
+  const theme = { ...DEFAULT_DOCUMENT_THEME };
+  if (!value || typeof value !== 'object') return theme;
+  for (const key of Object.keys(documentThemeSchema.shape) as (keyof DocumentTheme)[]) {
+    const parsed = documentThemeSchema.shape[key].safeParse((value as Record<string, unknown>)[key]);
+    if (parsed.success) Object.assign(theme, { [key]: parsed.data });
+  }
+  return theme;
 }
 
 interface AppStore {
@@ -91,6 +102,7 @@ interface AppStore {
 
 function createEmptyProfile(name: string = 'My Main CV'): CVProfile {
   return {
+    documentTheme: { ...DEFAULT_DOCUMENT_THEME },
     profileId: uuidv4(),
     profileName: name,
     version: 0,
@@ -183,13 +195,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     // Initial State
     profiles: [],
     activeProfileId: null,
-    documentTheme: {
-      accentColor: '#2557a7', // Builder default: deep blue
-      fontFamily: 'sans',
-      fontSize: 'medium',
-      lineSpacing: 'normal',
-      layoutStyle: 'modern',
-    },
+    documentTheme: { ...DEFAULT_DOCUMENT_THEME },
     jobDescription: '',
     setJobDescription: (jd: string) => set({ jobDescription: jd }),
     extensionConnected: false,
@@ -202,16 +208,18 @@ export const useAppStore = create<AppStore>((set, get) => {
       const newProfile = createEmptyProfile(name);
       set((state) => ({
         profiles: [...state.profiles, newProfile],
-        activeProfileId: newProfile.profileId
+        activeProfileId: newProfile.profileId,
+        documentTheme: { ...newProfile.documentTheme! },
       }));
       return newProfile.profileId;
     },
 
     loadSampleProfile: () => {
-      const sample = createSampleProfile('Alex Morgan (Sample CV)');
+      const sample = { ...createSampleProfile('Alex Morgan (Sample CV)'), documentTheme: { ...DEFAULT_DOCUMENT_THEME } };
       set((state) => ({
         profiles: [...state.profiles, sample],
-        activeProfileId: sample.profileId
+        activeProfileId: sample.profileId,
+        documentTheme: { ...sample.documentTheme },
       }));
       return sample.profileId;
     },
@@ -224,6 +232,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       // Deep clone using JSON stringify to completely detach references
       const clonedProfile: CVProfile = JSON.parse(JSON.stringify(source));
       
+      clonedProfile.documentTheme = { ...(source.documentTheme ?? get().documentTheme) };
       clonedProfile.profileId = uuidv4(); // Issue new ID
       clonedProfile.profileName = newName || `${source.profileName} (Copy)`;
       clonedProfile.baseProfileId = sourceId;
@@ -235,13 +244,18 @@ export const useAppStore = create<AppStore>((set, get) => {
 
       set((state) => ({
         profiles: [...state.profiles, clonedProfile],
-        activeProfileId: clonedProfile.profileId
+        activeProfileId: clonedProfile.profileId,
+        documentTheme: { ...clonedProfile.documentTheme! },
       }));
 
       return clonedProfile.profileId;
     },
 
-    setActiveProfile: (id) => set({ activeProfileId: id }),
+    setActiveProfile: (id) => set(state => {
+      if (!state.profiles.some(p => p.profileId === id)) return state;
+      const profiles = state.profiles.map(p => p.documentTheme ? p : { ...p, documentTheme: { ...state.documentTheme } });
+      return { profiles, activeProfileId: id, documentTheme: { ...profiles.find(p => p.profileId === id)!.documentTheme! } };
+    }),
 
     updateProfileName: (id, name) => {
       set((state) => ({
@@ -250,9 +264,15 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     setDocumentTheme: (theme) => {
-      set((state) => ({
-        documentTheme: { ...state.documentTheme, ...theme }
-      }));
+      set(state => {
+        if (!state.profiles.some(p => p.profileId === state.activeProfileId)) return state;
+        const parsed = documentThemeSchema.safeParse({ ...state.documentTheme, ...theme });
+        if (!parsed.success) return state;
+        return {
+          documentTheme: parsed.data,
+          profiles: state.profiles.map(p => ({ ...p, documentTheme: p.profileId === state.activeProfileId ? { ...parsed.data } : p.documentTheme ?? { ...state.documentTheme } })),
+        };
+      });
     },
 
     deleteProfile: (id) => {
@@ -262,7 +282,8 @@ export const useAppStore = create<AppStore>((set, get) => {
         if (activeId === id) {
           activeId = remaining.length > 0 ? remaining[remaining.length - 1].profileId : null;
         }
-        return { profiles: remaining, activeProfileId: activeId };
+        return { profiles: remaining, activeProfileId: activeId,
+          documentTheme: { ...(remaining.find(p => p.profileId === activeId)?.documentTheme ?? state.documentTheme) } };
       });
     },
 
@@ -549,20 +570,14 @@ export const useAppStore = create<AppStore>((set, get) => {
       if (storedProfiles !== undefined && !Array.isArray(storedProfiles)) {
         throw new Error('Saved resume data is not a valid list.');
       }
+      const fallback = legacyTheme(storedTheme);
       if (Array.isArray(storedProfiles)) {
         if (!storedProfiles.every(p => cvProfileSchema.safeParse(p).success)) throw new Error('A saved resume could not be validated.');
-        set({ profiles: storedProfiles, activeProfileId: storedProfiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (storedProfiles[0]?.profileId || null) });
+        const profiles: CVProfile[] = storedProfiles.map(p => ({ ...p, documentTheme: { ...(p.documentTheme ?? fallback) } }));
+        const activeProfileId = profiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (profiles[0]?.profileId || null);
+        set({ profiles, activeProfileId, documentTheme: { ...(profiles.find(p => p.profileId === activeProfileId)?.documentTheme ?? fallback) } });
       } else {
         get().createProfile('My first resume');
-      }
-      if (storedTheme && typeof storedTheme === 'object') {
-        const safe: Partial<DocumentTheme> = {};
-        if (/^#[0-9a-f]{6}$/i.test(storedTheme.accentColor)) safe.accentColor = storedTheme.accentColor;
-        if (['sans', 'serif', 'mono'].includes(storedTheme.fontFamily)) safe.fontFamily = storedTheme.fontFamily;
-        if (['small', 'medium', 'large'].includes(storedTheme.fontSize)) safe.fontSize = storedTheme.fontSize;
-        if (['compact', 'normal', 'relaxed'].includes(storedTheme.lineSpacing)) safe.lineSpacing = storedTheme.lineSpacing;
-        if (['modern', 'classic', 'minimal'].includes(storedTheme.layoutStyle)) safe.layoutStyle = storedTheme.layoutStyle;
-        set({ documentTheme: { ...get().documentTheme, ...safe } });
       }
     },
 

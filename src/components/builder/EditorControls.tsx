@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { useEditorAnchor } from './useEditorAnchor';
 import { ArrowDown, ArrowUp, Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
 
 type Visibility = { label: string; checked: boolean; onChange: (value: boolean) => void; text?: string };
@@ -51,8 +52,9 @@ export function EntryCard({ title, subtitle, layoutNote, children, onRemove, onU
   const form = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const open = group ? group.active === id : localOpen;
-  const setOpen = (next: boolean) => { if (group) group.setActive(next ? id : null); else setLocalOpen(next); setConfirm(false); };
+  const anchor = useEditorAnchor();
+  const setOpen = (next: boolean) => { anchor(toggle.current, true); if (group) group.setActive(next ? id : null); else setLocalOpen(next); setConfirm(false); };
   useEffect(() => { if (startOpen) { if (group) group.setActive(id); const timer = setTimeout(() => form.current?.querySelector<HTMLInputElement>('input:not([type="checkbox"])')?.focus(), 0); return () => clearTimeout(timer); } }, []);
-  const done = () => { setOpen(false); toggle.current?.focus({ preventScroll: true }); };
+  const done = () => setOpen(false);
   return <div className={`entry-card ${open ? 'entry-is-editing' : ''}`}><div className="entry-heading"><button ref={toggle} className="entry-toggle" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}><span><strong>{title}</strong><small>{subtitle || 'Add the details for this entry'}</small>{layoutNote && <small className="entry-layout-note">{layoutNote}</small>}</span><span className="entry-edit-label">{open ? 'Editing' : 'Edit'}</span><ChevronDown size={17} style={{ transform: open ? 'rotate(180deg)' : '' }} /></button></div>{open && <div id={id} className="entry-form" ref={form}>{children}<div className="entry-form-footer"><div className="entry-secondary-actions"><button className="icon-button" aria-label={`Move ${title} up`} onClick={onUp} disabled={!onUp}><ArrowUp size={16} /></button><button className="icon-button" aria-label={`Move ${title} down`} onClick={onDown} disabled={!onDown}><ArrowDown size={16} /></button><button className="icon-button danger-text" aria-label={`Remove ${title}`} onClick={() => setConfirm(!confirm)}><Trash2 size={16} /></button></div><button className="primary-button entry-done" onClick={done}><Check size={16} />Done</button></div>{confirm && <div className="inline-confirm"><span>Remove this entry?</span><button className="text-button danger-text" onClick={onRemove}>Remove</button><button className="text-button" onClick={() => setConfirm(false)}>Keep</button></div>}</div>}</div>;
 }

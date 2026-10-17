@@ -1,0 +1,8 @@
+APPLIED src/components/builder/EditorControls.tsx
+APPLIED src/components/builder/SectionEditor.tsx
+APPLIED src/components/builder/SectionWorkspace.tsx
+APPLIED src/components/builder/resumeModel.ts
+APPLIED src/components/builder/useEditorAnchor.ts
+APPLIED src/components/builder/useSectionDrag.ts
+APPLIED src/store/useAppStore.ts
+APPLIED src/types/schema.ts

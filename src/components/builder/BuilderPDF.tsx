@@ -1,6 +1,7 @@
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
 import type { CVProfile } from '@/types/schema';
 import type { DocumentTheme } from '@/store/useAppStore';
+import { visiblePhoto } from './photoModel';
 import { contacts, fullName, headline, resumeBlocks, themeMetrics } from './resumeModel';
 
 // A first, naturally wrapped render measures the real font/layout heights. Never
@@ -19,15 +20,21 @@ export function measurePDFLayout(node: PDFLayoutNode): PDFMeasurements {
 export function BuilderPDF({ profile, theme, measurements, onMeasure }: { profile: CVProfile; theme: DocumentTheme; measurements?: PDFMeasurements; onMeasure?: (node: PDFLayoutNode) => void }) {
   const m = themeMetrics(theme);
   const classic = theme.layoutStyle === 'classic';
+  const photo = visiblePhoto(profile);
   const bodyHeight = 841.89 - m.margin * 2;
   const fits = (key: string, limit = bodyHeight - 2) => Boolean(measurements?.[key] && measurements[key] <= limit);
   const measuring = !measurements;
   return <Document title={profile.profileName} author={fullName(profile)} onRender={onMeasure ? result => { const data = (result as unknown as { _INTERNAL__LAYOUT__DATA_?: PDFLayoutNode })._INTERNAL__LAYOUT__DATA_; if (data) onMeasure(data); } : undefined}>
     <Page size="A4" style={{ padding: m.margin, fontFamily: m.font, fontSize: m.size, color: '#243044', lineHeight: m.leading }}>
       <View style={{ paddingBottom: 16, marginBottom: m.gap, borderBottomWidth: classic ? 1 : 2, borderBottomColor: theme.accentColor }}>
-        <Text style={{ fontSize: 27, lineHeight: 1.25, fontFamily: m.bold, color: '#172337', textAlign: classic ? 'center' : 'left' }}>{fullName(profile) || 'Your name'}</Text>
-        {Boolean(headline(profile)) && <Text style={{ fontSize: 12, lineHeight: 1.45, color: theme.accentColor, marginTop: 5, textAlign: classic ? 'center' : 'left' }}>{headline(profile)}</Text>}
-        {contacts(profile).length > 0 && <Text style={{ marginTop: 8, fontSize: 9, lineHeight: 1.5, color: '#526074', textAlign: classic ? 'center' : 'left' }}>{contacts(profile).join('  ·  ')}</Text>}
+        <View style={{ flexDirection: photo && !classic ? 'row' : 'column', alignItems: photo && !classic ? 'center' : 'stretch', gap: photo ? 16 : 0 }}>
+          {photo && <Image src={photo.source} style={{ width: 72, height: 72, borderRadius: photo.shape === 'circle' ? 36 : 6, alignSelf: classic ? 'center' : 'flex-start' }} />}
+          <View style={photo && !classic ? { flex: 1 } : {}}>
+            <Text style={{ fontSize: 27, lineHeight: 1.25, fontFamily: m.bold, color: '#172337', textAlign: classic ? 'center' : 'left' }}>{fullName(profile) || 'Your name'}</Text>
+            {Boolean(headline(profile)) && <Text style={{ fontSize: 12, lineHeight: 1.45, color: theme.accentColor, marginTop: 5, textAlign: classic ? 'center' : 'left' }}>{headline(profile)}</Text>}
+            {contacts(profile).length > 0 && <Text style={{ marginTop: 8, fontSize: 9, lineHeight: 1.5, color: '#526074', textAlign: classic ? 'center' : 'left' }}>{contacts(profile).join('  ·  ')}</Text>}
+          </View>
+        </View>
       </View>
       {resumeBlocks(profile).flatMap(block => block.items.map((item, i) => {
         const key = `measure-entry-${block.id}-${i}`;

@@ -1,0 +1,36 @@
+﻿{
+    "created":  "2026-10-17T01:53:26.4054976+03:00",
+    "projectPath":  "E:\\cv tailor - Copy",
+    "files":  [
+                  {
+                      "path":  "src/components/builder/BuilderStudio.tsx",
+                      "existed":  true,
+                      "oldSha256":  "f4d6e68060acdf47c24b8e71bb692a0076f902b07295120f933f8afaf1434bac",
+                      "installedSha256":  "fa6e4d92e34bbc2339e046fd165876887b13e89d9d45d60d16041363c139a770"
+                  },
+                  {
+                      "path":  "src/components/builder/SectionWorkspace.tsx",
+                      "existed":  true,
+                      "oldSha256":  "8a4078ac737303728cafdcfd6aa4b6a14affd119ea7bfb33261dfa88781167e1",
+                      "installedSha256":  "619d422d85f49252c7a59cabc636f0b835f39e6f8aa3a11516b02b6552fef9c3"
+                  },
+                  {
+                      "path":  "src/components/builder/useSectionDrag.ts",
+                      "existed":  true,
+                      "oldSha256":  "d805c1e7cf44c51711337777217a5c9179944e6cd4ecc6f2bebc0a889919cdd2",
+                      "installedSha256":  "8010b776d35c6f4cb45f7f97709bacb104452602db9ed9e945b005eeb423ebd6"
+                  },
+                  {
+                      "path":  "src/components/builder/useBuilderPersistence.ts",
+                      "existed":  true,
+                      "oldSha256":  "2d03df4f1ec690afe09d1ee69561604d915e0343f87669b05e6ce7856b257b00",
+                      "installedSha256":  "c6c755b9d6e9b66a7c3b5209b3993e42a2ee8c5b5c34496f8d5b82b961767ae8"
+                  },
+                  {
+                      "path":  "src/index.css",
+                      "existed":  true,
+                      "oldSha256":  "5cc1e53d25007922efcb79b8cd8865f255f58780aaef8e258355b6f083581237",
+                      "installedSha256":  "55a76d920e43cdcdbb83bb542dc473e90d07f6009f0aacc86c3223ae4460cb52"
+                  }
+              ]
+}

@@ -30,7 +30,7 @@ export function useBuilderPersistence() {
               if (live) { setStatus('saved'); setMessage(''); }
             }
           } catch {
-            if (live) { setStatus('error'); setMessage('Could not save on this device. Download a JSON backup before leaving.'); }
+            if (live) { setStatus('error'); setMessage('Could not save in this browser. Keep this tab open and retry saving before leaving.'); }
           }
         });
       }, 450);

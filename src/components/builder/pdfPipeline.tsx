@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { CVProfile } from '@/types/schema';
 import type { DocumentTheme } from '@/store/useAppStore';
+import { visiblePhoto } from './photoModel';
 import { contacts, fullName, headline, resumeBlocks } from './resumeModel';
 
 // Visible document data and saved layout rules invalidate the PDF; autosave/UI changes do not.
 export function resumePDFKey(profile: CVProfile, theme: DocumentTheme) {
-  return JSON.stringify([profile.profileId, profile.profileName, fullName(profile), contacts(profile), headline(profile), resumeBlocks(profile), profile.pageLayout, theme]);
+  return JSON.stringify([profile.profileId, profile.profileName, fullName(profile), contacts(profile), headline(profile), resumeBlocks(profile), profile.pageLayout, theme, visiblePhoto(profile)]);
 }
 let queue: Promise<unknown> = Promise.resolve();
 const cache = new Map<string, Promise<Blob>>();

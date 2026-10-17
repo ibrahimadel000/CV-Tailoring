@@ -26,7 +26,7 @@ export function contacts(p: CVProfile): string[] {
   return [h.email, h.showPhone !== false ? h.phone : '', h.showLocation !== false ? h.location : '', h.showLinkedin !== false ? h.linkedin : '', h.showGithub !== false ? h.github : '', h.showPortfolio !== false ? h.portfolio : '', h.showOtherUrl !== false ? h.otherUrl : ''].filter((s): s is string => Boolean(s?.trim()));
 }
 export function headline(p: CVProfile): string {
-  return p.resumeHeader.data.useAsHeadline !== false ? (p.resumeHeader.data.desiredJobPosition || p.headline.data) : '';
+  return p.resumeHeader.data.useAsHeadline !== false ? (p.resumeHeader.data.desiredJobPosition ?? p.headline.data) : '';
 }
 export function sectionCount(p: CVProfile, id: SectionId): number {
   if (id === 'personal') return fullName(p) || p.resumeHeader.data.email ? 1 : 0;

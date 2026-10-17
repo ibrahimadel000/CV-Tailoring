@@ -69,6 +69,8 @@ export interface ResumeHeader {
   desiredJobPosition?: string;
   useAsHeadline?: boolean;
   photoUrl?: string;
+  showPhoto?: boolean;
+  photoShape?: 'circle' | 'rounded';
   email: string;
   phone: string;
   linkedin: string;
@@ -93,6 +95,8 @@ export const resumeHeaderDataSchema = z.object({
   desiredJobPosition: z.string().optional(),
   useAsHeadline: z.boolean().optional(),
   photoUrl: z.string().optional(),
+  showPhoto: z.boolean().optional(),
+  photoShape: z.enum(['circle', 'rounded']).optional(),
   email: z.string(),
   phone: z.string(),
   linkedin: z.string(),
@@ -256,7 +260,17 @@ export interface ResumePageLayout {
   sections?: Record<string, 'new-page'>;
   entries?: Record<string, EntryPageLayout>;
 }
+export const documentThemeSchema = z.object({
+  accentColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  fontFamily: z.enum(['sans', 'serif', 'mono']),
+  fontSize: z.enum(['small', 'medium', 'large']),
+  lineSpacing: z.enum(['compact', 'normal', 'relaxed']),
+  layoutStyle: z.enum(['modern', 'split', 'classic', 'minimal']),
+});
+export type DocumentTheme = z.infer<typeof documentThemeSchema>;
+
 export interface CVProfile {
+  documentTheme?: DocumentTheme;
   pageLayout?: ResumePageLayout;
   profileId: string;
   customSections?: CustomResumeSection[];
@@ -278,6 +292,7 @@ export interface CVProfile {
 }
 
 export const cvProfileSchema = z.object({
+  documentTheme: documentThemeSchema.optional(),
   pageLayout: z.object({
     sections: z.record(z.literal('new-page')).optional(),
     entries: z.record(z.enum(['auto', 'together', 'new-page'])).optional(),
