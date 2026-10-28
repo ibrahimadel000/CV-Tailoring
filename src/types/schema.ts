@@ -1,3 +1,4 @@
+import { editorialPlanSchema } from '@/types/editorial';
 import { z } from 'zod';
 
 // ── Atomic Units ──
@@ -269,7 +270,88 @@ export const documentThemeSchema = z.object({
 });
 export type DocumentTheme = z.infer<typeof documentThemeSchema>;
 
+// AI assessments with locally resolved source snapshots, not verified qualifications.
+export const requirementAssessmentSchema = z.object({
+  requirement: z.string().trim().min(1).max(180),
+  jobQuote: z.string().trim().min(3).max(280),
+  status: z.enum(['supported', 'related', 'not_found']),
+  evidence: z.array(z.object({ id: z.string(), label: z.string(), text: z.string() })).max(4),
+});
+// B25 full coverage is separate from the six-row legacy snapshot. Older
+// clients can still load the copy (and source rollback remains schema-safe).
+export const jobAssessmentSchema = z.object({
+  version: z.literal('source-first-b25'),
+  inventoryCount: z.number().int().min(0).max(60), assessedCount: z.number().int().min(0).max(60),
+  extractionWarnings: z.array(z.string()),
+  rows: z.array(requirementAssessmentSchema.extend({
+    id: z.string(), priority: z.enum(['required','preferred','responsibility']),
+    status: z.enum(['supported','related','not_found','not_assessed']),
+    evidence: z.array(z.object({id:z.string(),label:z.string(),text:z.string()})).max(8),
+  })).max(60),
+});
+export type JobAssessment = z.infer<typeof jobAssessmentSchema>;
+// Local provenance for a tailored copy. Optional for all existing resumes.
+export const tailoringMetadataSchema = z.object({
+  contentEngine: z.object({
+    version: z.enum(['selection-writing-b28', 'editorial-writing-b29']), editorial: editorialPlanSchema.optional(), reviewedAt: z.string(),
+    omittedSourceIds: z.array(z.string().min(1).max(100)).max(500),
+    scopeActions: z.array(z.object({path:z.string().max(160),sourceId:z.string().max(100),text:z.string().max(12000)})).max(500),
+    bindings: z.array(z.object({sourceId:z.string().max(100),entryId:z.string().uuid().optional(),bulletId:z.string().uuid().optional(),skillId:z.string().uuid().optional()})).max(500),
+  }).optional(),
+  sourceProfileId: z.string().uuid(),
+  jobAssessment: jobAssessmentSchema.optional(),
+  requestKey: z.string().regex(/^[a-f0-9]{64}$/),
+  jobTitle: z.string().max(160), company: z.string().max(160),
+  createdAt: z.string(), model: z.string(),
+  warnings: z.array(z.string()), missingRequirements: z.array(z.string()),
+  requirements: z.array(requirementAssessmentSchema).max(6).optional(),
+  contentPlan:z.array(z.object({target:z.enum(['summary','experience','projects','skills']),entryId:z.string(),bulletId:z.string(),intent:z.enum(['emphasize_result','clarify_scope','reduce_repetition','surface_relevance','organize_skills']),jobQuote:z.string().max(280),evidence:z.array(z.object({id:z.string(),label:z.string(),text:z.string()})).max(32)})).max(16).optional(),
+  review: z.object({
+    proposedWording: z.number().int().min(0).max(33), appliedWording: z.number().int().min(0).max(33),
+    rejectedWording: z.number().int().min(0).max(33), skillsReordered: z.boolean(), skillsGrouped:z.boolean().optional(), declinedGrouping:z.boolean().optional(),
+    achievementOrders: z.number().int().min(0).max(12),
+    sourceBasedSummary: z.boolean().optional(), declinedChanges: z.number().int().min(0).max(46).optional(), reviewedAt: z.string().optional(),
+    rejected: z.array(z.object({ area: z.enum(['summary','experience','projects']), before:z.string().max(56000), proposed:z.string().max(1800), reason:z.string().max(400) })).max(33),
+  }).optional(),
+  // Larger draft reviews remain bounded without breaking older readers of review.
+  fullReview: z.object({
+    proposedWording:z.number().int().min(0).max(64), appliedWording:z.number().int().min(0).max(64),
+    rejectedWording:z.number().int().min(0).max(64), skillsReordered:z.boolean(),
+    skillsGrouped:z.boolean().optional(), declinedGrouping:z.boolean().optional(),
+    achievementOrders:z.number().int().min(0).max(24), sourceBasedSummary:z.boolean().optional(),
+    declinedChanges:z.number().int().min(0).max(96).optional(), reviewedAt:z.string().optional(),
+    rejected:z.array(z.object({area:z.enum(['summary','experience','projects']),before:z.string().max(56000),proposed:z.string().max(1800),reason:z.string().max(400)})).max(64),
+  }).optional(),
+  summaryEvidence: z.array(z.object({ id: z.string(), label: z.string(), text: z.string() })).max(32).optional(),
+  changes: z.array(z.object({
+    area: z.enum(['summary', 'experience', 'projects', 'skills', 'bullet_order']),
+    entryId: z.string().uuid().optional(), bulletId: z.string().uuid().optional(),
+    before: z.string(), after: z.string(), textField:z.literal('description').optional(), skillOperation:z.literal('grouping').optional(), planRefs:z.array(z.number().int().min(0).max(15)).max(16).optional(),qualityNote:z.string().max(200).optional(), explanation:z.string().max(240).optional(), origin: z.enum(['ai','source_based']).optional(),
+  })),
+});
+export type TailoringMetadata = z.infer<typeof tailoringMetadataSchema>;
+
+export const importMetadataSchema = z.object({
+  fileName: z.string().max(240), format: z.enum(['pdf', 'docx']),
+  importedAt: z.string(), sourceText: z.string().max(100000),
+  warnings: z.array(z.string()), pages: z.number().int().positive().optional(),
+});
+export type ImportMetadata = z.infer<typeof importMetadataSchema>;
+
+// User-reviewed supporting context, not independent verification and not PDF body.
+export const supportingEvidenceItemSchema = z.object({
+  id:z.string().uuid(), requirement:z.string().trim().min(1).max(180),
+  title:z.string().trim().min(3).max(100), task:z.string().trim().min(30).max(700),
+  tools:z.string().trim().min(2).max(240), outcome:z.string().trim().min(10).max(400),
+  confirmedAt:z.string().datetime(), provenance:z.literal('user_confirmed_not_verified'),
+}).strict().refine(e=>!/AIza[A-Za-z0-9_-]{20,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test([e.title,e.task,e.tools,e.outcome].join(' ')),{message:'Remove credentials or email/contact details from supporting accounts.'});
+export const supportingEvidenceSchema=z.array(supportingEvidenceItemSchema).max(12);
+export type SupportingEvidence=z.infer<typeof supportingEvidenceItemSchema>;
+
 export interface CVProfile {
+  supportingEvidence?: SupportingEvidence[];
+  importedFrom?: ImportMetadata;
+  tailoring?: TailoringMetadata;
   documentTheme?: DocumentTheme;
   pageLayout?: ResumePageLayout;
   profileId: string;
@@ -292,6 +374,9 @@ export interface CVProfile {
 }
 
 export const cvProfileSchema = z.object({
+  supportingEvidence: supportingEvidenceSchema.optional(),
+  importedFrom: importMetadataSchema.optional(),
+  tailoring: tailoringMetadataSchema.optional(),
   documentTheme: documentThemeSchema.optional(),
   pageLayout: z.object({
     sections: z.record(z.literal('new-page')).optional(),

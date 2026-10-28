@@ -1,0 +1,275 @@
+{
+  "origin": "actual_gemini_2.5_flash_response",
+  "inputRevision": "document-compose-v1",
+  "source": {
+    "version": "content-r1",
+    "headline": "Backend Software Engineer",
+    "summaryId": "summary",
+    "locks": {
+      "summary": false,
+      "experience": false,
+      "projects": false,
+      "skills": false
+    },
+    "experience": [
+      {
+        "id": "work_1",
+        "title": "Backend Software Engineer",
+        "organization": "Northbridge Demo Systems (fictional)",
+        "dates": "Jan 2022 – Dec 2025",
+        "overviewId": "",
+        "bulletIds": [
+          "work_1_b1",
+          "work_1_b2",
+          "work_1_b3",
+          "work_1_b4",
+          "work_1_b5"
+        ]
+      }
+    ],
+    "projects": [],
+    "skillIds": [
+      "skill_1",
+      "skill_2",
+      "skill_3",
+      "skill_4",
+      "skill_5",
+      "skill_6",
+      "skill_7",
+      "skill_8",
+      "skill_9",
+      "skill_10",
+      "skill_11"
+    ],
+    "skillContextOrigin": "original_import",
+    "skillGroups": [
+      {
+        "sectionTitle": "Skills",
+        "groupTitle": "Backend Development",
+        "skillIds": [
+          "skill_1",
+          "skill_2",
+          "skill_3",
+          "skill_4"
+        ]
+      },
+      {
+        "sectionTitle": "Skills",
+        "groupTitle": "Testing & Engineering",
+        "skillIds": [
+          "skill_5",
+          "skill_6",
+          "skill_7",
+          "skill_8"
+        ]
+      },
+      {
+        "sectionTitle": "Skills",
+        "groupTitle": "Delivery & Communication",
+        "skillIds": [
+          "skill_9",
+          "skill_10",
+          "skill_11"
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "id": "headline",
+        "kind": "headline",
+        "parent": "",
+        "text": "Backend Software Engineer"
+      },
+      {
+        "id": "summary",
+        "kind": "summary",
+        "parent": "",
+        "text": "Backend engineer building web services and helping teams deliver maintainable software."
+      },
+      {
+        "id": "work_1_b1",
+        "kind": "achievement",
+        "parent": "work_1",
+        "text": "Built and maintained Python/FastAPI order-management APIs with PostgreSQL for a production subscription service."
+      },
+      {
+        "id": "work_1_b2",
+        "kind": "achievement",
+        "parent": "work_1",
+        "text": "Added deterministic pytest tests for API validation and regression cases, including acceptance of valid requests and rejection of malformed requests."
+      },
+      {
+        "id": "work_1_b3",
+        "kind": "achievement",
+        "parent": "work_1",
+        "text": "Reduced p95 response time for the orders endpoint from 900 ms to 320 ms by adding a PostgreSQL index, measured in staging load tests."
+      },
+      {
+        "id": "work_1_b4",
+        "kind": "achievement",
+        "parent": "work_1",
+        "text": "Reviewed pull requests for correctness and maintainability, and fixed a retry-handling bug that caused duplicate order processing."
+      },
+      {
+        "id": "work_1_b5",
+        "kind": "achievement",
+        "parent": "work_1",
+        "text": "Wrote API troubleshooting documentation and delivered onboarding sessions for two new developers."
+      },
+      {
+        "id": "skill_1",
+        "kind": "skill",
+        "parent": "",
+        "text": "Python"
+      },
+      {
+        "id": "skill_2",
+        "kind": "skill",
+        "parent": "",
+        "text": "FastAPI"
+      },
+      {
+        "id": "skill_3",
+        "kind": "skill",
+        "parent": "",
+        "text": "RESTful APIs"
+      },
+      {
+        "id": "skill_4",
+        "kind": "skill",
+        "parent": "",
+        "text": "PostgreSQL"
+      },
+      {
+        "id": "skill_5",
+        "kind": "skill",
+        "parent": "",
+        "text": "pytest"
+      },
+      {
+        "id": "skill_6",
+        "kind": "skill",
+        "parent": "",
+        "text": "Automated regression testing"
+      },
+      {
+        "id": "skill_7",
+        "kind": "skill",
+        "parent": "",
+        "text": "Code review"
+      },
+      {
+        "id": "skill_8",
+        "kind": "skill",
+        "parent": "",
+        "text": "Algorithms & Data Structures"
+      },
+      {
+        "id": "skill_9",
+        "kind": "skill",
+        "parent": "",
+        "text": "Technical Documentation"
+      },
+      {
+        "id": "skill_10",
+        "kind": "skill",
+        "parent": "",
+        "text": "Agile/Scrum"
+      },
+      {
+        "id": "skill_11",
+        "kind": "skill",
+        "parent": "",
+        "text": "Agile / Scrum"
+      },
+      {
+        "id": "education_1",
+        "kind": "education",
+        "parent": "",
+        "text": "B.Sc. Computer Science — completed 2021."
+      }
+    ]
+  },
+  "job": "Software Engineer – Backend (contract, remote)\n\nHelp create realistic coding tasks and assess software solutions for an AI-training project. Prior AI experience is not required.\n\nResponsibilities:\n- Implement backend features, reproduce bugs and create realistic engineering tasks.\n- Write deterministic tests and verifiers that accept correct solutions and reject incorrect ones.\n- Debug services and improve performance, scalability and reliability.\n- Review code for correctness and maintainability.\n- Explain technical decisions clearly and assess solutions using objective criteria.\n\nQualifications:\n- Practical backend experience in Python, Java, Node.js, Go, Rust, TypeScript, C++ or similar languages. These are alternatives; knowledge of every listed language is not required.\n- Experience building services and APIs, automated testing, debugging and code review.\n- Knowledge of algorithms, data structures and computer science fundamentals.\n- Clear technical communication and analytical problem solving.\n\nPreferred: database performance optimization, refactoring and reliable evaluation tooling.",
+  "response": {
+    "summary": {
+      "text": "Backend Software Engineer with experience in building and maintaining Python/FastAPI web services, including API development, performance optimization, and robust testing. Proven ability to implement deterministic tests, debug critical issues, and improve system reliability. Skilled in code review, technical documentation, and applying computer science fundamentals to solve complex problems.",
+      "sourceIds": [
+        "headline",
+        "summary",
+        "work_1_b1",
+        "work_1_b2",
+        "work_1_b3",
+        "work_1_b4",
+        "work_1_b5",
+        "skill_1",
+        "skill_2",
+        "skill_3",
+        "skill_4",
+        "skill_5",
+        "skill_6",
+        "skill_7",
+        "skill_8",
+        "skill_9",
+        "education_1"
+      ]
+    },
+    "entries": [
+      {
+        "id": "work_1",
+        "overview": {
+          "text": "Backend Software Engineer at Northbridge Demo Systems (fictional)",
+          "sourceIds": [
+            "work_1"
+          ]
+        },
+        "bullets": [
+          {
+            "text": "Built and maintained Python/FastAPI order-management APIs with PostgreSQL for a production subscription service.",
+            "sourceIds": [
+              "work_1_b1"
+            ]
+          },
+          {
+            "text": "Added deterministic pytest tests for API validation and regression cases, ensuring acceptance of valid requests and rejection of malformed requests.",
+            "sourceIds": [
+              "work_1_b2"
+            ]
+          },
+          {
+            "text": "Reduced p95 response time for the orders endpoint from 900 ms to 320 ms by adding a PostgreSQL index, verified through staging load tests.",
+            "sourceIds": [
+              "work_1_b3"
+            ]
+          },
+          {
+            "text": "Reviewed pull requests for correctness and maintainability, and debugged a retry-handling bug that caused duplicate order processing.",
+            "sourceIds": [
+              "work_1_b4"
+            ]
+          },
+          {
+            "text": "Authored API troubleshooting documentation and delivered onboarding sessions for new developers.",
+            "sourceIds": [
+              "work_1_b5"
+            ]
+          }
+        ]
+      }
+    ],
+    "skillIds": [
+      "skill_1",
+      "skill_2",
+      "skill_3",
+      "skill_4",
+      "skill_5",
+      "skill_6",
+      "skill_7",
+      "skill_8",
+      "skill_9",
+      "skill_10",
+      "skill_11"
+    ]
+  },
+  "note": "Fictional input, real single provider response. Old response remains invalid; local variants must be labeled prepared."
+}

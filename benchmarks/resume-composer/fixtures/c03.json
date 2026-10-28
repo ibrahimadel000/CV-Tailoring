@@ -1,0 +1,143 @@
+{
+  "id": "C03",
+  "origin": "Prepared fictional R6 source, reused unchanged; not a model result",
+  "input": {
+    "source": {
+      "version": "content-r1",
+      "headline": "Marketing Operations Coordinator",
+      "summaryId": "summary",
+      "locks": {
+        "summary": false,
+        "experience": false,
+        "projects": false,
+        "skills": false
+      },
+      "experience": [
+        {
+          "id": "work_1",
+          "title": "Marketing Operations Coordinator",
+          "organization": "Harborlight Demo Retail (fictional)",
+          "dates": "Feb 2022 – Dec 2025",
+          "overviewId": "",
+          "bulletIds": [
+            "work_1_b1",
+            "work_1_b2",
+            "work_1_b3",
+            "work_1_b4"
+          ]
+        }
+      ],
+      "projects": [],
+      "skillIds": [
+        "skill_1",
+        "skill_2",
+        "skill_3",
+        "skill_4",
+        "skill_5",
+        "skill_6"
+      ],
+      "skillContextOrigin": "original_import",
+      "skillGroups": [
+        {
+          "sectionTitle": "Skills",
+          "groupTitle": "Marketing & Operations",
+          "skillIds": [
+            "skill_1",
+            "skill_2",
+            "skill_3",
+            "skill_4",
+            "skill_5"
+          ]
+        },
+        {
+          "sectionTitle": "Skills",
+          "groupTitle": "Introductory Coursework",
+          "skillIds": [
+            "skill_6"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "headline",
+          "kind": "headline",
+          "parent": "",
+          "text": "Marketing Operations Coordinator"
+        },
+        {
+          "id": "summary",
+          "kind": "summary",
+          "parent": "",
+          "text": "Marketing operations professional focused on campaign coordination, reporting and clear documentation."
+        },
+        {
+          "id": "work_1_b1",
+          "kind": "achievement",
+          "parent": "work_1",
+          "text": "Coordinated paid advertising calendars and copy approvals across three client accounts."
+        },
+        {
+          "id": "work_1_b2",
+          "kind": "achievement",
+          "parent": "work_1",
+          "text": "Prepared weekly campaign reports in Google Sheets and documented changes in advertising spend and lead volume."
+        },
+        {
+          "id": "work_1_b3",
+          "kind": "achievement",
+          "parent": "work_1",
+          "text": "Reorganized a manual campaign-review checklist, reducing repeated approval steps; no software development or automated testing was part of this work."
+        },
+        {
+          "id": "work_1_b4",
+          "kind": "achievement",
+          "parent": "work_1",
+          "text": "Led onboarding sessions for account coordinators and maintained client communication templates."
+        },
+        {
+          "id": "skill_1",
+          "kind": "skill",
+          "parent": "",
+          "text": "Campaign Coordination"
+        },
+        {
+          "id": "skill_2",
+          "kind": "skill",
+          "parent": "",
+          "text": "Copywriting"
+        },
+        {
+          "id": "skill_3",
+          "kind": "skill",
+          "parent": "",
+          "text": "Google Sheets"
+        },
+        {
+          "id": "skill_4",
+          "kind": "skill",
+          "parent": "",
+          "text": "Workflow Documentation"
+        },
+        {
+          "id": "skill_5",
+          "kind": "skill",
+          "parent": "",
+          "text": "Stakeholder Communication"
+        },
+        {
+          "id": "skill_6",
+          "kind": "skill",
+          "parent": "",
+          "text": "Python — introductory coursework only"
+        },
+        {
+          "id": "education_1",
+          "kind": "education",
+          "parent": "",
+          "text": "B.A. Business Administration — completed 2021."
+        }
+      ]
+    },
+    "job": "Software Engineer – Backend (contract, remote)\n\nHelp create realistic coding tasks and assess software solutions for an AI-training project. Prior AI experience is not required.\n\nResponsibilities:\n- Implement backend features, reproduce bugs and create realistic engineering tasks.\n- Write deterministic tests and verifiers that accept correct solutions and reject incorrect ones.\n- Debug services and improve performance, scalability and reliability.\n- Review code for correctness and maintainability.\n- Explain technical decisions clearly and assess solutions using objective criteria.\n\nQualifications:\n- Practical backend experience in Python, Java, Node.js, Go, Rust, TypeScript, C++ or similar languages. These are alternatives; knowledge of every listed language is not required.\n- Experience building services and APIs, automated testing, debugging and code review.\n- Knowledge of algorithms, data structures and computer science fundamentals.\n- Clear technical communication and analytical problem solving.\n\nPreferred: database performance optimization, refactoring and reliable evaluation tooling."
+  }
+}

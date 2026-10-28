@@ -1,0 +1,19 @@
+// Run: node --test tests/batch14-core.test.cjs
+// Uses the existing TypeScript devDependency to load pure source modules.
+const {test}=require('node:test');const crypto=require('node:crypto');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');const ts=require('typescript');
+const root=path.resolve(__dirname,'..');const cache=new Map();
+function loadTs(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const mod=new Module(file,module);mod.filename=file;mod.paths=Module._nodeModulePaths(root);const normal=mod.require.bind(mod);mod.require=id=>id.startsWith('@/')?loadTs(path.join(root,'src',id.slice(2)+'.ts')):normal(id);cache.set(file,mod);mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);return mod.exports;}
+const core=loadTs(path.join(root,'src/services/tailorModel.ts'));const {createSampleProfile}=loadTs(path.join(root,'src/mock/profile.ts'));const {cvProfileSchema}=loadTs(path.join(root,'src/types/schema.ts'));
+function source(){return createSampleProfile('Test source');}
+function patch(p){return {jobTitle:'Engineer',company:'Example',summary:'',bullets:[],skillOrder:[],missingRequirements:[]};}
+function bulletPatch(p,text){return {...patch(p),bullets:[{section:'experience',entryId:p.experience.data[0].id,bulletId:p.experience.data[0].bullets[0].id,text}]};}
+const unusedJob='Engineer. Build accessible web applications using React and TypeScript. Work with product teams and improve reliability.';
+
+
+function error(raw){try{core.applyTailorPatch(source(),raw);assert.fail('invalid response accepted');}catch(e){assert.equal(e.code,'invalid');return e.message;}}
+test('format diagnostic identifies an oversized array and exact local limit',()=>{const text=error({...patch(),requirements:Array(61).fill({requirement:'Python',jobQuote:'Python required',status:'not_found',evidenceIds:[]})});assert(text.includes('requirements (too_big; max 60)'));});
+test('invalid IDs show their field path without disclosing the bad value',()=>{const v={...patch(),bullets:[{section:'experience',entryId:'PRIVATE_VALUE',bulletId:crypto.randomUUID(),text:'PRIVATE_CV_TEXT'}]};const message=error(v);assert(message.includes('bullets[0].entryId (invalid_string; UUID required)'));assert(!message.includes('PRIVATE_VALUE'));assert(!message.includes('PRIVATE_CV_TEXT'));});
+test('missing or null values reveal expected and received types only',()=>{const message=error({...patch(),summary:null});assert(message.includes('summary (invalid_type; expected string, received null)'));});
+test('unexpected properties and invalid enum values are never echoed',()=>{const v={...patch(),PRIVATE_KEY_NAME:'PRIVATE_VALUE',bullets:[{section:'PRIVATE_ENUM_VALUE',entryId:crypto.randomUUID(),bulletId:crypto.randomUUID(),text:'PRIVATE_CV'}]};const message=error(v);for(const secret of ['PRIVATE_KEY_NAME','PRIVATE_VALUE','PRIVATE_ENUM_VALUE','PRIVATE_CV'])assert(!message.includes(secret));assert(message.includes('invalid_enum_value'));assert(message.includes('unrecognized_keys'));});
+test('diagnostic limits the list to four issues and summarizes the rest',()=>{const message=error({jobTitle:null,company:null,summary:null,bullets:null,skillOrder:null,missingRequirements:null});assert(message.includes('+2 more'));assert(!message.includes('skillOrder'));assert(message.length<900);});
+test('format diagnostics do not weaken validation or modify source',()=>{const p=source(),snapshot=JSON.stringify(p);assert.throws(()=>core.applyTailorPatch(p,{...patch(),skillOrder:['not-a-uuid']}));assert.equal(JSON.stringify(p),snapshot);assert.equal(core.applyTailorPatch(p,patch()).changes.length,0);});

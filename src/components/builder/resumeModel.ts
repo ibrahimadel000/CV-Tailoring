@@ -1,4 +1,5 @@
-import type { CVProfile } from '@/types/schema';
+import type { CVProfile, SkillTag } from '@/types/schema';
+import { orderedSkillGroups } from '@/components/builder/skillPresentation';
 import type { DocumentTheme } from '@/store/useAppStore';
 
 export type BuiltInSectionId = 'personal' | 'summary' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications';
@@ -12,9 +13,29 @@ export const sections: { id: BuiltInSectionId; title: string; description: strin
   { id: 'projects', title: 'Projects', description: 'Show what you can build, lead, or deliver.', hint: 'Include personal, academic, or professional projects. Explain your role and the outcome.' },
   { id: 'certifications', title: 'Certifications', description: 'Credentials that support your experience.', hint: 'Include the credential name, issuing organization, and date. This section is optional.' },
 ];
+// Native fields are strings, without a plain/rich discriminator. Preserve the
+// legacy toolbar's inline formatting, but never infer arbitrary HTML from text.
+// This is a text projection, NOT an HTML sanitizer: callers render text nodes.
+function legacyInlineText(value: string): string {
+  const tags = [...value.matchAll(/<\/?(?:u|b|strong|i|em)>/gi)];
+  const stack: string[] = [];
+  for (const [tag] of tags) {
+    const name = tag.replace(/[<>/]/g, '').toLowerCase();
+    if (tag[1] === '/') {
+      // Ambiguous/malformed markup stays literal rather than losing content.
+      if (stack.pop() !== name) return value;
+    } else stack.push(name);
+  }
+  if (stack.length) return value;
+  return value.replace(/<\/?(?:u|b|strong|i|em)>/gi, '');
+}
 export function plainText(value = ''): string {
-  // Older editors stored lightweight Markdown. Export visible text, never HTML.
-  return value.replace(/<[^>]*>/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/_([^_\n]+)_/g, '$1').trim();
+  return legacyInlineText(value)
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    // Italic delimiters are not underscores inside identifiers (CI_CD_pipeline).
+    .replace(/(^|[^\p{L}\p{N}_])_(?!_)((?:[^_\r\n]|(?<=[\p{L}\p{N}])_(?=[\p{L}\p{N}]))+)_(?![\p{L}\p{N}_])/gu, '$1$2')
+    .trim();
 }
 export function fullName(p: CVProfile): string {
   const h = p.resumeHeader.data;
@@ -46,6 +67,9 @@ export function essentials(p: CVProfile) {
     { label: 'Relevant skills', done: p.skills.data.some(s => Boolean(s.name.trim())) },
   ];
 }
+export function displaySkillGroups(skills:SkillTag[]) {
+  return orderedSkillGroups(skills).map(group=>({title:group.title,text:group.items.map(s=>[s.name.trim(),s.level?.trim()].filter(Boolean).join(' — ')).join(' · ')}));
+}
 export interface ResumeBlock { id: SectionId; title: string; items: { entryId?: string; title?: string; subtitle?: string; date?: string; text?: string; bullets?: string[] }[] }
 export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   const blocks: ResumeBlock[] = [];
@@ -54,7 +78,7 @@ export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   if (experience.length) blocks.push({ id: 'experience', title: 'Experience', items: experience.map(e => ({ entryId: e.id, title: e.roleTitle, subtitle: [e.companyName, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
   const education = p.education.data.filter(e => e.degree.trim() || e.institution.trim() || e.description?.trim());
   if (education.length) blocks.push({ id: 'education', title: 'Education', items: education.map(e => ({ entryId: e.id, title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – ') || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.join(' · ')].filter(Boolean).join('\n') })) });
-  const skills = ['Technical', 'Tools', 'Soft', 'Languages'].map(category => ({ title: category === 'Soft' ? 'Interpersonal' : category, text: p.skills.data.filter(s => s.category === category).map(s => s.name.trim()).filter(Boolean).join(' · ') })).filter(s => s.text);
+  const skills = displaySkillGroups(p.skills.data);
   if (skills.length) blocks.push({ id: 'skills', title: 'Skills', items: skills });
   const projects = p.projects.data.filter(e => e.name.trim() || e.bullets.some(b => b.text.trim()));
   if (projects.length) blocks.push({ id: 'projects', title: 'Projects', items: projects.map(e => ({ entryId: e.id, title: e.name, subtitle: [e.role, e.url].filter(Boolean).join(' · '), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });

@@ -1,0 +1,5 @@
+// Offline only: no environment key, fetch, browser, or model call.
+const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+const root=path.resolve(__dirname,'../..'),cache=new Map();
+function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const m=new Module(file,module);m.filename=file;m.paths=Module._nodeModulePaths(root);const normal=m.require.bind(m);m.require=id=>id.startsWith('@/')?load(path.join(root,'src',id.slice(2)+'.ts')):id.startsWith('.')&&fs.existsSync(path.resolve(path.dirname(file),id+'.ts'))?load(path.resolve(path.dirname(file),id+'.ts')):normal(id);cache.set(file,m);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8').replaceAll('import.meta.env.DEV','false').replaceAll('import.meta.env.VITE_GEMINI_API_KEY',"''"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);return m.exports;}
+module.exports={root,load:p=>load(path.join(root,'src',p+'.ts'))};

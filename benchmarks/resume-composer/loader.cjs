@@ -1,0 +1,5 @@
+// Offline TypeScript loader: no Vite secrets, browser, provider, or network adapter.
+const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+const root=path.resolve(__dirname,'../..'),cache=new Map();
+function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const mod=new Module(file,module);mod.filename=file;mod.paths=Module._nodeModulePaths(root);const normal=mod.require.bind(mod);mod.require=id=>id.startsWith('@/')?load(path.join(root,'src',id.slice(2)+'.ts')):id.startsWith('.')&&fs.existsSync(path.resolve(path.dirname(file),id+'.ts'))?load(path.resolve(path.dirname(file),id+'.ts')):normal(id);cache.set(file,mod);const src=fs.readFileSync(file,'utf8').replaceAll('import.meta.env.DEV','false').replaceAll('import.meta.env.VITE_GEMINI_API_KEY',"''");mod._compile(ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);return mod.exports;}
+module.exports={root,core:load(path.join(root,'src/services/resumeComposer/core.ts'))};
