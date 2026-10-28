@@ -2,6 +2,21 @@
 import type { Source } from '../contentEngine/engine';
 const PREFIX = 'entrymeta:';
 export const isEntryMetadata = (id: string) => id.startsWith(PREFIX);
+/** Natural-authoring guidance only, not an entailment test or a new citation gate.
+ * Keep identity context distinct from content; do not infer interests or practice.
+ * Existing reference policies and the underlying source remain unchanged.
+ */
+export function buildSummaryEvidenceBrief(source: Source) {
+  const available = source.locks.summary ? [] : source.evidence;
+  const identity = (f: Source['evidence'][number]) => f.kind === 'headline' || isEntryMetadata(f.id);
+  return {
+    contentSourceIds: available.filter(f => f.kind !== 'skill' && !identity(f)).map(f => f.id),
+    identitySourceIds: available.filter(identity).map(f => f.id),
+    contentRole: 'Candidate statements in their actual scope, not proof of every relationship a summary could assert.',
+    identityRole: 'Role/header context only; not achievements, seniority or evidence of target duties.',
+    skillsRole: 'Select listed skills separately. A skill listing is not summary-authoring evidence of practice or proficiency.',
+  };
+}
 export function withEntryMetadata(input: Source): Source {
   const source: Source = JSON.parse(JSON.stringify(input));
   const entries = [...source.experience, ...source.projects];

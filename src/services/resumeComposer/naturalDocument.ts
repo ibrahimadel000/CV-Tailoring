@@ -6,13 +6,13 @@ import type { CVProfile, SkillTag } from '@/types/schema';
 import type { Source } from '../contentEngine/engine';
 import { projectSource } from '../contentEngine/engine';
 import { compositionSchema, prepareComposition, prepareSourceComposition, compileComposition, CompositionError } from './core';
-import { boundCompositionContract, referencePolicy, withEntryMetadata } from './references';
+import { boundCompositionContract, referencePolicy, withEntryMetadata, buildSummaryEvidenceBrief } from './references';
 import { buildDocumentBrief, equivalentSkillKey } from './documentEditorial';
 import { projectGoogleSchema } from './providerContract';
 import type { SkillNormalization } from './skillSelection';
 import { applySummaryBoundary } from './summaryBoundary';
 
-export const NATURAL_REVISION = 'document-compose-natural-segments-2-skill-boundary';
+export const NATURAL_REVISION = 'document-compose-natural-segments-3-summary-synthesis';
 export const NATURAL_SUMMARY_MAX = 2400;
 export const NATURAL_SEGMENTS_MAX = 24;
 export const NATURAL_REFS_MAX = 24;
@@ -30,15 +30,18 @@ export type NaturalDocument = z.infer<typeof naturalDocumentSchema>;
 
 export function naturalContract(source: Source) {
   const native = boundCompositionContract(source);
+  // Complete trace namespace stays compatible with valid mixed-kind citations.
+  // The brief distinguishes authoring content from identity and listed skills;
+  // narrowing this enum would reject real-practice outputs without proving meaning.
   const available = referencePolicy(source).summarySourceIds;
   return {
     type: 'object', properties: {
       summarySegments: {
         type: 'array', maxItems: source.locks.summary ? 0 : NATURAL_SEGMENTS_MAX,
-        description: 'Independently readable complete summary sentences joined by one space. No skills inventory or unsupported interests. At most 2400 joined characters and 24 distinct source IDs. No required topics; empty is allowed.',
+        description: 'One selective target-relevant overview, expressed as independently readable sentences joined by one space. Use documentBrief.summaryEvidence content in its actual scope, not copied work bullets or a skills inventory. At most 2400 joined characters and 24 distinct source IDs. Empty is allowed; no invented interests or target credentials.',
         items: { type: 'object', properties: {
           text: { type: 'string', minLength: 1, maxLength: NATURAL_SUMMARY_MAX },
-          sourceIds: { type: 'array', minItems: 1, maxItems: available.length ? NATURAL_REFS_MAX : 0,
+          sourceIds: { type: 'array', description: 'Cite the actual supporting contentSourceIds; identitySourceIds support role/header wording only. The complete valid ID namespace also retains skill IDs for trace compatibility, not proof of practice.', minItems: 1, maxItems: available.length ? NATURAL_REFS_MAX : 0,
             items: { type: 'string', minLength: 1, maxLength: 100, ...(available.length ? { enum: available } : {}) } },
         }, required: ['text', 'sourceIds'], additionalProperties: false },
       },
@@ -54,7 +57,9 @@ export function naturalContract(source: Source) {
 }
 function packetFrom(base: ReturnType<typeof prepareComposition>) {
   return { revision: NATURAL_REVISION, source: base.source, job: base.job,
-    referencePolicy: base.referencePolicy, documentBrief: buildDocumentBrief(base.source),
+    referencePolicy: base.referencePolicy, documentBrief: {
+      ...buildDocumentBrief(base.source), summaryEvidence: buildSummaryEvidenceBrief(base.source),
+    },
     outputContract: naturalContract(base.source) };
 }
 export function prepareNaturalComposition(profile: CVProfile, job: string) {
@@ -153,7 +158,16 @@ export const naturalInstructions = `Compose ONE focused, truthful resume documen
 
 Read the whole job for its central work, mandatory qualifications and useful adjacent strengths. Compensation, promotional text and application procedure are not the work. A requirement in JOB never becomes a fact about the candidate; an optional or explicitly unnecessary specialty need not be promoted. If the target is distant, use honest adjacent strengths rather than inventing a perfect match. Preserve actual identity, titles, dates, qualifications, unfinished degrees, negatives, course-only levels, measurement environments and attribution. Treat the resume as truthful; no evidence interview is needed.
 
-Write summarySegments as independently readable complete sentences, each with text and sourceIds. Join them with a single space into one focused introduction; do not split a sentence across segments or leave a sentence depending on a previous segment for its meaning. Choose a supported opening relevant to the target and complementary evidence rather than a compressed inventory or verbatim copy of experience bullets. Use professional prose, not first-person filler, a skills list or copied job-description wording. Use documentBrief for what is already rendered separately. Education and certificates need not reappear. Do not force every source anchor into the introduction. An empty array is allowed when no useful supported introduction is available; do not invent generic praise to fill it. The complete joined introduction, including joining spaces, is limited to 2400 characters and 24 distinct source IDs; at most 24 nonempty segments, each with at most 24 distinct references. Do not pad to capacity.
+SUMMARY PURPOSE: Introduce the candidate's supported professional background through the aspect most useful to this job. JOB chooses emphasis, never candidate facts. Use documentBrief.summaryEvidence.contentSourceIds for candidate content in its actual scope; identitySourceIds supply role/header context only. Skills remain available for separate skillSelections, not as a source of performed work. When narrative establishes actual practice with a technology, it may appear naturally in the introduction without becoming a technology inventory.
+
+SYNTHESIZE BEFORE WORDING: Choose the most useful overlap between the source and the target, then express a coherent professional overview at a higher level than individual work bullets. A reader should understand the candidate's relevant background; the experience section supplies the detailed actions and results. Reuse supported meaning, not a sequence of achievement sentences, a compressed list, or the same details with synonyms. Keep a strong existing summary when it already serves this purpose. Useful overlap with experience is expected; every sentence need not introduce a different fact. With sparse evidence, a modest specific introduction is better than invented breadth. With a distant target, state the supported adjacent background instead of adopting the target's title or duties. Use professional prose, not first-person filler, generic praise, copied job-description wording or a skills list. Use documentBrief for what is already rendered separately. Education and certificates need not reappear. Do not force every source anchor into the introduction.
+
+SYNTHETIC STYLE CONTRASTS, NOT CANDIDATE FACTS: Suppose a fictional source says "Software engineer", "Built internal web applications", "Improved release workflows", and "Delivered developer onboarding workshops"; RESTful APIs appears only as a listed skill.
+- For a software-development target, a supported overview is "Software engineer combining web application development with improvements to release workflows." Do not convert the listed skill and a job's API requirement into API-building experience or proficiency.
+- For a developer-onboarding target, a supported overview is "Software engineer with a background in web application development and developer onboarding." Do not copy the three work bullets into the introduction or adopt a trainer title that the source does not establish.
+These are contrasts, not templates to fill or facts to borrow. Use only the actual SOURCE, its language and scope; never copy example facts into a different candidate's CV.
+
+SUMMARY WIRE: Write summarySegments as independently readable complete sentences, each with text and sourceIds. Join them with a single space into one focused introduction; do not split a sentence across segments or leave a sentence depending on a previous segment for its meaning. An empty array is allowed when no useful supported introduction is available; do not invent generic praise to fill it. The complete joined introduction, including joining spaces, is limited to 2400 characters and 24 distinct source IDs; at most 24 nonempty segments, each with at most 24 distinct references. Do not pad to capacity.
 
 Source redaction placeholders such as [link omitted] and [contact omitted] are metadata about withheld spans, not candidate facts or final resume wording. Do not copy them into output or infer the withheld content.
 
