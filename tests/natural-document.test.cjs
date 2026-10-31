@@ -161,7 +161,7 @@ for(const text of ['Owned production automated testing strategy.','Built REST AP
 });
 test('standalone instructions have no old wire, word bans, planner or mandatory topic inventory',()=>{
  for(const forbidden of ['summaryBlocks','summaryClaims','selectedSkillIds','summaryBlockOrder','ACTIVE OUTPUT CONTRACT IS v4','ACTIVE OUTPUT CONTRACT IS v6'])assert(!n.naturalInstructions.includes(forbidden));
- for(const phrase of ['one response','do not attach','Do not force every source anchor','A useful original bullet may stay unchanged','not semantic verification','No edits to identity']){
+ for(const phrase of ['one response','do not attach','do not enumerate every relevant bullet','A useful original bullet may stay unchanged','not semantic verification','No edits to identity']){
  if(phrase==='do not attach')assert(n.naturalInstructions.includes('does not establish performed work at an employer'));else assert(n.naturalInstructions.includes(phrase),phrase);
  }
  const code=fs.readFileSync(path.join(__dirname,'../src/services/resumeComposer/naturalDocument.ts'),'utf8');

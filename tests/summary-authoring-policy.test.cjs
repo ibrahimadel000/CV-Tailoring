@@ -64,9 +64,9 @@ test('legacy brief shape remains unchanged; natural authoring alone adds the sum
 });
 test('active prompt contains positive synthesis and same-source target contrasts, not another output stage',()=>{
  assert.equal(typeof instructions,'string');
- for(const p of ['SUMMARY PURPOSE:','SYNTHESIZE BEFORE WORDING:','SYNTHETIC STYLE CONTRASTS, NOT CANDIDATE FACTS:',
-  'For a software-development target','For a developer-onboarding target','These are contrasts, not templates',
-  'Use only the actual SOURCE','Do not force every source anchor','not a sequence of achievement sentences'])
+ for(const p of ['SUMMARY PURPOSE:','COMPOSITION DECISION:','SYNTHETIC EDITORIAL CONTRASTS, NOT CANDIDATE FACTS:',
+  'For a records-coordination job','For a workshop-support job','These are editorial contrasts, not sentence templates',
+  'Use only the actual SOURCE','do not enumerate every relevant bullet','Useful factual overlap is expected'])
   assert(instructions.includes(p),p);
  for(const old of ['summaryBlocks','summaryClaims','hiddenPlanner','phasePlanner'])assert(!instructions.includes(old));
  assert(instructions.includes('one response'));assert(!code.includes('fetch('));
@@ -74,7 +74,7 @@ test('active prompt contains positive synthesis and same-source target contrasts
 test('explicit-interest, distant-target and sparse-evidence limits remain instruction-only',()=>{
  for(const p of ['Personal interests, motivation and career direction are candidate facts too',
   'Neither a listed skill nor JOB establishes','With sparse evidence','With a distant target',
-  'Keep a strong existing summary','An empty array is allowed','not semantic verification'])
+  'Preserve a strong existing summary','An empty array is allowed','not semantic verification'])
   assert(instructions.includes(p),p);
 });
 test('skill selection and hard preservation rules remain in the active request instructions',()=>{
