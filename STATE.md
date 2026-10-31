@@ -1,0 +1,10 @@
+# CV Tailor — current state (2026-10-31)
+
+- Baseline: main@45d065b5a84779115a783739b13dc6953ad3bc15, SC1 + verification fix1. Source/tests/build inputs hash-match EN05. EN05 is a reconstruction, not a fresh Windows capture; installed Windows files remain user-reported.
+- **Actual unresolved stop:** the user's Tailor run returned HTTP503/UNAVAILABLE: “No automatic retry. Your resumes are unchanged.” No successful output from the revised summary brief has been verified. This does not establish quota exhaustion, a billing problem, or prompt failure.
+- This branch, test/sc1-offline-app-acceptance, adds isolated test tooling/coverage and lean state docs only. Application dependencies and the root lockfile are unchanged. No src/ files, model/settings, prompt, editor, import/export implementation or runtime behavior changed.
+- Local verification: 792/792 existing unit tests; 4/4 new Chromium app-path tests; production TypeScript/Vite build passed. Generated production files are byte-identical to baseline. Existing large-chunk warning remains.
+- Browser tests exercise actual schema/compiler/store, save/reopen, UI editing and real PDF download/text extraction, with synthetic responses. Exact503 and invalid-reference paths leave source/storage unchanged. Original/identity/dates/design/locked content preserved in tested cases. No unexpected external traffic; zero real Gemini calls.
+- Environment: Node24.22.1, npm11.19.1, TypeScript5.7.3, Zod3.25.76, pinned Playwright1.64.1, sandbox Chromium153.0.8010.12. Installation scripts disabled. Tests used a fixed fake key, fresh contexts and no .env files.
+- Status: locally verified test-only change; not merged, deployed, installed on Windows, manually validated against the user's data, or writing-accepted. The live503 problem is NOT fixed by these tests.
+- All earlier provider budgets are closed. No new live API test batch is authorized. Keep credentials/private CVs out of chat, commits and artifacts. No merge/default-branch changes, billing changes or deployment without explicit authorization.
