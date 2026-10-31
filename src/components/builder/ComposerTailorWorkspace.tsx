@@ -25,7 +25,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     try {
       const result = await runner.current!.run(job, task.signal);
       if (!alive.current) return;
-      const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
+      const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length + (result.summaryCapabilityIds.length ? 1 : 0));
       setNotes([...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)]);
       setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : 'The content was unchanged. No duplicate copy was created.') + (notice ? ` ${notice}` : ''));
       if (result.status === 'created') onCreated(result.profileId, notice);
