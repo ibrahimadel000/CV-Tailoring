@@ -1,9 +1,9 @@
-# Current task — SC2 experimental Flash-Lite preview
+# Current task — SC3 focused summary candidate
 
-Approved outcome: real reversible application preview, dedicated branch/focused PR, offline verification and safe Windows apply/rollback instructions. Branch:preview/sc2-flash-lite; base:test/sc1-offline-app-acceptance@4cd5eb76ae5753648b9937ef463d2ca6b83c57af. No merge into main.
+Approved: improve summary authoring through a real reversible application preview, one bounded outcome. Branch:preview/sc3-summary-focus from SC2@e2a34be9f784aefd13b96b588aca630d6eb9f2a3; focused PR targets preview/sc2-flash-lite, not main.
 
-Completed locally: only two runtime constants changed (active model and visible SC2 label); model-specific test expectations updated without weakening safeguards. Prompt, schema/compiler,300s/medium/8192/default settings, one request/no retry/fallback, source/locks/identity/dates, editor/store/design/import/export and app dependencies unchanged.792unit tests,4mocked browser cases and production build passed. Existing bundle warning only.
+Implementation: more specific narrative-led summary guidance plus visible SC3 label. Same Flash-Lite model/settings and one-call behavior. No evidence-boundary relaxation, skill-to-practice promotion, app replacement, editor/import/export changes, dependencies or private user data in tests/code. Earlier conversational skills-sentence suggestion is not implemented because it conflicts with the existing deliberate summary boundary.
 
-Delivery: focused PR plus SC2-PREVIEW.md with clean-tree guard, backup branch, checkout, visible version check and reversible rollback. Historical test filenames retained. Preview prepared/offline-verified; Windows installation, full-app live testing and writing acceptance remain pending. Do not label this a proven503 fix.
+Acceptance: full unit suite plus explicit static-policy and manually authored native-compiler regression cases, four mocked real-browser cases and production build. Review exact runtime diff. Deliver PR, changed files, prompt hash/settings, limitations and guarded PowerShell backup/apply/version-check/rollback guide.
 
-Next bounded outcome after local installation: agree a separately budgeted full-app authoring trial and assess factual scope, actor, strength, relationships and editorial usefulness in actual outputs. No live trial is authorized yet; Batch01 is exhausted/closed2of2. No new calls, retries, reviewers, fallback models, billing changes, merge/default-branch edits or deployment.
+Current:795/795 unit tests,4/4 mocked browser tests and production build passed; existing bundle warning only. Runtime diff reviewed: two instruction paragraphs plus visible label. SC3 not installed or writing-accepted. No live calls allowed. After delivery and local version check, agree a new finite trial before testing actual writing; all prior budgets are closed. Keep pagination outside this bounded change.

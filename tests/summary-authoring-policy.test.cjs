@@ -88,3 +88,17 @@ test('valid mixed-kind trace namespace is preserved instead of imposing a new re
  assert(code.includes('summarySourceIds'));assert(code.includes('skill IDs for trace compatibility'));
  assert(!code.includes('semanticStatus: \'verified\''));
 });
+// Instruction presence only: this cannot establish that a model follows the guidance.
+test('SC3 prioritizes specific target-relevant narrative over a generic inherited opening',()=>{
+ for(const text of ["Lead with the most target-relevant kind of work",
+  "rather than the broadest description in the original summary",
+  "do not preserve a vague opening merely because it is original",
+  "Prefer a compact synthesis of related contributions",
+  "Do not import archive work into other candidates or targets"])
+  assert(instructions.includes(text),text);
+ for(const text of ["Skill listings belong in the Skills section",
+  "Workflow improvement does not establish runtime performance, debugging or automated testing",
+  "Combining skill and work references does not establish a missing relationship",
+  "Adjacent sentences must not imply a connection the source does not state"])
+  assert(instructions.includes(text),text);
+});
