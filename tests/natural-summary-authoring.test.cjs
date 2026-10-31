@@ -107,3 +107,26 @@ test('guidance is not a semantic gate: invented interest and copied bullets stil
  }
  // Passing here exposes the known gap; it is NOT acceptance of either prose sample.
 });
+// SC3 editorial reference cases: authored by hand, NOT generated-writing evidence.
+test('SC3 compact architecture and delivery overview survives the unchanged native boundary',()=>{
+ const p=fixture(),before=JSON.stringify(p);
+ p.summary.data='I work at the intersection of technology and management.';
+ const snapshot=JSON.stringify(p);
+ const text='Software engineer with a background in web application development, technical architecture and delivery workflow improvement.';
+ const out=n.compileNaturalComposition(p,response(p,[unit(text,['headline','work_1_b1','work_1_b2'])]));
+ assert.equal(out.candidate.summary.data,text);assert.deepEqual(out.summaryRemovals,[]);
+ assert.deepEqual(out.summaryTrace[0].sources.map(f=>f.sourceId),['headline','work_1_b1','work_1_b2']);
+ assert.deepEqual(out.candidate.experience,p.experience);assert.equal(JSON.stringify(p),snapshot);
+ assert.equal(out.semanticStatus,'unassessed');assert.notEqual(before,snapshot);
+ for(const absent of ['Python','RESTful APIs','MySQL','automated testing','performance optimization'])
+  assert(!out.candidate.summary.data.includes(absent));
+});
+test('SC3 does not disguise prompt guidance as an automatic editorial rejection or rewrite',()=>{
+ const p=fixture();p.summary.data='I work at the intersection of technology and management.';
+ const generic=unit(p.summary.data,['summary']);
+ const out=n.compileNaturalComposition(p,response(p,[generic]));
+ assert.equal(out.candidate.summary.data,generic.text);assert.deepEqual(out.summaryRemovals,[]);
+ assert.equal(out.semanticStatus,'unassessed');
+ // This is a documented limitation: generic but source-supported prose still compiles.
+ // Only a later explicitly budgeted real output can establish editorial improvement.
+});
