@@ -7,16 +7,17 @@ const { createSampleProfile } = load('mock/profile');
 const ORIGIN = 'http://127.0.0.1:4187';
 const PROVIDER_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
 const JOB = 'Software Engineer: build internal web applications, document delivery work and collaborate with the team. Classroom experience is acceptable.';
-const GENERATED_SUMMARY = 'Software engineer with classroom experience building internal web applications.';
+const NARRATIVE_SUMMARY = 'Software engineer with classroom experience building internal web applications.';
+const GENERATED_SUMMARY = NARRATIVE_SUMMARY + ' Relevant skills: Python — Coursework only.';
 const EDITED_SUMMARY = 'Built internal web applications for a classroom exercise.';
 const ERROR_503 = 'Google rejected the request (HTTP 503; UNAVAILABLE). Provider-reported details, not a verification of account usage. No automatic retry. Your resumes are unchanged.';
 const PROFILE_KEY = 'cv-tailor-profiles-v2';
 const ACTIVE_KEY = 'cv-tailor-active-id-v2';
 
 function sourceProfile(summaryLocked = false) {
-  const p = createSampleProfile('SC3 Offline Synthetic Source');
+  const p = createSampleProfile('SC4 Offline Synthetic Source');
   p.documentTheme = { accentColor: '#2557a7', fontFamily: 'sans', fontSize: 'medium', lineSpacing: 'normal', layoutStyle: 'modern' };
-  Object.assign(p.resumeHeader.data, { name: 'Fictional Sample', firstName: 'Fictional', lastName: 'Sample', desiredJobPosition: 'Software Engineer', email: 'SC3_PRIVATE_CONTACT@example.invalid', phone: '', linkedin: '', github: '', portfolio: '' });
+  Object.assign(p.resumeHeader.data, { name: 'Fictional Sample', firstName: 'Fictional', lastName: 'Sample', desiredJobPosition: 'Software Engineer', email: 'SC4_PRIVATE_CONTACT@example.invalid', phone: '', linkedin: '', github: '', portfolio: '' });
   p.resumeHeader.isLocked = true;
   p.headline.data = 'Software Engineer';
   p.summary.data = 'Fictional software engineer supporting web application delivery.';
@@ -36,7 +37,8 @@ function sourceProfile(summaryLocked = false) {
 function authoredDocument(packet) {
   const s = packet.source, facts = new Map(s.evidence.map(f => [f.id, f]));
   return {
-    summarySegments: s.locks.summary ? [] : [{ text: GENERATED_SUMMARY, sourceIds: ['work_1_b1'] }],
+    summarySegments: s.locks.summary ? [] : [{ text: NARRATIVE_SUMMARY, sourceIds: ['work_1_b1'] }],
+    summaryCapabilityIds: s.locks.summary ? [] : ['skill_1'],
     entries: [
       ...s.experience.filter(() => !s.locks.experience),
       ...s.projects.filter(() => !s.locks.projects),
@@ -126,7 +128,7 @@ async function seed(page, source) {
   return (await stored(page)).profiles[0]; // Snapshot after the REAL loader's normalization.
 }
 async function tailor(page) {
-  await expect(page.getByText('SC3 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('SC4 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
   await page.getByLabel('Job description', { exact: true }).fill(JOB);
   await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
 }
@@ -136,14 +138,14 @@ function checkWire(sc1Harness) {
   expect(headers['x-goog-api-key']).toBe('synthetic-offline-sc1-key');
   expect(body.generationConfig).toEqual({ responseMimeType: 'application/json', responseSchema: expect.any(Object), maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } });
   expect(body.systemInstruction.parts[0].text).toContain('SUMMARY PURPOSE:');
-  expect(body.systemInstruction.parts[0].text).toContain('Lead with the most target-relevant kind of work');
-  expect(body.systemInstruction.parts[0].text).toContain('do not preserve a vague opening merely because it is original');
+  expect(body.systemInstruction.parts[0].text).toContain('Lead directly with relevant supported work');
+  expect(body.systemInstruction.parts[0].text).toContain('CAPABILITY SEPARATION:');
   expect(body.systemInstruction.parts[0].text).toContain('Skill listings belong in the Skills section');
   const packet = JSON.parse(body.contents[0].parts[0].text);
   expect(packet.job).toBe(JOB);
   expect(packet.documentBrief.summaryEvidence).toBeDefined();
-  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'entries', 'skillSelections']);
-  expect(JSON.stringify(body)).not.toContain('SC3_PRIVATE_CONTACT');
+  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'summaryCapabilityIds', 'entries', 'skillSelections']);
+  expect(JSON.stringify(body)).not.toContain('SC4_PRIVATE_CONTACT');
 }
 function checkPreserved(original, copy) {
   for (const key of ['resumeHeader', 'headline', 'education', 'certifications', 'projects', 'skills', 'documentTheme', 'customSections', 'pageLayout']) expect(copy[key], key).toEqual(original[key]);
@@ -180,7 +182,7 @@ async function exportedText(page, testInfo) {
 }
 
 for (const summaryLocked of [false, true]) {
-  test(`SC3 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
+  test(`SC4 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
     sc1Harness.respond(packet => ({ body: completed(authoredDocument(packet)) }));
     const original = await seed(page, sourceProfile(summaryLocked));
     await tailor(page);
@@ -191,19 +193,29 @@ for (const summaryLocked of [false, true]) {
     expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
     checkPreserved(original, copy);
     const copyId = copy.profileId;
+    if (!summaryLocked) {
+      expect(copy.summary.data).toBe(GENERATED_SUMMARY);
+      await page.reload(); await saved(page);
+      expect((await stored(page)).profiles.find(p => p.profileId === copyId).summary.data).toBe(GENERATED_SUMMARY);
+      const initialPdf = await exportedText(page, testInfo);
+      expect(initialPdf).toContain(NARRATIVE_SUMMARY);
+      expect(initialPdf).toContain('Relevant skills: Python');
+      expect(initialPdf).toContain('Coursework only');
+      await page.reload(); await saved(page);
+    }
     // Exercise a real editor control, rather than mutating the store from the test.
-    await page.getByLabel('Resume document name').fill('SC3 Edited Synthetic Copy');
+    await page.getByLabel('Resume document name').fill('SC4 Edited Synthetic Copy');
     if (!summaryLocked) {
       const toggle = page.locator('[data-section-card="summary"] .section-accordion-toggle');
       if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
       await expect(page.getByLabel('Your professional summary', { exact: true })).toHaveValue(GENERATED_SUMMARY);
       await page.getByLabel('Your professional summary', { exact: true }).fill(EDITED_SUMMARY);
     }
-    await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).profileName).toBe('SC3 Edited Synthetic Copy');
+    await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).profileName).toBe('SC4 Edited Synthetic Copy');
     await saved(page);
     state = await stored(page); copy = state.profiles.find(p => p.profileId === copyId);
     await page.reload(); await saved(page);
-    await expect(page.getByLabel('Resume document name')).toHaveValue('SC3 Edited Synthetic Copy');
+    await expect(page.getByLabel('Resume document name')).toHaveValue('SC4 Edited Synthetic Copy');
     const reopened = await stored(page);
     expect(reopened.activeId).toBe(copyId);
     expect(reopened.profiles).toHaveLength(2);
@@ -219,7 +231,7 @@ for (const summaryLocked of [false, true]) {
   });
 }
 
-test('SC3 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged without retry', async ({ page, sc1Harness }) => {
+test('SC4 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged without retry', async ({ page, sc1Harness }) => {
   sc1Harness.respond(() => ({ status: 503, body: { error: { code: 503, status: 'UNAVAILABLE', message: 'Synthetic provider failure' } } }));
   const original = await seed(page, sourceProfile());
   await tailor(page);
@@ -233,7 +245,7 @@ test('SC3 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged 
   checkWire(sc1Harness);
 });
 
-test('SC3 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
+test('SC4 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
   sc1Harness.respond(packet => {
     const document = authoredDocument(packet);
     document.summarySegments[0].sourceIds = ['invented_source_id'];

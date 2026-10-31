@@ -1,9 +1,11 @@
-# Current task — SC3 focused summary candidate
+# Current task — evidence-aware authoring improvement
 
-Approved: improve summary authoring through a real reversible application preview, one bounded outcome. Branch:preview/sc3-summary-focus from SC2@e2a34be9f784aefd13b96b588aca630d6eb9f2a3; focused PR targets preview/sc2-flash-lite, not main.
+Outcome: a materially more useful truthful tailored CV, assessed in actual outputs—not another warning, diagnostic feature, test count or isolated prompt revision. Existing successful copy/original-preservation route remains intact.
 
-Implementation: more specific narrative-led summary guidance plus visible SC3 label. Same Flash-Lite model/settings and one-call behavior. No evidence-boundary relaxation, skill-to-practice promotion, app replacement, editor/import/export changes, dependencies or private user data in tests/code. Earlier conversational skills-sentence suggestion is not implemented because it conflicts with the existing deliberate summary boundary.
+Baseline:SC3@b347b037240b3912dbe56d91db434a55a8918238, user-installed but real summary rejected for generic weak wording. All previous provider budgets closed.
 
-Acceptance: full unit suite plus explicit static-policy and manually authored native-compiler regression cases, four mocked real-browser cases and production build. Review exact runtime diff. Deliver PR, changed files, prompt hash/settings, limitations and guarded PowerShell backup/apply/version-check/rollback guide.
+Candidate:preview/sc4-evidence-aware-authoring. Separate free narrative from source-bound capability IDs; application renders exact retained names/levels/context under explicit listing, not model-invented employer/proficiency claims. Revised whole-document brief covers introduction, experience priorities and skill selection. Preserve native editor/store/locks/identity/dates/qualifications/import/export. Same model/settings, no extra pipeline or automatic calls.
 
-Current:795/795 unit tests,4/4 mocked browser tests and production build passed; existing bundle warning only. Runtime diff reviewed: two instruction paragraphs plus visible label. SC3 not installed or writing-accepted. No live calls allowed. After delivery and local version check, agree a new finite trial before testing actual writing; all prior budgets are closed. Keep pagination outside this bounded change.
+Offline acceptance complete:808unit tests,4mocked browser cases,build and9batch-guard tests passed. Runtime diff reviewed. Deliver focused stacked PR plus real reversible preview and local comparison package. SC4 is not installed, writing-accepted or a proven general fix.
+
+Approved live evaluation:SC4-Authoring-Batch01,2fixed cases (backend user-provided professional source; fictional scoped practice) × SC3/SC4=4maximum sequential calls. Existing local credentials only. Stop on any failure; reserve before fetch; no retries/reviewers/fallback/extra calls. No real execution in agent environment. User-local results pending,0live calls used here. Compare actual factual scope/actor/strength/relationships and editorial usefulness before acceptance. No discretionary app click is included.
