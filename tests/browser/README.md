@@ -1,10 +1,10 @@
-# SC1 offline application acceptance
+# SC2 offline application acceptance
 
-This is test-only coverage of the existing SC1 application, not a new model, prompt, production feature, or provider-reliability fix.
+This suite covers the experimental SC2 Flash-Lite preview. SC2 changes only the active model and visible preview label; it retains the SC1 prompt and all compilation/preservation rules. It is not a demonstrated provider-reliability or authoring-quality fix.
 
 ## Run
 
-Use Node 24 (the existing SC1 tests use Node's TypeScript stripping API):
+Use Node 24 (the existing SC2 tests use Node's TypeScript stripping API):
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund
@@ -21,18 +21,18 @@ The runner starts its own Vite server on `127.0.0.1:4187`. It deliberately refus
 
 ## What is exercised
 
-- The actual Tailor button, SC1 request adapter, full outbound packet/provider schema, native schema/compiler, Zustand store, IndexedDB persistence, editor, and PDF export. Only the external provider HTTP response is mocked.
+- The actual Tailor button, SC2 request adapter, full outbound packet/provider schema, native schema/compiler, Zustand store, IndexedDB persistence, editor, and PDF export. Only the external provider HTTP response is mocked.
 - Two successful authored fixtures: locked experience with an editable summary, and a locked summary with editable experience. Each creates exactly one separate copy, preserves the original/identity/dates/design/locked fields, accepts a real UI edit, reloads from IndexedDB, and exports a real PDF. The downloaded PDF is parsed with local PDF.js and checked for expected content.
 - The user's exact reported HTTP503/UNAVAILABLE message: no copy, unchanged original and persisted data, no second call during the bounded post-error observation, and unchanged state after reload.
 - A completed HTTP response containing an invented source reference: rejected by the real native contract, with no copy saved. This checks that the harness has not bypassed the compiler.
-- The real packet excludes a synthetic private-contact sentinel, uses the SC1 settings, and sends only one mocked request in each case.
+- The real packet excludes a synthetic private-contact sentinel, uses the SC2 settings, and sends only one mocked request in each case.
 
-All external browser HTTP requests are blocked except the one exact SC1 endpoint, which is fulfilled locally. Unexpected external requests fail the tests. Service workers are disabled. Test runner retries are zero. The fixed fake key is not a credential and must never be replaced with a real key.
+All external browser HTTP requests are blocked except the one exact SC2 endpoint, which is fulfilled locally. Unexpected external requests fail the tests. Service workers are disabled. Test runner retries are zero. The fixed fake key is not a credential and must never be replaced with a real key.
 
 ## Limits
 
 These authored responses are synthetic, not Gemini outputs. Passing proves these bounded application paths only; it does not establish authoring quality, factual safety for arbitrary CVs, provider availability, performance, production security, or every import/export path. The no-retry observation is bounded; existing adapter unit tests also verify one-fetch behavior. Live HTTP503 remains an unresolved provider result, not evidence about quota, billing, or prompt quality.
 
-The suite tests a **development** server because the existing SC1 adapter intentionally disables client-key composition in production. Production compilation is verified separately with `npm run build`; this suite is not a production backend test.
+The suite tests a **development** server because the existing SC2 adapter intentionally disables client-key composition in production. Production compilation is verified separately with `npm run build`; this suite is not a production backend test.
 
-No application dependencies, `src/` files, active model/settings, summary brief, or product UI are changed by this PR. Do not merge or deploy automatically.
+The SC2 preview changes only the active composition model and its visible version label in `src/services/resumeComposer/request.ts`. Application dependencies, prompt, other model/settings, compiler, workflow and UI implementation are unchanged. Existing model/label expectations are updated deliberately, not removed. These browser fixtures retain the same success/locks/persistence/PDF/503/native-rejection assertions. Do not merge or deploy automatically.
