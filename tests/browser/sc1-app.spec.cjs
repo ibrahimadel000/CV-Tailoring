@@ -5,7 +5,7 @@ const { load } = require('../helpers/editorial-loader.cjs');
 const { createSampleProfile } = load('mock/profile');
 
 const ORIGIN = 'http://127.0.0.1:4187';
-const PROVIDER_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
+const PROVIDER_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
 const JOB = 'Software Engineer: build internal web applications, document delivery work and collaborate with the team. Classroom experience is acceptable.';
 const GENERATED_SUMMARY = 'Software engineer with classroom experience building internal web applications.';
 const EDITED_SUMMARY = 'Built internal web applications for a classroom exercise.';
@@ -14,9 +14,9 @@ const PROFILE_KEY = 'cv-tailor-profiles-v2';
 const ACTIVE_KEY = 'cv-tailor-active-id-v2';
 
 function sourceProfile(summaryLocked = false) {
-  const p = createSampleProfile('SC1 Offline Synthetic Source');
+  const p = createSampleProfile('SC2 Offline Synthetic Source');
   p.documentTheme = { accentColor: '#2557a7', fontFamily: 'sans', fontSize: 'medium', lineSpacing: 'normal', layoutStyle: 'modern' };
-  Object.assign(p.resumeHeader.data, { name: 'Fictional Sample', firstName: 'Fictional', lastName: 'Sample', desiredJobPosition: 'Software Engineer', email: 'SC1_PRIVATE_CONTACT@example.invalid', phone: '', linkedin: '', github: '', portfolio: '' });
+  Object.assign(p.resumeHeader.data, { name: 'Fictional Sample', firstName: 'Fictional', lastName: 'Sample', desiredJobPosition: 'Software Engineer', email: 'SC2_PRIVATE_CONTACT@example.invalid', phone: '', linkedin: '', github: '', portfolio: '' });
   p.resumeHeader.isLocked = true;
   p.headline.data = 'Software Engineer';
   p.summary.data = 'Fictional software engineer supporting web application delivery.';
@@ -126,7 +126,7 @@ async function seed(page, source) {
   return (await stored(page)).profiles[0]; // Snapshot after the REAL loader's normalization.
 }
 async function tailor(page) {
-  await expect(page.getByText('SC1 · Gemini 3.8 Flash · experimental', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('SC2 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
   await page.getByLabel('Job description', { exact: true }).fill(JOB);
   await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
 }
@@ -140,7 +140,7 @@ function checkWire(sc1Harness) {
   expect(packet.job).toBe(JOB);
   expect(packet.documentBrief.summaryEvidence).toBeDefined();
   expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'entries', 'skillSelections']);
-  expect(JSON.stringify(body)).not.toContain('SC1_PRIVATE_CONTACT');
+  expect(JSON.stringify(body)).not.toContain('SC2_PRIVATE_CONTACT');
 }
 function checkPreserved(original, copy) {
   for (const key of ['resumeHeader', 'headline', 'education', 'certifications', 'projects', 'skills', 'documentTheme', 'customSections', 'pageLayout']) expect(copy[key], key).toEqual(original[key]);
@@ -177,7 +177,7 @@ async function exportedText(page, testInfo) {
 }
 
 for (const summaryLocked of [false, true]) {
-  test(`SC1 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
+  test(`SC2 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
     sc1Harness.respond(packet => ({ body: completed(authoredDocument(packet)) }));
     const original = await seed(page, sourceProfile(summaryLocked));
     await tailor(page);
@@ -189,18 +189,18 @@ for (const summaryLocked of [false, true]) {
     checkPreserved(original, copy);
     const copyId = copy.profileId;
     // Exercise a real editor control, rather than mutating the store from the test.
-    await page.getByLabel('Resume document name').fill('SC1 Edited Synthetic Copy');
+    await page.getByLabel('Resume document name').fill('SC2 Edited Synthetic Copy');
     if (!summaryLocked) {
       const toggle = page.locator('[data-section-card="summary"] .section-accordion-toggle');
       if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
       await expect(page.getByLabel('Your professional summary', { exact: true })).toHaveValue(GENERATED_SUMMARY);
       await page.getByLabel('Your professional summary', { exact: true }).fill(EDITED_SUMMARY);
     }
-    await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).profileName).toBe('SC1 Edited Synthetic Copy');
+    await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).profileName).toBe('SC2 Edited Synthetic Copy');
     await saved(page);
     state = await stored(page); copy = state.profiles.find(p => p.profileId === copyId);
     await page.reload(); await saved(page);
-    await expect(page.getByLabel('Resume document name')).toHaveValue('SC1 Edited Synthetic Copy');
+    await expect(page.getByLabel('Resume document name')).toHaveValue('SC2 Edited Synthetic Copy');
     const reopened = await stored(page);
     expect(reopened.activeId).toBe(copyId);
     expect(reopened.profiles).toHaveLength(2);
@@ -216,7 +216,7 @@ for (const summaryLocked of [false, true]) {
   });
 }
 
-test('SC1 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged without retry', async ({ page, sc1Harness }) => {
+test('SC2 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged without retry', async ({ page, sc1Harness }) => {
   sc1Harness.respond(() => ({ status: 503, body: { error: { code: 503, status: 'UNAVAILABLE', message: 'Synthetic provider failure' } } }));
   const original = await seed(page, sourceProfile());
   await tailor(page);
@@ -230,7 +230,7 @@ test('SC1 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged 
   checkWire(sc1Harness);
 });
 
-test('SC1 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
+test('SC2 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
   sc1Harness.respond(packet => {
     const document = authoredDocument(packet);
     document.summarySegments[0].sourceIds = ['invented_source_id'];

@@ -2,9 +2,9 @@ import { providerFailureMessage } from './providerDiagnostics';
 import { naturalInstructions, googleNaturalSchema, type NaturalPacket } from './naturalDocument';
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorRequest';
-export const COMPOSITION_MODEL = 'gemini-3.8-flash';
+export const COMPOSITION_MODEL = 'gemini-3.5-flash-lite';
 export const COMPOSITION_TIMEOUT_MS = 300000;
-export const COMPOSITION_PREVIEW_LABEL = 'SC1 · Gemini 3.8 Flash · experimental';
+export const COMPOSITION_PREVIEW_LABEL = 'SC2 · Gemini 3.5 Flash-Lite · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal): Promise<unknown> {
