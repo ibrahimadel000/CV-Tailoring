@@ -9,7 +9,15 @@ export const isEntryMetadata = (id: string) => id.startsWith(PREFIX);
 export function buildSummaryEvidenceBrief(source: Source) {
   const available = source.locks.summary ? [] : source.evidence;
   const identity = (f: Source['evidence'][number]) => f.kind === 'headline' || isEntryMetadata(f.id);
+  // Positive authoring material comes before the inherited profile paragraph.
+  // Ordering is structural, not a keyword score, relevance verdict or new fact.
+  const primaryFacts = available.filter(f => ['role', 'achievement', 'project'].includes(f.kind));
+  const qualificationFacts = available.filter(f => ['education', 'certification'].includes(f.kind));
   return {
+    primaryFacts: primaryFacts.map(({ id, kind, parent, text }) => ({ id, kind, parent, text })),
+    qualificationFacts: qualificationFacts.map(({ id, kind, text }) => ({ id, kind, text })),
+    profileContext: available.filter(f => f.kind === 'summary').map(({ id, text }) => ({ id, text })),
+    authoringRole: 'Compose from the professional facts above. Profile wording is context, not the default introduction. Preserve scope and attribution; qualification facts do not establish work practice. Reference eligibility is not semantic verification.',
     contentSourceIds: available.filter(f => f.kind !== 'skill' && !identity(f)).map(f => f.id),
     identitySourceIds: available.filter(identity).map(f => f.id),
     contentRole: 'Candidate statements in their actual scope, not proof of every relationship a summary could assert.',

@@ -20,7 +20,7 @@ test('native packet aligns summary-content guidance while retaining source and f
  assert(packet.source.skillIds.includes('skill_1'));assert(packet.source.evidence.some(f=>f.id==='skill_1'));
  const schema=n.googleNaturalSchema(packet),ids=packet.outputContract.properties.summarySegments.items.properties.sourceIds.items.enum;
  assert(ids.includes('skill_1'));assert.deepEqual(schema.properties.summarySegments.items.properties.sourceIds.items.enum,ids);
- assert.equal(packet.revision,'document-compose-natural-segments-4-capability-separation');
+ assert.equal(packet.revision,'document-compose-natural-segments-6-contextual-authoring');
 });
 test('different job focus leaves actual evidence unchanged and never adds candidate facts',()=>{
  const p=fixture(),before=JSON.stringify(p),a=n.prepareNaturalComposition(p,job);
@@ -58,6 +58,7 @@ test('explicit interest can be used while absent interest is not fabricated in t
  assert(!n.prepareNaturalComposition(p,job).documentBrief.summaryEvidence.contentSourceIds.includes('summary'));
  p.summary.data='Interested in accessible web interfaces.';
  const packet=n.prepareNaturalComposition(p,job);assert(packet.documentBrief.summaryEvidence.contentSourceIds.includes('summary'));
+ p.experience.data=[]; // Context-only sources remain supported; no invented work anchor.
  const out=n.compileNaturalComposition(p,response(p,[unit(p.summary.data,['summary'])]));
  assert.equal(out.candidate.summary.data,p.summary.data);
 });
@@ -121,12 +122,9 @@ test('SC3 compact architecture and delivery overview survives the unchanged nati
  for(const absent of ['Python','RESTful APIs','MySQL','automated testing','performance optimization'])
   assert(!out.candidate.summary.data.includes(absent));
 });
-test('SC3 does not disguise prompt guidance as an automatic editorial rejection or rewrite',()=>{
- const p=fixture();p.summary.data='I work at the intersection of technology and management.';
- const generic=unit(p.summary.data,['summary']);
- const out=n.compileNaturalComposition(p,response(p,[generic]));
- assert.equal(out.candidate.summary.data,generic.text);assert.deepEqual(out.summaryRemovals,[]);
- assert.equal(out.semanticStatus,'unassessed');
- // This is a documented limitation: generic but source-supported prose still compiles.
- // Only a later explicitly budgeted real output can establish editorial improvement.
+test('profile-only wording is rejected when professional work evidence exists, without rewriting it',()=>{
+ const p=fixture();p.summary.data='I work at the intersection of technology and management. I collaborate across teams.';
+ const generic=unit('I work at the intersection of technology and management.',['summary']),before=JSON.stringify(p);
+ assert.throws(()=>n.compileNaturalComposition(p,response(p,[generic])),/only profile or identity context/);
+ assert.equal(JSON.stringify(p),before);
 });

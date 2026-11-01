@@ -19,7 +19,7 @@ const one=(text='Prepared source-linked text.',sourceIds=['work_1_b1'])=>({text,
 test('natural packet/schema projects the current output only, no planner or old summary wire',()=>{
  const p=n.prepareNaturalComposition(fixture(),job),g=n.googleNaturalSchema(p);
  assert.equal(p.revision,n.NATURAL_REVISION);
- assert.deepEqual(p.outputContract.required,['summarySegments','summaryCapabilityIds','entries','skillSelections']);
+ assert.deepEqual(p.outputContract.required,['summarySegments','entries','skillSelections']);
  assert.deepEqual(g.required,p.outputContract.required);
  assert.equal(g.properties.summarySegments.type,'ARRAY');
  assert.deepEqual(g.properties.summarySegments.items.required,['text','sourceIds']);
