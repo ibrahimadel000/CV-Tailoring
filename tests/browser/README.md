@@ -1,10 +1,10 @@
-# SC4 offline application acceptance
+# SC5 offline application acceptance
 
-This suite covers the experimental SC4 Flash-Lite preview. SC4 separates freely authored work narrative from a source-bound capability listing and revises the document-wide authoring brief. Same Flash-Lite model/settings, original/lock protection, editor and persistence route. It is not a demonstrated provider-reliability or authoring-quality fix.
+This suite covers the experimental SC5 Flash-Lite preview. SC5 retires the automatic summary capability inventory, puts actual work/project facts first in the authoring brief, and adds a limited retained-evidence provenance guard. Same Flash-Lite model/settings, original/lock protection, editor and persistence route. It is not a demonstrated provider-reliability or authoring-quality fix.
 
 ## Run
 
-Use Node 24 (the existing SC4 tests use Node's TypeScript stripping API):
+Use Node 24 (the existing SC5 tests use Node's TypeScript stripping API):
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund
@@ -21,20 +21,20 @@ The runner starts its own Vite server on `127.0.0.1:4187`. It deliberately refus
 
 ## What is exercised
 
-- The actual Tailor button, SC4 request adapter, full outbound packet/provider schema, native schema/compiler, Zustand store, IndexedDB persistence, editor, and PDF export. Only the external provider HTTP response is mocked.
+- The actual Tailor button, SC5 request adapter, full outbound packet/provider schema, native schema/compiler, Zustand store, IndexedDB persistence, editor, and PDF export. Only the external provider HTTP response is mocked.
 - Two successful authored fixtures: locked experience with an editable summary, and a locked summary with editable experience. Each creates exactly one separate copy, preserves the original/identity/dates/design/locked fields, accepts a real UI edit, reloads from IndexedDB, and exports a real PDF. The downloaded PDF is parsed with local PDF.js and checked for expected content.
 - The user's exact reported HTTP503/UNAVAILABLE message: no copy, unchanged original and persisted data, no second call during the bounded post-error observation, and unchanged state after reload.
 - A completed HTTP response containing an invented source reference: rejected by the real native contract, with no copy saved. This checks that the harness has not bypassed the compiler.
-- The real packet excludes a synthetic private-contact sentinel, uses the SC4 settings, and sends only one mocked request in each case.
+- The real packet excludes a synthetic private-contact sentinel, uses the SC5 settings, and sends only one mocked request in each case.
 
-All external browser HTTP requests are blocked except the one exact SC4 endpoint, which is fulfilled locally. Unexpected external requests fail the tests. Service workers are disabled. Test runner retries are zero. The fixed fake key is not a credential and must never be replaced with a real key.
+All external browser HTTP requests are blocked except the one exact SC5 endpoint, which is fulfilled locally. Unexpected external requests fail the tests. Service workers are disabled. Test runner retries are zero. The fixed fake key is not a credential and must never be replaced with a real key.
 
 ## Limits
 
 These authored responses are synthetic, not Gemini outputs. Passing proves these bounded application paths only; it does not establish authoring quality, factual safety for arbitrary CVs, provider availability, performance, production security, or every import/export path. The no-retry observation is bounded; existing adapter unit tests also verify one-fetch behavior. Live HTTP503 remains an unresolved provider result, not evidence about quota, billing, or prompt quality.
 
-The suite tests a **development** server because the existing SC4 adapter intentionally disables client-key composition in production. Production compilation is verified separately with `npm run build`; this suite is not a production backend test.
+The suite tests a **development** server because the existing SC5 adapter intentionally disables client-key composition in production. Production compilation is verified separately with `npm run build`; this suite is not a production backend test.
 
-The SC4 preview changes summary editorial instructions in `src/services/resumeComposer/naturalDocument.ts` and its visible version label in `src/services/resumeComposer/request.ts`. The provider schema now requires summaryCapabilityIds and the native compiler renders selected capabilities from exact source text/qualification; existing freely authored skill-inflation filtering remains. Other preservation/workflow/editor/import/export behavior, model/settings and app dependencies are unchanged. Existing model/label expectations are updated deliberately, not removed. These browser fixtures retain the same success/locks/persistence/PDF/503/native-rejection assertions. Do not merge or deploy automatically.
+The provider schema requires summarySegments, entries and skillSelections. Selected capabilities stay in native Skills, including qualifications such as Coursework only. Success cases check that no Relevant skills inventory is appended to the summary or exported PDF. Existing model/label expectations are deliberately updated, not removed.
 
-SC4 success fixtures explicitly select Python with Coursework only via the new source-bound channel. The resulting labelled capability line is checked in the real summary editor before UI editing; preservation/save/reopen/PDF assertions remain. See SC4-PREVIEW.md for the separately authorized finite comparison; do not use browser fixtures to claim generated writing quality.
+Two additional rejection cases cover a changed profile-only introduction despite available work evidence, and a stale nonempty SC4 capability field. Both preserve original/saved data. The provenance guard permits exact unchanged original summaries, qualification-led introductions and no-work sources; it cannot establish semantic support or useful writing. See SC5-REPAIR.md. All live budgets are CLOSED; these tests authorize no provider calls.
