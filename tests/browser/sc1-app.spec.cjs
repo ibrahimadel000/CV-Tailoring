@@ -8,16 +8,16 @@ const ORIGIN = 'http://127.0.0.1:4187';
 const PROVIDER_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
 const JOB = 'Software Engineer: build internal web applications, document delivery work and collaborate with the team. Classroom experience is acceptable.';
 const NARRATIVE_SUMMARY = 'Software engineer with classroom experience building internal web applications.';
-const GENERATED_SUMMARY = NARRATIVE_SUMMARY + ' Relevant skills: Python — Coursework only.';
+const GENERATED_SUMMARY = NARRATIVE_SUMMARY;
 const EDITED_SUMMARY = 'Built internal web applications for a classroom exercise.';
 const ERROR_503 = 'Google rejected the request (HTTP 503; UNAVAILABLE). Provider-reported details, not a verification of account usage. No automatic retry. Your resumes are unchanged.';
 const PROFILE_KEY = 'cv-tailor-profiles-v2';
 const ACTIVE_KEY = 'cv-tailor-active-id-v2';
 
 function sourceProfile(summaryLocked = false) {
-  const p = createSampleProfile('SC4 Offline Synthetic Source');
+  const p = createSampleProfile('SC5 Offline Synthetic Source');
   p.documentTheme = { accentColor: '#2557a7', fontFamily: 'sans', fontSize: 'medium', lineSpacing: 'normal', layoutStyle: 'modern' };
-  Object.assign(p.resumeHeader.data, { name: 'Fictional Sample', firstName: 'Fictional', lastName: 'Sample', desiredJobPosition: 'Software Engineer', email: 'SC4_PRIVATE_CONTACT@example.invalid', phone: '', linkedin: '', github: '', portfolio: '' });
+  Object.assign(p.resumeHeader.data, { name: 'Fictional Sample', firstName: 'Fictional', lastName: 'Sample', desiredJobPosition: 'Software Engineer', email: 'SC5_PRIVATE_CONTACT@example.invalid', phone: '', linkedin: '', github: '', portfolio: '' });
   p.resumeHeader.isLocked = true;
   p.headline.data = 'Software Engineer';
   p.summary.data = 'Fictional software engineer supporting web application delivery.';
@@ -38,7 +38,6 @@ function authoredDocument(packet) {
   const s = packet.source, facts = new Map(s.evidence.map(f => [f.id, f]));
   return {
     summarySegments: s.locks.summary ? [] : [{ text: NARRATIVE_SUMMARY, sourceIds: ['work_1_b1'] }],
-    summaryCapabilityIds: s.locks.summary ? [] : ['skill_1'],
     entries: [
       ...s.experience.filter(() => !s.locks.experience),
       ...s.projects.filter(() => !s.locks.projects),
@@ -128,7 +127,7 @@ async function seed(page, source) {
   return (await stored(page)).profiles[0]; // Snapshot after the REAL loader's normalization.
 }
 async function tailor(page) {
-  await expect(page.getByText('SC4 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('SC5 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
   await page.getByLabel('Job description', { exact: true }).fill(JOB);
   await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
 }
@@ -144,8 +143,8 @@ function checkWire(sc1Harness) {
   const packet = JSON.parse(body.contents[0].parts[0].text);
   expect(packet.job).toBe(JOB);
   expect(packet.documentBrief.summaryEvidence).toBeDefined();
-  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'summaryCapabilityIds', 'entries', 'skillSelections']);
-  expect(JSON.stringify(body)).not.toContain('SC4_PRIVATE_CONTACT');
+  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'entries', 'skillSelections']);
+  expect(JSON.stringify(body)).not.toContain('SC5_PRIVATE_CONTACT');
 }
 function checkPreserved(original, copy) {
   for (const key of ['resumeHeader', 'headline', 'education', 'certifications', 'projects', 'skills', 'documentTheme', 'customSections', 'pageLayout']) expect(copy[key], key).toEqual(original[key]);
@@ -182,7 +181,7 @@ async function exportedText(page, testInfo) {
 }
 
 for (const summaryLocked of [false, true]) {
-  test(`SC4 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
+  test(`SC5 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
     sc1Harness.respond(packet => ({ body: completed(authoredDocument(packet)) }));
     const original = await seed(page, sourceProfile(summaryLocked));
     await tailor(page);
@@ -199,23 +198,23 @@ for (const summaryLocked of [false, true]) {
       expect((await stored(page)).profiles.find(p => p.profileId === copyId).summary.data).toBe(GENERATED_SUMMARY);
       const initialPdf = await exportedText(page, testInfo);
       expect(initialPdf).toContain(NARRATIVE_SUMMARY);
-      expect(initialPdf).toContain('Relevant skills: Python');
+      expect(initialPdf).not.toContain('Relevant skills:');
       expect(initialPdf).toContain('Coursework only');
       await page.reload(); await saved(page);
     }
     // Exercise a real editor control, rather than mutating the store from the test.
-    await page.getByLabel('Resume document name').fill('SC4 Edited Synthetic Copy');
+    await page.getByLabel('Resume document name').fill('SC5 Edited Synthetic Copy');
     if (!summaryLocked) {
       const toggle = page.locator('[data-section-card="summary"] .section-accordion-toggle');
       if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
       await expect(page.getByLabel('Your professional summary', { exact: true })).toHaveValue(GENERATED_SUMMARY);
       await page.getByLabel('Your professional summary', { exact: true }).fill(EDITED_SUMMARY);
     }
-    await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).profileName).toBe('SC4 Edited Synthetic Copy');
+    await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).profileName).toBe('SC5 Edited Synthetic Copy');
     await saved(page);
     state = await stored(page); copy = state.profiles.find(p => p.profileId === copyId);
     await page.reload(); await saved(page);
-    await expect(page.getByLabel('Resume document name')).toHaveValue('SC4 Edited Synthetic Copy');
+    await expect(page.getByLabel('Resume document name')).toHaveValue('SC5 Edited Synthetic Copy');
     const reopened = await stored(page);
     expect(reopened.activeId).toBe(copyId);
     expect(reopened.profiles).toHaveLength(2);
@@ -231,7 +230,7 @@ for (const summaryLocked of [false, true]) {
   });
 }
 
-test('SC4 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged without retry', async ({ page, sc1Harness }) => {
+test('SC5 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged without retry', async ({ page, sc1Harness }) => {
   sc1Harness.respond(() => ({ status: 503, body: { error: { code: 503, status: 'UNAVAILABLE', message: 'Synthetic provider failure' } } }));
   const original = await seed(page, sourceProfile());
   await tailor(page);
@@ -245,7 +244,7 @@ test('SC4 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged 
   checkWire(sc1Harness);
 });
 
-test('SC4 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
+test('SC5 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
   sc1Harness.respond(packet => {
     const document = authoredDocument(packet);
     document.summarySegments[0].sourceIds = ['invented_source_id'];
@@ -256,5 +255,32 @@ test('SC4 real native contract rejects invented references without creating a co
   await expect(page.getByText(/unknown source reference.*Nothing was saved/i)).toBeVisible();
   await expect(page.getByLabel('Source resume', { exact: true }).locator('option')).toHaveCount(1);
   expect(await stored(page)).toEqual({ profiles: [original], activeId: original.profileId });
+  checkWire(sc1Harness);
+});
+
+test('SC5 rejects profile-only introduction when actual work evidence exists; original stays saved', async ({ page, sc1Harness }) => {
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.summarySegments = [{ text: 'Software engineer supporting delivery.', sourceIds: ['summary'] }];
+    return { body: completed(document) };
+  });
+  const original = await seed(page, sourceProfile(false));
+  await tailor(page);
+  await expect(page.getByText('Generated introduction used only profile or identity context', { exact: false })).toBeVisible();
+  const state = await stored(page);
+  expect(state.profiles).toEqual([original]);expect(state.activeId).toBe(original.profileId);
+  await page.reload();await saved(page);expect((await stored(page)).profiles).toEqual([original]);
+  checkWire(sc1Harness);
+});
+
+test('SC5 rejects stale SC4 capability append instead of silently printing import labels', async ({ page, sc1Harness }) => {
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);document.summaryCapabilityIds = ['skill_1'];
+    return { body: completed(document) };
+  });
+  const original = await seed(page, sourceProfile(false));await tailor(page);
+  await expect(page.getByText('summaryCapabilityIds', { exact: false })).toBeVisible();
+  expect((await stored(page)).profiles).toEqual([original]);
+  await page.reload();await saved(page);expect((await stored(page)).profiles).toEqual([original]);
   checkWire(sc1Harness);
 });
