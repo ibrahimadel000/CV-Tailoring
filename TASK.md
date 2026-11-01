@@ -1,7 +1,7 @@
-# Current task — review evidence-first repair
+# Current task — evaluate repaired authoring
 
-Implemented offline candidate from SC4@a46e1b6a41c7fb9b2785543766b24a0161a3df02 on repair/evidence-first-authoring. Remove the automatic summary capability/context dump; provide actual work/project facts before profile context; reject a changed nonempty profile/header-only introduction when work/project evidence exists. Qualifications may anchor; exact unchanged originals and no-work sources remain supported.
+SC5 implementation on repair/evidence-first-authoring is offline-verified:816 unit tests,6 mocked browser cases and build passed. Draft PR5 remains unmerged. Runtime checkpoint dbe378e2def693924309bdcaeade50ddbf7b2fc7; this checkpoint is documentation-only.
 
-Verification:816 unit tests,6 mocked browser cases and build passed. Private offline replay detects the observed SC4 backend failure without provider calls. No hardcoded job answer, extra model, retry/fallback, deterministic rewrite or diagnostics system. Preserve original/native workflow and model/settings.
+The user approved SC5-Authoring-Batch01:maximum2 requests,backend reconstructed original-source/job case then existing fictional scope case. Same SC5 model/settings. One request per case,no retries/reviewers/fallbacks;stop on request/contract/local failure and close unused calls. All older budgets remain CLOSED. Prepared local runner has13/13 offline safety tests passing;no live requests executed during preparation. No additional app Tailor click authorized.
 
-Next outcome:review the focused draft PR. Candidate is NOT installed or writing-accepted. Provenance rejection prevents one failure pattern; it does not author a replacement or certify semantics. All live budgets CLOSED. Agree a new finite batch before any API evaluation; never rerun SC4 Batch01. Keep main unmodified and unmerged.
+Next outcome:review actual outputs for target-specific useful synthesis,correct relationships/scope/actor/strength,skill relevance and qualifications. Reject generic filler or invented API/testing/performance employment claims. Batch uses native adapter/compiler but does not save browser CVs;local end-to-end original/copy/edit/save/reopen/PDF acceptance remains separate. See SC5-BATCH01.md. No merge,default-branch change,deployment or billing change.
