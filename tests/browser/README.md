@@ -1,6 +1,6 @@
-# SC5 offline application acceptance
+# SC5.1 offline application acceptance
 
-This suite covers the experimental SC5 Flash-Lite preview. SC5 retires the automatic summary capability inventory, puts actual work/project facts first in the authoring brief, and adds a limited retained-evidence provenance guard. Same Flash-Lite model/settings, original/lock protection, editor and persistence route. It is not a demonstrated provider-reliability or authoring-quality fix.
+This suite covers the experimental SC5.1 Flash-Lite preview. SC5 retires the automatic summary capability inventory, puts actual work/project facts first in the authoring brief, and adds a limited retained-evidence provenance guard. Same Flash-Lite model/settings, original/lock protection, editor and persistence route. It is not a demonstrated provider-reliability or authoring-quality fix.
 
 ## Run
 
@@ -38,3 +38,5 @@ The suite tests a **development** server because the existing SC5 adapter intent
 The provider schema requires summarySegments, entries and skillSelections. Selected capabilities stay in native Skills, including qualifications such as Coursework only. Success cases check that no Relevant skills inventory is appended to the summary or exported PDF. Existing model/label expectations are deliberately updated, not removed.
 
 Two additional rejection cases cover a changed profile-only introduction despite available work evidence, and a stale nonempty SC4 capability field. Both preserve original/saved data. The provenance guard permits exact unchanged original summaries, qualification-led introductions and no-work sources; it cannot establish semantic support or useful writing. See SC5-REPAIR.md. All live budgets are CLOSED; these tests authorize no provider calls.
+
+SC5.1 also sends the bound joined authoringView through the real adapter. A seventh positive case uses complementary classroom contributions plus a selected documentation capability and verifies exact native summary/skill preservation through separate copy,save/reopen and parsed PDF. These authored fixtures are synthetic,not evidence the model selects or writes them. Output schema/compiler/filter semantics and model/settings are unchanged;all live budgets remain CLOSED.

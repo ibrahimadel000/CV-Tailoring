@@ -1,99 +1,84 @@
-# Evidence-first authoring repair — offline candidate
+# SC5.1 contextual authoring — offline repair candidate
 
-## Outcome and limits
+## What changed and why
 
-SC4's observed backend response shortened generic profile context instead of using relevant professional evidence; no summary passage was removed. Its automatic capability renderer then printed raw source-group labels. SC5 removes that renderer and gives the writer actual professional facts first, separate from qualifications and inherited profile wording. Native skill selections remain editable and qualified.
+SC5's completed two-request batch was not writing-accepted. The backend opening used a target-specific focus not established by its cited work fact,largely paraphrased one contribution and omitted an explicitly relevant documentation capability. No passage was filtered. Fictional limitations survived,but this did not demonstrate broad writing improvement.
 
-A changed, nonempty introduction must retain a work/project or qualification reference when work/project facts exist. Exact unchanged original summaries are allowed; qualification-led introductions and sources without work/project narrative remain possible. The guard runs after existing filtering. It rejects the observed profile-only rewrite but cannot guarantee truthful relationships or useful writing: a generic sentence with a valid work reference can still pass. A rejection leaves resumes unchanged; it does not create a better replacement. No template answer, keyword ranker, extra reviewer, model, retry or fallback was added.
+The native compiler already accepts useful supported synthesis and selected documentation. SC5.1 changes the writer's positive input and instructions rather than adding another gate:
 
-Status: prepared/offline-verified candidate for review. Not Windows-installed, manually tested or writing-accepted. Existing saved CVs and exported PDFs are not automatically rewritten. No fresh model outputs were generated. All provider budgets are CLOSED; do not click Tailor or rerun any previous batch under this delivery.
+- Join exact contribution text with its actual role/organization and lock context.
+- Join every native skill's exact text/qualification with original source group context;skills outside groups remain explicitly visible. Distinct contexts are retained. This is not ranking,keyword matching or an inference about employer use.
+- Distinguish the vacancy's focus/title from candidate history;ask for supported synthesis instead of a first-bullet paraphrase and whole-job capability coverage,including supporting duties.
+- Keep the three-field output contract and existing native filtering/compiler/locks unchanged. No automatic capability inventory,hardcoded user answer,second stage,reviewer,retry,fallback or model switch.
 
-## Version and settings
+This is a causal hypothesis about authoring input usability,NOT proof that the model now writes better. Static instruction tests verify presence,not compliance. Existing weak SC5 output still compiles;we do not silently repair prose or pretend IDs certify meaning.
 
-- Branch: repair/evidence-first-authoring.
-- Base: preview/sc4-evidence-aware-authoring at a46e1b6a41c7fb9b2785543766b24a0161a3df02; review against that branch, not main. Main remains45d065b5a84779115a783739b13dc6953ad3bc15.
-- Visible identifier: SC5 · Gemini 3.5 Flash-Lite · experimental.
-- Packet revision: document-compose-natural-segments-5-evidence-first.
-- Prompt SHA256: d556feb2746251c6aed6cb2d174062ad0d860323875a1b938e217110828c478c.
-- Unchanged: gemini-3.5-flash-lite; medium thinking;8192 maximum output tokens;300000ms deadline;default sampling;one fetch;no automatic retry/fallback;existing180000-character adapter input limit. Professional facts are repeated in a compact authoring view; very large inputs remain subject to that existing limit.
-- Development adapter only. Production client-key composition stays disabled. No key, account, environment or billing change.
+## Version and scope
 
-## Exact changed files
+- Branch:repair/evidence-first-authoring;draft PR5 remains stacked on SC4,not main.
+- Increment base:2fcbc9ff2a55ed0b245da8cb9817f4c06e5f9891,with SC5 runtime dbe378e2def693924309bdcaeade50ddbf7b2fc7. Main remains45d065b5a84779115a783739b13dc6953ad3bc15.
+- Visible label:SC5.1 · Gemini 3.5 Flash-Lite · experimental.
+- Packet revision:document-compose-natural-segments-6-contextual-authoring.
+- Prompt SHA256:6cbfcfb6dd7c652e2d5ebf8d7473a32b579279811814d94e489565f64135af3e.
+- Same gemini-3.5-flash-lite,medium thinking,8192 maximum output tokens,300000ms deadline,default sampling,one fetch,no retry/fallback. Joined source views increase input text;existing180000-character adapter limit unchanged. Development adapter only;production client-key composition stays disabled.
 
-Runtime:
-- src/services/resumeComposer/references.ts — positive work/project/qualification facts before profile context, exact source data.
-- src/services/resumeComposer/naturalDocument.ts — three-field provider contract, evidence-first packet/prompt, limited retained-reference guard.
-- src/services/resumeComposer/summaryCapabilities.ts — retire nonempty capability append explicitly; tolerate absent/empty legacy payloads.
-- src/services/resumeComposer/request.ts — visible version label only; model/settings unchanged.
-- src/components/builder/ComposerTailorWorkspace.tsx — summary notice counts no longer include retired append.
+Exact incremental runtime files:
+1. src/services/resumeComposer/authoringView.ts (new):pure joined source-context view.
+2. src/services/resumeComposer/naturalDocument.ts:include bound authoring view,revision and positive instructions. Output schema and compiler/filter logic unchanged in this increment.
+3. src/services/resumeComposer/request.ts:visible SC5.1 identifier only.
 
-Tests:
-- tests/evidence-first-authoring.test.cjs (new)
-- tests/natural-document.test.cjs
-- tests/natural-summary-authoring.test.cjs
-- tests/summary-authoring-policy.test.cjs
-- tests/summary-capabilities.test.cjs
-- tests/summary-preview-sc1.test.cjs
-- tests/browser/sc1-app.spec.cjs
+Exact incremental tests:
+- tests/contextual-authoring.test.cjs (new):8source-view/compiler/policy tests.
+- tests/natural-summary-authoring.test.cjs:expected packet revision.
+- tests/summary-preview-sc1.test.cjs:frozen prompt hash and visible identifier.
+- tests/browser/sc1-app.spec.cjs:identifier,real outbound view,positive synthesis/documentation save/reopen/PDF case;prior assertions retained.
 
-Documentation: STATE.md, TASK.md, tests/browser/README.md and this file.
+Documentation:STATE.md,TASK.md,tests/browser/README.md and this guide. SC5-BATCH01.md remains the historical closed result. No dependency/lockfile,native store/editor/design/import/export or candidate identity/date/qualification changes. Existing saved CVs/PDFs are not rewritten.
 
-No dependency/lockfile, native store/editor/design/import/export implementation or source CV data changes.
+## Verification and remaining limits
 
-## Verification
+Linux Node24:824/824 unit tests,7/7 offline browser scenarios and production build passed;existing large-bundle warning remains. All unit/build work blocks external network;browser provider requests are locally fulfilled with fake keys and fictional CVs. The new browser case confirms complementary supported summary and selected documentation through the actual native compiler,editable copy,persistence and parsed PDF. Other cases retain editing/locks/original preservation/503-no-retry/invalid-reference/stale-output checks.
 
-Linux Node24:816/816 unit tests passed;6/6 offline browser scenarios passed;production build passed with the existing large-bundle warning. Unit tests explicitly retain exact-unchanged-summary behavior, qualifications and locked/no-work sources. A negative semantic-limit test demonstrates that generic text plus a valid reference can still pass.
+Private offline replay of the two existing cases verifies all native capabilities remain visible and old returned text is not silently changed. No fresh writing produced;no real API requests. Source-view tamper rejection is structural,not semantic truth. This does not establish arbitrary factual safety,all import layouts,provider reliability or writing acceptance.
 
-Browser checks use fictional CVs, a fake key and locally fulfilled provider responses; external requests are blocked. They exercise the actual UI/compiler/store, separate copy, locks, edit/save/reopen, PDF,503/no retry,invalid references,profile-only rewrite rejection and stale capability rejection. No new API requests. This does not prove every import/export path or production-backend behavior.
+Status:prepared/offline-verified,not installed on the user's Windows machine or live-writing-accepted. ALL live budgets CLOSED. Do not rerun SC5-Authoring-Batch01 or click Tailor. No new evaluation package is released with this increment. A fresh finite evaluation requires separate explicit agreement;do not reuse any ledger or budget. Do not merge/deploy or claim completion based on offline passes.
 
-Offline replay of previously returned SC4 batch data: the old backend payload is rejected for the retired field; with only that field removed for isolation, its profile-only rewritten narrative is rejected. The earlier concrete SC3 narrative remains structurally acceptable; the scoped unchanged classroom introduction remains acceptable. Reconstructed source profiles are not an exact installed browser export. This is regression/failure detection, NOT improved generated writing.
+## Optional reversible local source preview — no provider call
 
-## Optional reversible local preview — no Tailor call
-
-You do not need another blind install/API loop to review this candidate. Inspect the draft PR first. If you choose to inspect locally, stop the old Vite process. Back up the entire project directory privately, including local-only files; do not upload it. Preserve existing browser storage (do not clear site data). Changing the Git branch does not roll back browser-stored resume edits.
-
-In PowerShell:
+Review draft PR5 before installing. Stop Vite. Back up the project privately;keep .env and browser data private and never clear site storage. In PowerShell:
 
 ```powershell
 Set-Location 'E:\cv tailor - Copy'
 git status --short
 ```
 
-If there are any local changes or untracked project files you need, STOP and reconcile them; do not reset, clean, force checkout, overwrite or blindly stash. Keep the existing environment private. In a clean repository, record the original branch/commit and create a rollback marker:
+If there are any local changes,untracked files you need,a wrong repository or no Git checkout,STOP. Do not reset,clean,force,blindly stash or overwrite. With a clean verified checkout,record the starting branch/commit and unique backup marker:
 
 ```powershell
 git branch --show-current
 git rev-parse HEAD
-git branch backup/before-evidence-first
-# If that backup name already exists, choose a new unique name; never force it.
+$backup = "backup/pre-contextual-$(Get-Date -Format yyyyMMdd-HHmmss)"
+git branch $backup
+if ($LASTEXITCODE -ne 0) { throw 'Backup failed. Stop.' }
+Write-Host "KEEP THIS ROLLBACK BRANCH: $backup"
 git fetch origin
-git switch --create repair/evidence-first-authoring --track origin/repair/evidence-first-authoring
+if ($LASTEXITCODE -ne 0) { throw 'Fetch failed. Stop.' }
 ```
 
-If the repair branch already exists, stop and inspect it before switching/pulling; do not overwrite it. Confirm the checked-out commit matches the PR's current head. If this directory is not a Git checkout or differs from the expected SC4 base, stop rather than applying guessed file replacements.
+Inspect the current PR head and local branch before switching. If the repair branch does not exist locally,use `git switch --create repair/evidence-first-authoring --track origin/repair/evidence-first-authoring`. If it already exists,do not overwrite it;inspect and reconcile its head first. Stop on any refusal or unexpected drift. No default-branch merge is required. Confirm checked-out HEAD matches the PR's current head before running tests.
 
-With Node24 and existing installed dependencies:
+With Node24 and existing dependencies:
 
 ```powershell
 node --test tests/*.test.cjs
+if ($LASTEXITCODE -ne 0) { throw 'Offline tests failed. Stop.' }
 npm run build
+if ($LASTEXITCODE -ne 0) { throw 'Build failed. Stop.' }
 npm run test:browser:offline
+if ($LASTEXITCODE -ne 0) { throw 'Browser checks failed. Stop.' }
 npm run dev
 ```
 
-The browser suite needs its separate installed test dependencies and compatible Chromium (see tests/browser/README.md); setup may download packages, but tests use no real provider. Do not change runtime dependencies or disclose keys to resolve a local setup problem. Confirm the SC5 label in the app. STOP before Tailor: no live budget is authorized. Review saved originals without clearing storage. Local test/build success is not writing acceptance.
+Browser checks need the existing separate test dependencies and compatible Chromium;see tests/browser/README.md. Setup can download packages,but the tests use no real provider. Confirm SC5.1 label. STOP before Tailor;no live budget exists. Existing stored CVs remain plain editable native profiles.
 
-Rollback after stopping Vite:
-
-```powershell
-git status --short
-# Only with a clean tree:
-git switch backup/before-evidence-first
-npm run dev
-```
-
-Use your recorded unique backup branch name if different. Do not use destructive reset/clean. Git rollback restores source, not browser-storage edits. No merge, deployment or default-branch push is part of this preview.
-
-## Acceptance still required
-
-Before claiming the writing problem solved: agree one new finite evaluation with exact cases/settings/stopping rules; judge actual outputs for scope, actor, strength, relationships, relevant synthesis, useful ordering and preservation. Structural success and provenance are not enough. Never reuse a closed budget.
+Rollback:stop Vite;confirm a clean tree;`git switch` to your exact printed backup branch,then `npm run dev`. Do not reset/clean/force. Git rollback restores source,not browser-stored changes. Existing SC5 batch runner intentionally refuses this changed source and must not be edited or rerun to bypass the closed budget.
