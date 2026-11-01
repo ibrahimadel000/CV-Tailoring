@@ -127,7 +127,7 @@ async function seed(page, source) {
   return (await stored(page)).profiles[0]; // Snapshot after the REAL loader's normalization.
 }
 async function tailor(page) {
-  await expect(page.getByText('SC5 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('SC5.1 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
   await page.getByLabel('Job description', { exact: true }).fill(JOB);
   await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
 }
@@ -143,6 +143,7 @@ function checkWire(sc1Harness) {
   const packet = JSON.parse(body.contents[0].parts[0].text);
   expect(packet.job).toBe(JOB);
   expect(packet.documentBrief.summaryEvidence).toBeDefined();
+  expect(packet.documentBrief.authoringView).toBeDefined();
   expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'entries', 'skillSelections']);
   expect(JSON.stringify(body)).not.toContain('SC5_PRIVATE_CONTACT');
 }
@@ -181,7 +182,7 @@ async function exportedText(page, testInfo) {
 }
 
 for (const summaryLocked of [false, true]) {
-  test(`SC5 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
+  test(`SC5.1 success: ${summaryLocked ? 'locked summary' : 'locked experience'} survives editable-copy, save/reopen and PDF`, async ({ page, sc1Harness }, testInfo) => {
     sc1Harness.respond(packet => ({ body: completed(authoredDocument(packet)) }));
     const original = await seed(page, sourceProfile(summaryLocked));
     await tailor(page);
@@ -282,5 +283,48 @@ test('SC5 rejects stale SC4 capability append instead of silently printing impor
   await expect(page.getByText('summaryCapabilityIds', { exact: false })).toBeVisible();
   expect((await stored(page)).profiles).toEqual([original]);
   await page.reload();await saved(page);expect((await stored(page)).profiles).toEqual([original]);
+  checkWire(sc1Harness);
+});
+
+test('SC5.1 complementary supported summary and selected documentation survive real save/reopen/PDF', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile();
+  p.skills.isLocked = false;
+  p.skills.data.push({ id: crypto.randomUUID(), name: 'Technical Documentation', category: 'Technical', level: '' });
+  p.experience.data[0].bullets.push({ id: crypto.randomUUID(), text: 'Wrote setup documentation for the classroom application.', isVerified: true });
+  const composed = 'Classroom web application work with setup documentation.';
+  sc1Harness.respond(packet => {
+    const view = packet.documentBrief.authoringView;
+    expect(view.contributionsByEntry[0].contributions).toHaveLength(2);
+    expect(view.contributionsByEntry[0].locked).toBe(true);
+    expect([...view.capabilityGroups.flatMap(g => g.capabilities), ...view.ungroupedCapabilities].map(s => s.text)).toContain('Technical Documentation');
+    const raw = authoredDocument(packet);
+    raw.summarySegments = [{ text: composed, sourceIds: ['work_1_b1', 'work_1_b2'] }];
+    raw.skillSelections = [{ id: 'skill_1', category: 'Languages' }, { id: 'skill_2', category: 'Technical' }];
+    return { body: completed(raw) };
+  });
+  const original = await seed(page, p);
+  await tailor(page);
+  await expect(page.getByText('A new editable copy is open.', { exact: false })).toBeVisible();
+  await saved(page);
+  let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
+  expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
+  expect(copy.summary.data).toBe(composed);
+  for (const key of ['resumeHeader', 'headline', 'education', 'certifications', 'experience', 'projects', 'documentTheme', 'customSections', 'pageLayout']) expect(copy[key], key).toEqual(original[key]);
+  expect(copy.skills.data.map(({ name, level, category }) => ({ name, level, category }))).toEqual([
+    { name: 'Python', level: 'Coursework only', category: 'Languages' },
+    { name: 'Technical Documentation', level: '', category: 'Technical' },
+  ]);
+  const copyId = copy.profileId;
+  expect(copyId).not.toBe(original.profileId);
+  expect(copy.baseProfileId).toBe(original.profileId);
+  await page.reload(); await saved(page);
+  state = await stored(page);
+  expect(state.profiles).toHaveLength(2);
+  expect(state.profiles.find(p => p.profileId === copyId)).toEqual(copy);
+  const pdf = await exportedText(page, testInfo);
+  expect(pdf).toContain(composed);
+  expect(pdf).toContain('Technical Documentation');
+  expect(pdf).toContain('Coursework only');
+  expect(pdf).not.toContain('Relevant skills:');
   checkWire(sc1Harness);
 });
