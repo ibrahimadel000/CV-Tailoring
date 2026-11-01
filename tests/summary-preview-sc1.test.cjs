@@ -19,8 +19,8 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
 }
 const signal=()=>new AbortController().signal;
 const complete=raw=>({ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}})});
-test('SC4 prompt exactly matches frozen candidate and UI visibly names actual preview/model',()=>{
- a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'a158ded8f47c234ce2124a4dfc0161e32322787c365ab5ce9f41b2a3e3608146');
+test('SC5 prompt exactly matches frozen candidate and UI visibly names actual preview/model',()=>{
+ a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'d556feb2746251c6aed6cb2d174062ad0d860323875a1b938e217110828c478c');
  const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental summary-composition preview'));a(!ui.includes('Gemini 2.5 Flash'));
 });
 test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full packet/schema and candidate instructions',async()=>{
@@ -31,7 +31,7 @@ test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full
   a.equal(options.headers['x-goog-api-key'],'synthetic-preview-key');a(!options.body.includes('synthetic-preview-key'));return complete(raw);
  });
  a.deepEqual(JSON.parse(JSON.stringify(await x.requestComposition(fakePacket,signal()))),raw);a.equal(calls,1);
- a.equal(x.COMPOSITION_MODEL,'gemini-3.5-flash-lite');a.equal(x.COMPOSITION_PREVIEW_LABEL,'SC4 · Gemini 3.5 Flash-Lite · experimental');
+ a.equal(x.COMPOSITION_MODEL,'gemini-3.5-flash-lite');a.equal(x.COMPOSITION_PREVIEW_LABEL,'SC5 · Gemini 3.5 Flash-Lite · experimental');
  a.equal(x.records[0].model,'gemini-3.5-flash-lite');a.equal(x.records[0].status,'success');a.equal(x.records[0].attempts,1);a(!JSON.stringify(x.records).includes('NOT_FOR_EXPORT'));
 });
 for(const status of [429,503])test('HTTP'+status+' stops one fetch, records failure, never retries',async()=>{
