@@ -1,7 +1,9 @@
-# Current task — evaluate repaired authoring
+# Current task — repair authoring, not another gate
 
-SC5 implementation on repair/evidence-first-authoring is offline-verified:816 unit tests,6 mocked browser cases and build passed. Draft PR5 remains unmerged. Runtime checkpoint dbe378e2def693924309bdcaeade50ddbf7b2fc7; this checkpoint is documentation-only.
+SC5 Batch01 complete/CLOSED2/2,no retries. Both HTTP200/native compiled,originals unchanged by report,zero removed passages. Matched source/jobs verified against SC4. Local runner checked SC5 source;real browser copy/edit/save/PDF acceptance not established by this helper.
 
-The user approved SC5-Authoring-Batch01:maximum2 requests,backend reconstructed original-source/job case then existing fictional scope case. Same SC5 model/settings. One request per case,no retries/reviewers/fallbacks;stop on request/contract/local failure and close unused calls. All older budgets remain CLOSED. Prepared local runner has13/13 offline safety tests passing;no live requests executed during preparation. No additional app Tailor click authorized.
+Reject SC5 as completion of the writing goal. Limited progress:no automatic skill/context dump;opening uses work evidence. Remaining mechanism:target-specific focus can be asserted beyond cited work;one-bullet paraphrase instead of useful synthesis;explicitly relevant native capabilities omitted. Existing work order is unchanged from SC4. Fictional scope limits survived,not general safety proof.
 
-Next outcome:review actual outputs for target-specific useful synthesis,correct relationships/scope/actor/strength,skill relevance and qualifications. Reject generic filler or invented API/testing/performance employment claims. Batch uses native adapter/compiler but does not save browser CVs;local end-to-end original/copy/edit/save/reopen/PDF acceptance remains separate. See SC5-BATCH01.md. No merge,default-branch change,deployment or billing change.
+Next single outcome:improve source-grounded document composition and useful job coverage within the existing one-pass architecture. Preserve native source/copy/locks/editor/store/import/export. Do not patch this by hardcoding one CV,keyword ranking,word bans,another rejection guard,reviewer/retry/fallback or silent model switch. Use these concrete failures to justify any offline implementation;do not issue another speculative preview merely for activity. Actual-output acceptance will still require a separately agreed finite budget.
+
+ALL live budgets CLOSED. No new API requests,merge,deployment,billing change or default-branch edits authorized. Current runtime remains dbe378e2def693924309bdcaeade50ddbf7b2fc7;PR5 draft/unmerged. This checkpoint changes documentation only. No private report/CV content committed.
