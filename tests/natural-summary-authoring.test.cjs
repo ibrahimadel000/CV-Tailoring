@@ -49,7 +49,9 @@ test('real practice with mixed narrative and skill references stays compatible',
 });
 test('listed-only API inflation is still removed by the existing boundary, not rewritten',()=>{
  const p=fixture(),r=response(p,[unit('Proficient in building RESTful APIs using Python.',['work_1_b1','skill_1','skill_2'])]);
- const out=n.compileNaturalComposition(p,r);assert.equal(out.candidate.summary.data,'');
+ const out=n.compileNaturalComposition(p,r);
+ // Claim guard: with no surviving generated passage, the original summary is kept.
+ assert.equal(out.candidate.summary.data,p.summary.data.trim());
  assert.equal(out.summaryRemovals.length,1);assert.equal(out.semanticStatus,'unassessed');
  assert.deepEqual(out.candidate.experience,p.experience);
 });
@@ -73,13 +75,18 @@ test('coursework and unfinished-degree scope survive packet, authored summary an
  assert.equal(out.candidate.summary.data,text);assert.equal(out.candidate.skills.data[0].level,'Coursework only');
  assert.deepEqual(out.candidate.education,p.education);
 });
-test('empty and locked summaries retain existing behavior without a generated fallback',()=>{
- const p=fixture();let out=n.compileNaturalComposition(p,response(p,[]));assert.equal(out.candidate.summary.data,'');
+test('empty AI summary keeps the original; locked summaries stay byte-for-byte and ignore generated text',()=>{
+ const p=fixture();let out=n.compileNaturalComposition(p,response(p,[]));
+ // Claim guard: an empty generated summary restores the original instead of wiping it.
+ assert.equal(out.candidate.summary.data,p.summary.data.trim());
  p.summary.data='  Exact original summary  ';p.summary.isLocked=true;
  const packet=n.prepareNaturalComposition(p,job);assert.deepEqual(packet.documentBrief.summaryEvidence.contentSourceIds,[]);
  assert.deepEqual(packet.documentBrief.summaryEvidence.identitySourceIds,[]);
  out=n.compileNaturalComposition(p,response(p,[]));assert.deepEqual(out.candidate.summary,p.summary);
- assert.throws(()=>n.compileNaturalComposition(p,response(p,[unit('New text.',['work_1_b1'])])),/Locked summary/);
+ // Claim guard: segments generated for a locked summary are ignored with a review note.
+ out=n.compileNaturalComposition(p,response(p,[unit('New text.',['work_1_b1'])]));
+ assert.deepEqual(out.candidate.summary,p.summary);
+ assert(out.guardNotes.some(g=>g.path==='summary'&&g.kind==='ignored'));
 });
 test('modified summary guidance is still part of the authoritative packet binding',()=>{
  const packet=n.prepareNaturalComposition(fixture(),job);
@@ -122,9 +129,12 @@ test('SC3 compact architecture and delivery overview survives the unchanged nati
  for(const absent of ['Python','RESTful APIs','MySQL','automated testing','performance optimization'])
   assert(!out.candidate.summary.data.includes(absent));
 });
-test('profile-only wording is rejected when professional work evidence exists, without rewriting it',()=>{
+test('profile-only wording keeps the original summary when professional work evidence exists, without rewriting it',()=>{
  const p=fixture();p.summary.data='I work at the intersection of technology and management. I collaborate across teams.';
  const generic=unit('I work at the intersection of technology and management.',['summary']),before=JSON.stringify(p);
- assert.throws(()=>n.compileNaturalComposition(p,response(p,[generic])),/only profile or identity context/);
- assert.equal(JSON.stringify(p),before);
+ // Claim guard: the unsupported introduction is dropped and the original summary kept
+ // with a review note, instead of failing the whole document.
+ const out=n.compileNaturalComposition(p,response(p,[generic]));
+ assert.equal(out.candidate.summary.data,p.summary.data);assert.equal(JSON.stringify(p),before);
+ assert(out.warnings.some(w=>w.path==='summary'&&w.message.includes('not based on your experience')));
 });
