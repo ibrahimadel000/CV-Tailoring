@@ -29,6 +29,10 @@ The runner starts its own Vite server on `127.0.0.1:4187`. It deliberately refus
 
 All external browser HTTP requests are blocked except the one exact SC5 endpoint, which is fulfilled locally. Unexpected external requests fail the tests. Service workers are disabled. Test runner retries are zero. The fixed fake key is not a credential and must never be replaced with a real key.
 
+## Import-to-export fictional fixtures
+
+`import-smoke.spec.cjs` generates small fictional PDF and DOCX files locally, imports them through the real dialog, checks mapped dates and qualification limits, edits the summary, reloads the saved profile, and parses the actual exported PDF. It also checks a two-page source with 30 page-spanning bullets, multipage export with no empty pages or text bounding boxes outside the page, and an image-only PDF rejected without changing saved resumes. The browser blocks external traffic; no model call is made. The fixtures do not cover all layouts, visual clipping, fonts, OCR, or real user data.
+
 ## Limits
 
 These authored responses are synthetic, not Gemini outputs. Passing proves these bounded application paths only; it does not establish authoring quality, factual safety for arbitrary CVs, provider availability, performance, production security, or every import/export path. The no-retry observation is bounded; existing adapter unit tests also verify one-fetch behavior. Live HTTP503 remains an unresolved provider result, not evidence about quota, billing, or prompt quality.
