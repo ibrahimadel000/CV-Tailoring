@@ -31,7 +31,7 @@ All external browser HTTP requests are blocked except the one exact SC5 endpoint
 
 ## Import-to-export fictional fixtures
 
-`import-smoke.spec.cjs` generates small fictional PDF and DOCX files locally, imports them through the real dialog, checks mapped dates and qualification limits, edits the summary, reloads the saved profile, and parses the actual exported PDF. It also checks a two-page source with 30 page-spanning bullets, multipage export with no empty pages or text bounding boxes outside the page, and an image-only PDF rejected without changing saved resumes. The browser blocks external traffic; no model call is made. The fixtures do not cover all layouts, visual clipping, fonts, OCR, or real user data.
+`import-smoke.spec.cjs` generates small fictional PDF and DOCX files locally, imports them through the real dialog, checks mapped dates and qualification limits, edits the summary, reloads the saved profile, and parses the actual exported PDF. It also checks a two-page source with 30 page-spanning bullets, multipage export with no empty pages or text bounding boxes outside the page, an image-only PDF rejected without changing saved resumes, a two-column PDF, and a clearly identified one-row sidebar/main DOCX table. The table check includes preserved header/footer text; multirow and continuation tables must retain conservative document-order behavior. The browser blocks external traffic; no model call is made. The fixtures do not cover all layouts, visual clipping, fonts, OCR, or real user data.
 
 ## Limits
 

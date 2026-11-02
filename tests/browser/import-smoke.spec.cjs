@@ -5,6 +5,10 @@ const files={pdf:()=>({name:'fictional.pdf',mimeType:'application/pdf',buffer:fi
 async function stored(page){return page.evaluate(async()=>{const req=indexedDB.open('keyval-store',1);const db=await new Promise((a,b)=>{req.onsuccess=()=>a(req.result);req.onerror=()=>b(req.error)});const store=db.transaction('keyval','readonly').objectStore('keyval');const read=k=>new Promise((a,b)=>{const r=store.get(k);r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error)});const profiles=await read('cv-tailor-profiles-v2'),active=await read('cv-tailor-active-id-v2');db.close();return{profiles,active}})}
 async function start(page,context){await context.route('**/*',r=>new URL(r.request().url()).origin==='http://127.0.0.1:4187'?r.continue():r.abort());await page.goto('/');await expect(page.getByText('Saved in this browser',{exact:true})).toBeVisible()}
 async function openImport(page){await page.getByRole('button',{name:'Import CV'}).first().click()}
+async function exportedText(page,testInfo){
+ await page.getByRole('button',{name:'Export PDF',exact:true}).click();const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download PDF',exact:true}).click();const dl=await pending;const file=testInfo.outputPath('two-column-export.pdf');await dl.saveAs(file);const bytes=await fs.readFile(file);
+ return page.evaluate(async bytes=>{const pdf=await import('/node_modules/pdfjs-dist/build/pdf.mjs');pdf.GlobalWorkerOptions.workerSrc='/node_modules/pdfjs-dist/build/pdf.worker.mjs';const doc=await pdf.getDocument({data:Uint8Array.from(bytes)}).promise;const parts=[];for(let i=1;i<=doc.numPages;i++)parts.push((await(await doc.getPage(i)).getTextContent()).items.map(x=>x.str??'').join(' '));await doc.destroy();return parts.join(' ').replace(/\s+/g,' ')},Array.from(bytes));
+}
 for(const format of ['pdf','docx'])test(`fictional ${format} import, edit, reload, and PDF`,async({page,context},testInfo)=>{
  await start(page,context);const before=await stored(page);await openImport(page);await page.getByLabel('Choose CV file').setInputFiles(files[format]());
  await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
@@ -42,4 +46,60 @@ test('multipage PDF import retains page-spanning bullets and exports all pages',
  const out=await page.evaluate(async bytes=>{const pdf=await import('/node_modules/pdfjs-dist/build/pdf.mjs');pdf.GlobalWorkerOptions.workerSrc='/node_modules/pdfjs-dist/build/pdf.worker.mjs';const doc=await pdf.getDocument({data:Uint8Array.from(bytes)}).promise;const text=[],counts=[],outside=[];for(let i=1;i<=doc.numPages;i++){const p=await doc.getPage(i),view=p.getViewport({scale:1}),items=(await p.getTextContent()).items.filter(x=>typeof x.str==='string'&&x.str.trim());counts.push(items.length);text.push(items.map(x=>x.str).join(' '));outside.push(items.filter(x=>x.transform[4]<-1||x.transform[5]<-1||x.transform[4]+x.width>view.width+1||x.transform[5]+x.height>view.height+1).length)}const n=doc.numPages;await doc.destroy();return {n,counts,outside,text:text.join(' ').replace(/\s+/g,' ')}},Array.from(bytes));
  expect(out.n).toBeGreaterThan(1);expect(out.counts.every(n=>n>0)).toBe(true);expect(out.outside.every(n=>n===0)).toBe(true);for(let i=1;i<=30;i++)expect(out.text).toContain(`Classroom task ${String(i).padStart(2,'0')}`);
  expect(out.text).toContain('in progress');expect(out.text).toContain('Expected 2027');
+});
+test('two-column PDF keeps sidebar skills separate from work and qualifications',async({page,context},testInfo)=>{
+ await start(page,context);await openImport(page);await page.getByLabel('Choose CV file').setInputFiles({name:'two-column.pdf',mimeType:'application/pdf',buffer:fixtures.twoColumn()});
+ await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.some(p=>p.importedFrom?.fileName==='two-column.pdf')).toBe(true);
+ const state=await stored(page),p=state.profiles.find(x=>x.profileId===state.active);
+ expect(p.importedFrom.warnings.some(w=>w.includes('Two text columns'))).toBe(true);
+ expect(p.resumeHeader.data.name).toBe('Maya Vale');expect(p.resumeHeader.data.email).toBe('maya@example.invalid');
+ expect(p.experience.data).toHaveLength(1);expect(p.experience.data[0]).toMatchObject({roleTitle:'Software Engineer Intern',companyName:'Example Systems',startDate:'Jan 2024',endDate:'Jun 2024'});
+ expect(p.experience.data[0].bullets.map(b=>b.text)).toEqual(['Built Python APIs for class, not production.','Recorded manual testing results.']);
+ expect(p.education.data[0]).toMatchObject({degree:'BSc Computer Science (in progress)',institution:'Example University',graduationDate:'Expected 2027'});
+ expect(p.skills.data.map(s=>s.name)).toEqual(['Python (coursework only)','SQL (beginner)','Team communication']);
+ expect(p.customSections.some(s=>s.title==='LANGUAGES'&&s.paragraphs.some(x=>x.includes('English - Fluent')))).toBe(true);
+ const pdf=await exportedText(page,testInfo);for(const v of ['Maya Vale','Example Systems','not production','in progress','Expected 2027','coursework only'])expect(pdf).toContain(v);
+});
+test('two-column DOCX table preserves sidebar and main identity',async({page,context},testInfo)=>{
+ await start(page,context);await openImport(page);await page.getByLabel('Choose CV file').setInputFiles({name:'two-column.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:fixtures.tableDocx()});
+ await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.some(p=>p.importedFrom?.fileName==='two-column.docx')).toBe(true);
+ const state=await stored(page),p=state.profiles.find(x=>x.profileId===state.active);
+ expect(p.importedFrom.warnings.some(w=>w.includes('Table cells'))).toBe(true);
+ expect(p.resumeHeader.data.name).toBe('Maya Vale');expect(p.resumeHeader.data.email).toBe('maya@example.invalid');
+ expect(p.skills.data.map(s=>s.name)).toEqual(['Python (coursework only)','SQL (beginner)','Team communication']);
+ expect(p.experience.data[0]).toMatchObject({roleTitle:'Software Engineer Intern',companyName:'Example Systems',startDate:'Jan 2024',endDate:'Jun 2024'});
+ expect(p.experience.data[0].bullets.map(b=>b.text)).toEqual(['Built Python APIs for class, not production.','Recorded manual testing results.']);
+ expect(p.education.data[0]).toMatchObject({degree:'BSc Computer Science (in progress)',institution:'Example University',graduationDate:'Expected 2027'});
+ expect(p.importedFrom.sourceText).toContain('Maya Vale');expect(p.importedFrom.sourceText).toContain('not production');
+ const pdf=await exportedText(page,testInfo);for(const v of ['Maya Vale','Example Systems','not production','in progress','Expected 2027','coursework only'])expect(pdf).toContain(v);
+});
+
+test('two-column DOCX preserves header and footer parts',async({page,context})=>{
+ await start(page,context);await openImport(page);const buffer=fixtures.tableDocx({header1:'Phone: +1 202 555 0172',footer1:'Fictional footer content'});
+ await page.getByLabel('Choose CV file').setInputFiles({name:'table-with-header.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer});
+ await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.some(p=>p.importedFrom?.fileName==='table-with-header.docx')).toBe(true);
+ const state=await stored(page),p=state.profiles.find(x=>x.profileId===state.active);
+ expect(p.resumeHeader.data.name).toBe('Maya Vale');expect(p.resumeHeader.data.phone).toBe('+1 202 555 0172');
+ expect(p.importedFrom.sourceText).toContain('Fictional footer content');
+ expect(p.customSections.some(s=>s.paragraphs.some(v=>v.includes('Fictional footer content')))).toBe(true);
+});
+test('multirow Word tables keep the conservative document-order warning',async({page,context})=>{
+ await start(page,context);await openImport(page);await page.getByLabel('Choose CV file').setInputFiles({name:'multirow.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:fixtures.multirowDocx()});
+ await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.some(p=>p.importedFrom?.fileName==='multirow.docx')).toBe(true);
+ const state=await stored(page),p=state.profiles.find(x=>x.profileId===state.active);
+ expect(p.importedFrom.warnings).toContain('Table cells were read in document order. Check section placement for multi-column layouts.');
+ for(const phrase of ['Python','Arabic','College','Personal project'])expect(p.importedFrom.sourceText).toContain(phrase);
+});
+
+test('a two-cell continuation table is not mistaken for a sidebar',async({page,context})=>{
+ await start(page,context);await openImport(page);await page.getByLabel('Choose CV file').setInputFiles({name:'continuation.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:fixtures.continuationDocx()});
+ await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.some(p=>p.importedFrom?.fileName==='continuation.docx')).toBe(true);
+ const state=await stored(page),p=state.profiles.find(x=>x.profileId===state.active);
+ expect(p.importedFrom.warnings).toContain('Table cells were read in document order. Check section placement for multi-column layouts.');
+ expect(p.experience.data[0].bullets.map(b=>b.text)).toEqual(['Recorded manual tests.','Documented class exercises.']);
 });
