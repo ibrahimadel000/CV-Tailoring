@@ -8,7 +8,7 @@ import { requestComposition, COMPOSITION_PREVIEW_LABEL } from '@/services/resume
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection } from '@/services/tailorRequest';
 import { summaryBoundaryNotice } from '@/services/resumeComposer/summaryBoundary';
-export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport }: { onCreated: (profileId: string, notice: string) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
+export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
   const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
@@ -26,9 +26,10 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       const result = await runner.current!.run(job, task.signal);
       if (!alive.current) return;
       const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
-      setNotes([...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)]);
+      const reviewNotes = [...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)];
+      setNotes(reviewNotes);
       setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : 'The content was unchanged. No duplicate copy was created.') + (notice ? ` ${notice}` : ''));
-      if (result.status === 'created') onCreated(result.profileId, notice);
+      if (result.status === 'created') onCreated(result.profileId, notice, reviewNotes);
     } catch (e) {
       if (alive.current) setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. No automatic retry. Check your original before trying again.');
     } finally { if (controller.current === task) { controller.current = undefined; if (alive.current) setBusy(false); } }
