@@ -23,7 +23,12 @@ test('a compact work-based introduction remains accepted without adding a capabi
 test('a removed narrative passage cannot rescue a retained profile-only introduction',()=>{
  const p=fixture();p.summary.data='I work at the intersection of technology and management. I collaborate across teams.';
  const r=written(p,[unit('I work at the intersection of technology and management.',['summary']),unit('Expert building production RESTful APIs using Python.',['work_1_b1','skill_1','skill_2'])]);
- a.throws(()=>n.compileNaturalComposition(p,r),/only profile or identity context/);
+ // Claim guard: the document compiles; the unsupported introduction is dropped, the
+ // boundary removal stands, and the original summary is kept, with review notes.
+ const out=n.compileNaturalComposition(p,r);
+ a.equal(out.candidate.summary.data,p.summary.data);
+ a.equal(out.summaryRemovals.length,1);
+ a(out.warnings.some(w=>w.path==='summary'&&w.message.includes('not based on your experience')));
 });
 test('qualification-led introduction preserves in-progress scope without pretending it is work',()=>{
  const p=fixture();p.education.data[0].degree='B.Sc. Computer Science (in progress)';

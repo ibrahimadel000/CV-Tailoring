@@ -245,7 +245,7 @@ test('SC5 exact HTTP503/UNAVAILABLE leaves original and saved resumes unchanged 
   checkWire(sc1Harness);
 });
 
-test('SC5 real native contract rejects invented references without creating a copy', async ({ page, sc1Harness }) => {
+test('invalid summary references preserve the original and show a review note', async ({ page, sc1Harness }) => {
   sc1Harness.respond(packet => {
     const document = authoredDocument(packet);
     document.summarySegments[0].sourceIds = ['invented_source_id'];
@@ -253,13 +253,14 @@ test('SC5 real native contract rejects invented references without creating a co
   });
   const original = await seed(page, sourceProfile());
   await tailor(page);
-  await expect(page.getByText(/unknown source reference.*Nothing was saved/i)).toBeVisible();
-  await expect(page.getByLabel('Source resume', { exact: true }).locator('option')).toHaveCount(1);
+  await expect(page.getByText('The content was unchanged. No duplicate copy was created.', { exact: false })).toBeVisible();
+  await page.getByText(/Content review notes ·/).click();
+  await expect(page.getByText(/Removed a summary sentence that cited content not found/)).toBeVisible();
   expect(await stored(page)).toEqual({ profiles: [original], activeId: original.profileId });
   checkWire(sc1Harness);
 });
 
-test('SC5 rejects profile-only introduction when actual work evidence exists; original stays saved', async ({ page, sc1Harness }) => {
+test('profile-only introduction preserves the original and shows a review note', async ({ page, sc1Harness }) => {
   sc1Harness.respond(packet => {
     const document = authoredDocument(packet);
     document.summarySegments = [{ text: 'Software engineer supporting delivery.', sourceIds: ['summary'] }];
@@ -267,10 +268,29 @@ test('SC5 rejects profile-only introduction when actual work evidence exists; or
   });
   const original = await seed(page, sourceProfile(false));
   await tailor(page);
-  await expect(page.getByText('Generated introduction used only profile or identity context', { exact: false })).toBeVisible();
-  const state = await stored(page);
-  expect(state.profiles).toEqual([original]);expect(state.activeId).toBe(original.profileId);
-  await page.reload();await saved(page);expect((await stored(page)).profiles).toEqual([original]);
+  await expect(page.getByText('The content was unchanged. No duplicate copy was created.', { exact: false })).toBeVisible();
+  await page.getByText(/Content review notes ·/).click();
+  await expect(page.getByText(/not based on your experience/)).toBeVisible();
+  expect(await stored(page)).toEqual({ profiles: [original], activeId: original.profileId });
+  checkWire(sc1Harness);
+});
+
+test('restored unsupported work line is visible in editor review notes', async ({ page, sc1Harness }) => {
+  const p = sourceProfile(false); p.experience.isLocked = false;
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.entries[0].bullets[0].text = 'Built applications with Kubernetes.';
+    return { body: completed(document) };
+  });
+  const original = await seed(page, p); await tailor(page);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', {exact: false})).toBeVisible();
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/kept your original wording because the rewrite added/).first()).toBeVisible();
+  await saved(page);
+  const state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
+  expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
+  expect(copy.experience.data[0].bullets[0].text).toBe(original.experience.data[0].bullets[0].text);
+  expect(copy.summary.data).toBe(NARRATIVE_SUMMARY);
   checkWire(sc1Harness);
 });
 
