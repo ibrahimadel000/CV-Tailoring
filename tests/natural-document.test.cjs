@@ -33,7 +33,7 @@ test('natural packet/schema projects the current output only, no planner or old 
 });
 test('six independently referenced units compile directly to native summary without five-claim cap',()=>{
  const p=fixture(),r=response(p),before=JSON.stringify(p);
- r.summarySegments=Array.from({length:6},(_,i)=>one(`Natural unit ${i}.`));
+ r.summarySegments=['Built web applications.','Built technical architectures.','Developed web applications.','Developed technical architectures.','Built applications.','Built architectures.'].map(text=>one(text));
  const out=compile(p,r);assert.equal(out.candidate.summary.data,r.summarySegments.map(s=>s.text).join(' '));
  assert.equal(out.summarySegments.length,6);assert(!('summaryClaims'in out));
  assert.deepEqual(out.summaryTrace[0],{segmentIndex:0,sources:[{sourceId:'work_1_b1',kind:'achievement',parent:'work_1'}]});

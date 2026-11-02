@@ -368,3 +368,27 @@ test('SC5.1 complementary supported summary and selected documentation survive r
   expect(pdf).not.toContain('Relevant skills:');
   checkWire(sc1Harness);
 });
+
+test('unsupported summary additions are omitted with a visible review note', async ({ page, sc1Harness }, testInfo) => {
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.summarySegments.push({ text: 'Delivered Kubernetes applications for 500 clients.', sourceIds: ['work_1_b1'] });
+    return { body: completed(document) };
+  });
+  const original = await seed(page, sourceProfile(false)); await tailor(page);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/Removed a generated summary passage because it added/).first()).toContainText('Kubernetes');
+  await expect(page.getByText(/Removed a generated summary passage because it added/).first()).toContainText('500');
+  await saved(page);
+  let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
+  expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
+  expect(copy.summary.data).toBe(NARRATIVE_SUMMARY);
+  await page.reload(); await saved(page);
+  state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
+  expect(copy.summary.data).toBe(NARRATIVE_SUMMARY);
+  const pdf = await exportedText(page, testInfo);
+  expect(pdf).toContain(NARRATIVE_SUMMARY); expect(pdf).not.toContain('Delivered Kubernetes applications'); expect(pdf).not.toContain('500 clients');
+  expect(pdf).toContain('Certified Kubernetes Application Developer'); // Existing source qualifications remain intact.
+  checkWire(sc1Harness);
+});
