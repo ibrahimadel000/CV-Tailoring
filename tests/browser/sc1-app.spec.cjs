@@ -192,6 +192,7 @@ for (const summaryLocked of [false, true]) {
     let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
     expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
     checkPreserved(original, copy);
+    expect(copy.compositionReview).toBeUndefined(); // Clean cases do not acquire review metadata.
     const copyId = copy.profileId;
     if (!summaryLocked) {
       expect(copy.summary.data).toBe(GENERATED_SUMMARY);
@@ -387,8 +388,30 @@ test('unsupported summary additions are omitted with a visible review note', asy
   await page.reload(); await saved(page);
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.summary.data).toBe(NARRATIVE_SUMMARY);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/Removed a generated summary passage because it added/).first()).toContainText('500');
+  await expect(page.getByText(/These notes were recorded during tailoring and may not reflect later edits/)).toBeVisible();
+  const copyId = copy.profileId;
+  await page.getByLabel('Source resume', { exact: true }).selectOption(original.profileId);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toHaveCount(0);
+  await page.getByLabel('Source resume', { exact: true }).selectOption(copyId);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Hide until reload' }).click();
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toHaveCount(0);
+  await saved(page); await page.reload(); await saved(page);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain(NARRATIVE_SUMMARY); expect(pdf).not.toContain('Delivered Kubernetes applications'); expect(pdf).not.toContain('500 clients');
+  expect(pdf).not.toContain('Some content needs your review');
   expect(pdf).toContain('Certified Kubernetes Application Developer'); // Existing source qualifications remain intact.
+  const toggle = page.locator('[data-section-card="summary"] .section-accordion-toggle');
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await page.getByLabel('Your professional summary', { exact: true }).fill('Built applications in a classroom exercise.');
+  await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).summary.data).toBe('Built applications in a classroom exercise.');
+  await saved(page); await page.reload(); await saved(page);
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/may not reflect later edits/)).toBeVisible();
+  expect((await stored(page)).profiles.find(p => p.profileId === original.profileId)).toEqual(original);
   checkWire(sc1Harness);
 });
