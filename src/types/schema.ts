@@ -348,7 +348,12 @@ export const supportingEvidenceItemSchema = z.object({
 export const supportingEvidenceSchema=z.array(supportingEvidenceItemSchema).max(12);
 export type SupportingEvidence=z.infer<typeof supportingEvidenceItemSchema>;
 
+// Local historical review notes for an editable tailored copy; not resume content.
+export const compositionReviewSchema = z.object({ text: z.string(), notes: z.array(z.string()) });
+export type CompositionReview = z.infer<typeof compositionReviewSchema>;
+
 export interface CVProfile {
+  compositionReview?: CompositionReview;
   supportingEvidence?: SupportingEvidence[];
   importedFrom?: ImportMetadata;
   tailoring?: TailoringMetadata;
@@ -374,6 +379,7 @@ export interface CVProfile {
 }
 
 export const cvProfileSchema = z.object({
+  compositionReview: compositionReviewSchema.optional(),
   supportingEvidence: supportingEvidenceSchema.optional(),
   importedFrom: importMetadataSchema.optional(),
   tailoring: tailoringMetadataSchema.optional(),

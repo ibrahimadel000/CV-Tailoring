@@ -102,7 +102,33 @@ test('removal notice is outside collapsed review notes and is passed to the edit
  const studio=fs.readFileSync(path.join(__dirname,'../src/components/builder/BuilderStudio.tsx'),'utf8');
  assert(ui.includes('summaryBoundaryNotice(result.summaryRemovals.length'));
  assert(ui.includes('onCreated(result.profileId, notice, reviewNotes)'));
- assert(studio.includes('notes: reviewNotes'));
+ assert(studio.includes('profile.compositionReview'));
  assert(studio.includes('compositionNotice.text'));assert(studio.includes('role="status"'));
+ assert(studio.includes('may not reflect later edits'));
  // Static wiring only; browser/mobile visibility still needs user-side checking.
+});
+test('review notes are saved only with the new copy and excluded from AI and resume content',async()=>{
+ const p=fixture(),before=JSON.stringify(p),r=response(p);
+ r.summarySegments=[r.summarySegments[0],{text:'Built applications for 500 clients.',sourceIds:['work_1_b1']}];
+ let active=p,copy,packet;
+ const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,next){assert.equal(snapshot,before);copy=next;active=next;return true;}},async sent=>{packet=sent;return r;});
+ const out=await runner.run(job,new AbortController().signal);
+ assert.equal(out.status,'created');assert.equal(JSON.stringify(p),before);
+ assert(copy.compositionReview.notes.some(note=>note.includes('500')));
+ assert(copy.compositionReview.text.includes('Some content needs your review'));
+ assert(!JSON.stringify(resumeBlocks(copy)).includes('500'));
+ assert(!JSON.stringify(packet).includes('compositionReview'));
+ const schema=load('types/schema').cvProfileSchema;assert(schema.safeParse(JSON.parse(JSON.stringify(copy))).success);
+});
+test('later tailored copies preserve inherited historical notes without sending them to the provider',async()=>{
+ const p=fixture();p.compositionReview={text:'Prior review',notes:['PRIVATE_REVIEW_NOTE_SENTINEL']};
+ const before=JSON.stringify(p),r=response(p);r.summarySegments=[r.summarySegments[0],{text:'Built applications for 500 clients.',sourceIds:['work_1_b1']}];
+ let active=p,copy,packet;
+ const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,next){assert.equal(snapshot,before);copy=next;active=next;return true;}},async sent=>{packet=sent;return r;});
+ const out=await runner.run(job,new AbortController().signal);
+ assert.equal(out.status,'created');assert.equal(JSON.stringify(p),before);
+ assert(copy.compositionReview.notes.includes('PRIVATE_REVIEW_NOTE_SENTINEL'));
+ assert(copy.compositionReview.notes.some(note=>note.includes('500')));
+ assert(!JSON.stringify(packet).includes('PRIVATE_REVIEW_NOTE_SENTINEL'));
+ assert(!JSON.stringify(resumeBlocks(copy)).includes('PRIVATE_REVIEW_NOTE_SENTINEL'));
 });

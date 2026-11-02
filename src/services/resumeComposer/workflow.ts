@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid';
 import { cvProfileSchema, type CVProfile } from '@/types/schema';
 import { professionalContent, CompositionError } from './core';
 import { compileNaturalComposition, prepareNaturalComposition, type NaturalPacket } from './naturalDocument';
+import { summaryBoundaryNotice } from './summaryBoundary';
 
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
 export type ComposeProvider = (packet: NaturalPacket, signal: AbortSignal) => Promise<unknown>;
@@ -45,6 +46,13 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;
         copy.profileName = `${profile.profileName} — Tailored`;
         copy.targetJob = packet.job; copy.version = profile.version + 1; copy.lastConfirmed = '';
+        // Preserve unresolved historical notes when a tailored copy is tailored again.
+        // They stay local to the profile and are not part of the provider packet or PDF.
+        const notes = [...new Set([...(profile.compositionReview?.notes ?? []),
+          ...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)])];
+        const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
+        if (notes.length) copy.compositionReview = { text: [notice, 'Some content needs your review; open the notes for details.'].filter(Boolean).join(' '), notes };
+        else delete copy.compositionReview;
         // Do not mislabel a new engine output as an old, reviewed/verified result.
         delete copy.tailoring; delete copy.matchScore;
         cvProfileSchema.parse(copy);
