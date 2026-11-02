@@ -42,8 +42,12 @@ test('active workflow uses one natural invocation and makes a separate native co
  const p=fixture(),before=JSON.stringify(p);let calls=0,saves=0;const run=createCompositionRunner({readActive:()=>p,appendIfCurrent(snapshot,copy){assert.equal(snapshot,before);assert.notEqual(copy.profileId,p.profileId);saves++;return true;}},async packet=>{calls++;assert.equal(packet.revision,load('services/resumeComposer/naturalDocument').NATURAL_REVISION);return require('./helpers/composer-natural-fixture.cjs').response(p);});
  const out=await run.run(job,new AbortController().signal);assert.equal(out.status,'created');assert.equal(calls,1);assert.equal(saves,1);assert.equal(JSON.stringify(p),before);
 });
-test('invalid response creates zero copies and never triggers an automatic repair',async()=>{
- const p=fixture();let calls=0,saves=0;const run=createCompositionRunner({readActive:()=>p,appendIfCurrent(){saves++;return true;}},async()=>{calls++;const raw=require('./helpers/composer-natural-fixture.cjs').response(p);raw.summarySegments[0].sourceIds=['unknown'];return raw;});await assert.rejects(run.run(job,new AbortController().signal),/unknown source reference/);assert.equal(calls,1);assert.equal(saves,0);
+test('flawed response no longer discards the document; a reviewed copy is saved with notes',async()=>{
+ const p=fixture();let calls=0,saves=0;const run=createCompositionRunner({readActive:()=>p,appendIfCurrent(){saves++;return true;}},async()=>{calls++;const raw=require('./helpers/composer-natural-fixture.cjs').response(p);raw.summarySegments[0].sourceIds=['unknown'];return raw;});
+ // Claim guard: graceful normalization replaces total failure; exactly one invocation,
+ // one reviewed copy, original summary kept.
+ const out=await run.run(job,new AbortController().signal);assert.equal(calls,1);assert.equal(saves,1);
+ assert(out.guardNotes.some(g=>g.path==='summarySegments.0'));assert.equal(out.candidate.summary.data,p.summary.data.trim());
 });
 test('valid work IDs still cannot prove a sentence semantically; limitation retained',()=>{
  const p=fixture(),raw=response(p);raw.summaryClaims.experience[0].text='Owned the production automated test strategy.';const out=v5.compileGroupedComposition(p,raw);assert(out.candidate.summary.data.includes('Owned the production'));assert(!('qualityStatus'in out));
