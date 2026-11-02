@@ -139,3 +139,31 @@ test('an existing overview may retain valid same-entry identity plus narrative r
  a.deepEqual(out.draft.experience[0].overview.sourceIds,['work_1_overview','entrymeta:work_1:title']);
  a(!out.guardNotes.some(n=>n.path==='entries.work_1.overview'));
 });
+
+test('supported reordered technical wording is retained and flagged for relationship review',()=>{
+ const p=fixture(); p.experience.data[0].bullets[0].text='Built APIs using Python.';
+ const r=response(p);r.entries[0].bullets[0]={text:'Built Python APIs.',sourceIds:['work_1_b1']};
+ const out=n.compileNaturalComposition(p,r);
+ a.equal(out.candidate.experience.data[0].bullets[0].text,'Built Python APIs.');
+ a(out.guardNotes.some(n=>n.kind==='review'&&n.path==='entries.work_1.bullets.0'&&n.message.includes('does not verify the claim or its scope')));
+ a(out.warnings.some(n=>n.path==='entries.work_1.bullets.0'&&n.message.includes('does not verify the claim or its scope')));
+ a.equal(out.semanticStatus,'unassessed');
+});
+test('separately present words do not falsely certify an invented relationship',()=>{
+ const p=fixture();p.experience.data[0].bullets[0].text='Used Python for data analysis. Maintained PHP APIs.';
+ const r=response(p);r.entries[0].bullets[0]={text:'Built Python APIs.',sourceIds:['work_1_b1']};
+ const out=n.compileNaturalComposition(p,r);
+ a.equal(out.candidate.experience.data[0].bullets[0].text,p.experience.data[0].bullets[0].text);
+ a(out.guardNotes.some(n=>n.kind==='restored'));
+ a.equal(out.semanticStatus,'unassessed'); // Human review remains essential; no automated truth verdict.
+});
+
+test('the reversal exception cannot delete a source negation or change the action',()=>{
+ for(const source of ['Did not build APIs using Python.','Learned about APIs using Python.']){
+  const p=fixture();p.experience.data[0].bullets[0].text=source;const r=response(p);
+  r.entries[0].bullets[0]={text:'Built Python APIs.',sourceIds:['work_1_b1']};
+  const out=n.compileNaturalComposition(p,r);
+  a.equal(out.candidate.experience.data[0].bullets[0].text,source);
+  a(out.guardNotes.some(note=>note.kind==='restored'));
+ }
+});

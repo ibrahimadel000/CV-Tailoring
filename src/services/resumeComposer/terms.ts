@@ -56,10 +56,10 @@ export function buildTermIndex(names: readonly string[]): Term[] {
   return index;
 }
 
-/** Salient literal terms in `text` that the combined `support` does not contain. */
-export function unsupportedTerms(text: string, support: readonly string[], index: readonly Term[]): Term[] {
+/** Literal signals only: separated words are not proof of a relationship. */
+export function analyzeTerms(text: string, support: readonly string[], index: readonly Term[]) {
   const corpus = support.join('\n');
-  const found = new Map<string, Term>();
+  const found = new Map<string, Term>(), splitPhrases: string[] = [];
   const add = (label: string) => {
     const key = normalized(label);
     if (key && !covered(corpus, label)) found.set(key, { label, normalized: key });
@@ -74,7 +74,17 @@ export function unsupportedTerms(text: string, support: readonly string[], index
   let phrase: number[] = [];
   const flushPhrase = () => {
     if (phrase.length >= 2) {
-      add(phrase.map(i => tokens[i].word).join(' '));
+      const words = phrase.map(i => tokens[i].word), label = words.join(' ');
+      // Permit only an exact whole-passage word-order reversal, keeping all
+      // surrounding words and punctuation. Separate words or a different action,
+      // actor, negation, or qualifier must not pass this narrow exception.
+      const reversed = words.length === 2 && ['using', 'with', 'in'].some(connector => {
+        const proposed = normalized(text).replace(normalized(label),
+          `${normalized(words[1])} ${connector} ${normalized(words[0])}`);
+        return support.some(source => normalized(source) === proposed);
+      });
+      if (!covered(corpus, label) && reversed) splitPhrases.push(label);
+      else add(label);
       phrase.forEach(i => phraseMembers.add(i));
     }
     phrase = [];
@@ -99,7 +109,12 @@ export function unsupportedTerms(text: string, support: readonly string[], index
     const capitalizedWord = isCapitalized(word) && word.length >= 3 && !sentenceInitial;
     if ((internal && word.length >= 2) || acronym || camel || capitalizedWord) add(word);
   }
-  return [...found.values()];
+  return { unsupported: [...found.values()], splitPhrases };
+}
+
+/** Salient literal terms absent from their cited support. */
+export function unsupportedTerms(text: string, support: readonly string[], index: readonly Term[]): Term[] {
+  return analyzeTerms(text, support, index).unsupported;
 }
 
 /**

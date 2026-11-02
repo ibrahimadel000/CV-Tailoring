@@ -6,7 +6,7 @@
  */
 import type { Source } from '../contentEngine/engine';
 import { isEntryMetadata } from './references';
-import { buildTermIndex, unsupportedTerms, unsupportedNumbers, type Term } from './terms';
+import { buildTermIndex, analyzeTerms, unsupportedNumbers, type Term } from './terms';
 
 type Paragraph = { text: string; sourceIds: string[] };
 type Entry = { id: string; overview: Paragraph; bullets: Paragraph[] };
@@ -16,7 +16,7 @@ export type GuardInput = {
   skillSelections: { id: string; category: 'Technical' | 'Tools' | 'Soft' | 'Languages' }[];
   summaryCapabilityIds?: string[];
 };
-export type GuardNote = { path: string; message: string; kind: 'restored' | 'removed' | 'ignored' };
+export type GuardNote = { path: string; message: string; kind: 'restored' | 'removed' | 'ignored' | 'review' };
 const empty = (): Paragraph => ({ text: '', sourceIds: [] });
 const unique = <T>(values: readonly T[]) => [...new Set(values)];
 const list = (terms: readonly string[]) => terms.slice(0, 3).map(t => `“${t}”`).join(', ');
@@ -94,12 +94,14 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         return ownIds.map(original);
       }
       const support = allIds.map(id => facts.get(id)!.text);
-      const terms = unsupportedTerms(p.text, support, index).map(t => t.label), numbers = unsupportedNumbers(p.text, support);
+      const signals = analyzeTerms(p.text, support, index);
+      const terms = signals.unsupported.map(t => t.label), numbers = unsupportedNumbers(p.text, support);
       if (terms.length || numbers.length) {
         notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because the rewrite added ${list([...terms, ...numbers])}, which this part of your CV does not mention.` });
         return ids.map(original);
       }
-      return null; // accepted as written
+      if (signals.splitPhrases.length) notes.push({ path: where, kind: 'review', message: `${label}: review ${list(signals.splitPhrases)}. The cited source uses a different word order; this literal match does not verify the claim or its scope.` });
+      return null; // accepted as written; no semantic verification
     };
     let overview = empty();
     if (u.overviewId && w.overview.text.trim()) {

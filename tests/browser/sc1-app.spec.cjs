@@ -294,6 +294,26 @@ test('restored unsupported work line is visible in editor review notes', async (
   checkWire(sc1Harness);
 });
 
+test('reordered supported technical wording stays in the copy with a visible caution', async ({ page, sc1Harness }) => {
+  const p = sourceProfile(false); p.experience.isLocked = false;
+  p.experience.data[0].bullets[0].text = 'Built APIs using Python.';
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.summarySegments = [{ text: 'Built APIs using Python.', sourceIds: ['work_1_b1'] }];
+    document.entries[0].bullets[0].text = 'Built Python APIs.';
+    return { body: completed(document) };
+  });
+  const original = await seed(page, p); await tailor(page);
+  await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/this literal match does not verify the claim or its scope/).first()).toBeVisible();
+  await saved(page);
+  const state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
+  expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
+  expect(copy.experience.data[0].bullets[0].text).toBe('Built Python APIs.');
+  checkWire(sc1Harness);
+});
+
 test('SC5 rejects stale SC4 capability append instead of silently printing import labels', async ({ page, sc1Harness }) => {
   sc1Harness.respond(packet => {
     const document = authoredDocument(packet);document.summaryCapabilityIds = ['skill_1'];
