@@ -11,8 +11,9 @@ import { buildDocumentBrief, equivalentSkillKey } from './documentEditorial';
 import { buildAuthoringView } from './authoringView';
 import { projectGoogleSchema } from './providerContract';
 import type { SkillNormalization } from './skillSelection';
-import { applySummaryBoundary } from './summaryBoundary';
+import { applySummaryBoundary, summaryRemovalMessage } from './summaryBoundary';
 import { renderSummaryCapabilities, SUMMARY_CAPABILITY_MAX } from './summaryCapabilities';
+import { guardNaturalDocument } from './claimGuard';
 
 export const NATURAL_REVISION = 'document-compose-natural-segments-6-contextual-authoring';
 export const NATURAL_SUMMARY_MAX = 2400;
@@ -96,76 +97,58 @@ function selectSkills(source: Source, selections: NaturalDocument['skillSelectio
   return { selected, normalizations };
 }
 export function compileNaturalComposition(profile: CVProfile, raw: unknown) {
+  // Malformed responses still fail closed: an uninterpretable document saves nothing.
   const parsed = naturalDocumentSchema.safeParse(raw);
-  if (!parsed.success) throw new CompositionError('contract', parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('\n'));
-  const doc = parsed.data, source = withEntryMetadata(projectSource(profile));
-  if (source.locks.summary && doc.summarySegments.length)
-    throw new CompositionError('contract', 'Locked summary requires no generated segments.');
+  if (!parsed.success) throw new CompositionError('contract', 'The AI response was incomplete or malformed. Your resumes are unchanged. ' + parsed.error.issues.slice(0, 3).map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
+  const source = withEntryMetadata(projectSource(profile));
+  // Graceful normalization: restore original passages or omit generated text; never invent prose.
+  const guarded = guardNaturalDocument(source, parsed.data, NATURAL_SUMMARY_MAX, NATURAL_REFS_MAX);
+  const doc = guarded.doc;
   const facts = new Map(source.evidence.map(f => [f.id, f]));
-  const rawSummaryTrace = doc.summarySegments.map((segment, i) => {
-    if (new Set(segment.sourceIds).size !== segment.sourceIds.length)
-      throw new CompositionError('contract', `summarySegments.${i}: duplicate reference IDs.`);
-    if (segment.sourceIds.some(id => !facts.has(id)))
-      throw new CompositionError('contract', `summarySegments.${i}: unknown source reference. Nothing was saved.`);
-    return { segmentIndex: i, sources: segment.sourceIds.map(id => {
-      const fact = facts.get(id)!;
-      return { sourceId: id, kind: fact.kind, parent: fact.parent };
-    }) };
-  });
-  const rawText = doc.summarySegments.map(s => s.text).join(' ');
-  const rawSourceIds = [...new Set(doc.summarySegments.flatMap(s => s.sourceIds))];
-  if (rawText.length > NATURAL_SUMMARY_MAX || rawSourceIds.length > NATURAL_REFS_MAX)
-    throw new CompositionError('contract', 'Joined summary exceeds the native 2400-character or 24-reference budget. Nothing was truncated or saved.');
-  // Native guards enforce same-entry narrative, overview slots, completeness and locks.
-  // Add only the established nonempty-entry retention boundary; no rewrite quotas.
-  for (const entry of doc.entries) {
-    const original = [...source.experience, ...source.projects].find(e => e.id === entry.id);
-    if (original && (original.overviewId || original.bulletIds.length) && !entry.overview.text && !entry.bullets.some(b => b.text))
-      throw new CompositionError('contract', 'A nonempty original entry lost every narrative contribution. Nothing was saved.');
-  }
+  const rawSummaryTrace = doc.summarySegments.map((segment, i) => ({ segmentIndex: i, sources: segment.sourceIds.map(id => {
+    const fact = facts.get(id)!;
+    return { sourceId: id, kind: fact.kind, parent: fact.parent };
+  }) }));
+  // Defense in depth: the guard already filtered and deduplicated these selections.
   const normalized = selectSkills(source, doc.skillSelections);
-  const capabilities = renderSummaryCapabilities(source, doc.summaryCapabilityIds, normalized.selected.map(s => s.id));
-  const requestedText = [rawText, capabilities.text].filter(Boolean).join(' ');
-  const requestedIds = new Set([...rawSourceIds, ...capabilities.sourceIds]);
-  if (requestedText.length > NATURAL_SUMMARY_MAX || requestedIds.size > NATURAL_REFS_MAX)
-    throw new CompositionError('contract', 'Joined summary including capabilities exceeds the native 2400-character or 24-reference budget. Nothing was truncated or saved.');
-  // Only this narrowly defined omission is authorized. No hidden text repair,
-  // replacement prose, additional request or semantic-success label.
+  renderSummaryCapabilities(source, doc.summaryCapabilityIds, normalized.selected.map(s => s.id));
   const boundary = applySummaryBoundary(source.evidence, profile.skills.data.flatMap((skill, i) =>
     source.skillIds.includes(`skill_${i + 1}`) ? [{ id: `skill_${i + 1}`, name: skill.name }] : []), doc.summarySegments);
-  const text = [...boundary.retained.map(s => s.text), capabilities.text].filter(Boolean).join(' ');
-  const sourceIds = [...new Set([...boundary.retained.flatMap(s => s.sourceIds), ...capabilities.sourceIds])];
-  const summaryTrace = boundary.retainedIndices.map(i => rawSummaryTrace[i]);
+  const warnings: { path: string; message: string }[] = guarded.notes.map(n => ({ path: n.path, message: n.message }));
+  for (const removal of boundary.removals) warnings.push({ path: `summarySegments.${removal.segmentIndex}`, message: summaryRemovalMessage(removal) });
+  let text = boundary.retained.map(s => s.text).join(' ');
+  let sourceIds = [...new Set(boundary.retained.flatMap(s => s.sourceIds))].slice(0, NATURAL_REFS_MAX);
+  let summaryTrace = boundary.retainedIndices.map(i => rawSummaryTrace[i]);
+  const originalSummary = profile.summary.data.trim();
+  const keepOriginal = (message: string) => {
+    if (text || boundary.removals.length || doc.summarySegments.length) warnings.push({ path: 'summary', message });
+    text = source.summaryId ? originalSummary : ''; sourceIds = source.summaryId ? [source.summaryId] : []; summaryTrace = [];
+  };
   const authoring = buildSummaryEvidenceBrief(source);
   const primaryIds = new Set([...authoring.primaryFacts, ...authoring.qualificationFacts].map(f => f.id));
-  // Exact original summary may remain: unchanged good wording is not a failure.
-  if (text && text !== profile.summary.data.trim() && authoring.primaryFacts.length && !sourceIds.some(id => primaryIds.has(id)))
-    throw new CompositionError('contract', 'Generated introduction used only profile or identity context despite available professional evidence. Nothing was saved; no automatic retry.');
-  // This checks provenance only. A model can misuse a valid reference; that is
-  // still an editorial/factual review failure, never semantic certification.
-
-  // Native composition path directly: never routes through a claim-count/type adapter.
-  const result = compileComposition(profile, { summary: { text, sourceIds }, entries: doc.entries,
+  if (!source.locks.summary) {
+    if (!text && originalSummary) keepOriginal('Kept your original summary because no supported AI summary remained.');
+    // A tailored introduction must rest on real experience or qualifications when they exist.
+    else if (text && text !== originalSummary && authoring.primaryFacts.length && !sourceIds.some(id => primaryIds.has(id)))
+      keepOriginal('Kept your original summary because the AI summary was not based on your experience.');
+  }
+  // Native composition path: same-entry references, locks, completeness and chronology.
+  const result = compileComposition(profile, { summary: source.locks.summary ? { text: '', sourceIds: [] } : { text, sourceIds }, entries: doc.entries,
     skillIds: normalized.selected.map(s => s.id) }, { normalizeSkills: false });
   if (!profile.skills.isLocked) {
     const categories = new Map(normalized.selected.map(s => [s.id, s.category]));
     result.candidate.skills.data = result.candidate.skills.data.map(skill => {
       const index = profile.skills.data.findIndex(s => s.id === skill.id);
-      return { ...skill, category: categories.get(`skill_${index + 1}`)! as SkillTag['category'] };
+      return { ...skill, category: (categories.get(`skill_${index + 1}`) ?? skill.category) as SkillTag['category'] };
     });
   }
   for (const normalization of normalized.normalizations) {
     const omitted = result.draft.omittedSkills.find(s => s.sourceId === normalization.omittedId);
     if (omitted) omitted.reason = normalization.reason;
   }
-  for (const removal of boundary.removals) result.warnings.push({
-    path: `summarySegments.${removal.segmentIndex}`,
-    message: removal.reason === 'skill-only-evidence'
-      ? 'Removed a generated summary passage that relied only on skill-list evidence. Skills remain available for selection in the Skills section.'
-      : 'Removed a generated summary passage naming a skill absent from its cited non-skill facts. Literal presence is not factual verification of the remaining text.',
-  });
+  result.warnings.unshift(...warnings);
   return { ...result, normalizations: normalized.normalizations, summarySegments: boundary.retained,
-    summaryRemovals: boundary.removals, summaryCapabilityIds: capabilities.sourceIds,
+    summaryRemovals: boundary.removals, summaryCapabilityIds: [] as string[], guardNotes: guarded.notes,
     summaryTrace, semanticStatus: 'unassessed' as const };
 }
 
