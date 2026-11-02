@@ -7,6 +7,7 @@
 import type { Source } from '../contentEngine/engine';
 import { isEntryMetadata } from './references';
 import { buildTermIndex, analyzeTerms, unsupportedNumbers, type Term } from './terms';
+import { containsSkillName } from './summaryBoundary';
 
 type Paragraph = { text: string; sourceIds: string[] };
 type Entry = { id: string; overview: Paragraph; bullets: Paragraph[] };
@@ -29,6 +30,7 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
 
   // Summary: valid, deduplicated references only; budgets enforced by omission, never truncation.
   let summarySegments: Paragraph[] = [];
+  const summarySegmentIndices: number[] = [];
   if (source.locks.summary) {
     if (doc.summarySegments.length) notes.push({ path: 'summary', kind: 'ignored', message: 'Your summary is locked, so the AI summary was ignored.' });
   } else {
@@ -39,6 +41,21 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       if (!text) continue;
       if (!ids.length || ids.some(id => !facts.has(id))) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that cited content not found in your CV.' });
+        continue;
+      }
+      // Apply the same literal signals used for work passages to the summary.
+      // A cited term or number is not proof of the claim's meaning or scope.
+      // Skill-only practice claims are checked separately by summaryBoundary.
+      const cited = ids.map(id => facts.get(id)!);
+      const support = cited.map(f => f.text);
+      const narrative = cited.filter(f => f.kind !== 'skill');
+      // Let the dedicated boundary handle and report its own removals.
+      const boundaryWillRemove = !narrative.length || skillNames.some(name => containsSkillName(text, name)
+        && !narrative.some(f => containsSkillName(f.text, name)));
+      const signals = analyzeTerms(text, support, index);
+      const terms = signals.unsupported.map(t => t.label), numbers = unsupportedNumbers(text, support);
+      if (!boundaryWillRemove && (terms.length || numbers.length)) {
+        notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: `Removed a generated summary passage because it added ${list([...terms, ...numbers])}, which its cited CV content does not mention.` });
         continue;
       }
       const cost = (used ? 1 : 0) + text.length;
@@ -52,7 +69,9 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         continue;
       }
       used += cost; for (const id of added) union.add(id);
+      if (!boundaryWillRemove && signals.splitPhrases.length) notes.push({ path: `summarySegments.${i}`, kind: 'review', message: `Review ${list(signals.splitPhrases)}. The cited source uses a different word order; this literal match does not verify the claim or its scope.` });
       summarySegments.push({ text, sourceIds: ids });
+      summarySegmentIndices.push(i);
     }
   }
   if (doc.summaryCapabilityIds?.length) notes.push({ path: 'summaryCapabilityIds', kind: 'ignored', message: 'Ignored a retired automatic skills list; skills stay in the Skills section.' });
@@ -151,5 +170,5 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       seen.add(s.id); return true;
     });
   }
-  return { doc: { summarySegments, entries, skillSelections, summaryCapabilityIds: [] as string[] }, notes };
+  return { doc: { summarySegments, entries, skillSelections, summaryCapabilityIds: [] as string[] }, notes, summarySegmentIndices };
 }

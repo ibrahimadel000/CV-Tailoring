@@ -105,7 +105,7 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown) {
   const guarded = guardNaturalDocument(source, parsed.data, NATURAL_SUMMARY_MAX, NATURAL_REFS_MAX);
   const doc = guarded.doc;
   const facts = new Map(source.evidence.map(f => [f.id, f]));
-  const rawSummaryTrace = doc.summarySegments.map((segment, i) => ({ segmentIndex: i, sources: segment.sourceIds.map(id => {
+  const rawSummaryTrace = doc.summarySegments.map((segment, i) => ({ segmentIndex: guarded.summarySegmentIndices[i], sources: segment.sourceIds.map(id => {
     const fact = facts.get(id)!;
     return { sourceId: id, kind: fact.kind, parent: fact.parent };
   }) }));
@@ -115,7 +115,8 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown) {
   const boundary = applySummaryBoundary(source.evidence, profile.skills.data.flatMap((skill, i) =>
     source.skillIds.includes(`skill_${i + 1}`) ? [{ id: `skill_${i + 1}`, name: skill.name }] : []), doc.summarySegments);
   const warnings: { path: string; message: string }[] = guarded.notes.map(n => ({ path: n.path, message: n.message }));
-  for (const removal of boundary.removals) warnings.push({ path: `summarySegments.${removal.segmentIndex}`, message: summaryRemovalMessage(removal) });
+  const summaryRemovals = boundary.removals.map(removal => ({ ...removal, segmentIndex: guarded.summarySegmentIndices[removal.segmentIndex] }));
+  for (const removal of summaryRemovals) warnings.push({ path: `summarySegments.${removal.segmentIndex}`, message: summaryRemovalMessage(removal) });
   let text = boundary.retained.map(s => s.text).join(' ');
   let sourceIds = [...new Set(boundary.retained.flatMap(s => s.sourceIds))].slice(0, NATURAL_REFS_MAX);
   let summaryTrace = boundary.retainedIndices.map(i => rawSummaryTrace[i]);
@@ -148,7 +149,7 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown) {
   }
   result.warnings.unshift(...warnings);
   return { ...result, normalizations: normalized.normalizations, summarySegments: boundary.retained,
-    summaryRemovals: boundary.removals, summaryCapabilityIds: [] as string[], guardNotes: guarded.notes,
+    summaryRemovals, summaryCapabilityIds: [] as string[], guardNotes: guarded.notes,
     summaryTrace, semanticStatus: 'unassessed' as const };
 }
 
