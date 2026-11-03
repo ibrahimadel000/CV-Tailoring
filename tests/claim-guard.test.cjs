@@ -171,7 +171,7 @@ test('the reversal exception cannot delete a source negation or change the actio
 test('summary removes unsupported numeric and technical additions while keeping supported adjacent text',()=>{
  const p=fixture(),before=JSON.stringify(p),r=response(p);
  r.summarySegments=[
-  {text:'Built web applications and technical architectures.',sourceIds:['work_1_b1']},
+  {text:'Software engineer combining web application development with delivery workflow improvement and technical onboarding.',sourceIds:['work_1_b1','work_1_b2','work_1_b3']},
   {text:'Built web applications using Kubernetes for 500 clients.',sourceIds:['work_1_b1']},
  ];
  const out=n.compileNaturalComposition(p,r);
@@ -188,7 +188,7 @@ test('summary restores original when its only generated passage adds unsupported
 
 test('summary keeps a literally supported figure and original source wording',()=>{
  const p=fixture();p.experience.data[0].bullets[0].text='Built applications used by 30 staff.';
- const r=response(p);r.summarySegments=[{text:'Built applications used by 30 staff.',sourceIds:['work_1_b1']}];
+ const r=response(p);r.summarySegments=[{text:'Engineer with a record of building applications used by 30 staff across delivery workflows.',sourceIds:['work_1_b1','work_1_b2']}];
  const out=n.compileNaturalComposition(p,r);
  a.equal(out.candidate.summary.data,r.summarySegments[0].text);a.deepEqual(out.guardNotes,[]);
  a.equal(out.semanticStatus,'unassessed');
@@ -200,12 +200,20 @@ test('summary permits narrowly reordered wording with an explicit review note',(
  a.equal(out.candidate.summary.data,r.summarySegments[0].text);
  a(out.guardNotes.some(g=>g.path==='summarySegments.0'&&g.kind==='review'&&g.message.includes('does not verify')));
 });
-test('supported literal figures do not certify the relationship or meaning',()=>{
+test('the external-audience signal catches one unsupported interpretation of a stated figure',()=>{
  const p=fixture();p.experience.data[0].bullets[0].text='Built applications for 30 internal staff.';
  const r=response(p);r.summarySegments=[{text:'Built applications for 30 external clients.',sourceIds:['work_1_b1']}];
  const out=n.compileNaturalComposition(p,r);
+ a.equal(out.candidate.summary.data,p.summary.data.trim());
+ a(out.guardNotes.some(g=>g.path==='summarySegments.0'&&g.kind==='removed'&&g.message.includes('external audience')));
+ a.equal(out.semanticStatus,'unassessed');
+});
+test('a supported figure does not certify relationships that the literal signals miss',()=>{
+ const p=fixture();p.experience.data[0].bullets[0].text='Built applications for 30 internal staff.';
+ const r=response(p);r.summarySegments=[{text:'Built applications for 30 paying clients.',sourceIds:['work_1_b1']}];
+ const out=n.compileNaturalComposition(p,r);
  a.equal(out.candidate.summary.data,r.summarySegments[0].text);
- a.equal(out.semanticStatus,'unassessed'); // Literal coverage is not factual verification.
+ a.equal(out.semanticStatus,'unassessed');
 });
 
 test('summary removal and trace indices refer to original response after earlier guard removal',()=>{
@@ -213,7 +221,7 @@ test('summary removal and trace indices refer to original response after earlier
  r.summarySegments=[
   {text:'Built applications for 500 clients.',sourceIds:['work_1_b1']},
   {text:'Built applications with Python.',sourceIds:['work_1_b1','skill_1']},
-  {text:'Built web applications and technical architectures.',sourceIds:['work_1_b1']},
+  {text:'Software engineer combining web application development with delivery workflow improvement and technical onboarding.',sourceIds:['work_1_b1','work_1_b2','work_1_b3']},
  ];
  const out=n.compileNaturalComposition(p,r);
  a.equal(out.candidate.summary.data,r.summarySegments[2].text);
