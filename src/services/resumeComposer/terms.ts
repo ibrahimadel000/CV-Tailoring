@@ -117,6 +117,89 @@ export function unsupportedTerms(text: string, support: readonly string[], index
   return analyzeTerms(text, support, index).unsupported;
 }
 
+const sequence = (text: string): string[] => normalized(text).match(TOKEN) ?? [];
+
+/** Length of the longest common subsequence of two token lists (ordered overlap). */
+function orderedOverlap(a: readonly string[], b: readonly string[]): number {
+  if (!a.length || !b.length) return 0;
+  let previous = new Array<number>(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    const current = new Array<number>(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = a[i - 1] === b[j - 1]
+        ? previous[j - 1] + 1
+        : Math.max(previous[j], current[j - 1]);
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+export type CopiedPassage = { id: string; shared: number };
+
+/**
+ * Detects text that substantially repeats ONE candidate passage in the same
+ * word order instead of synthesizing across sources. A literal signal about
+ * redundancy, not about truth: copying is always fully "supported" by its
+ * source, so grounding checks can never catch it. Either most of the new
+ * passage comes from one source passage, or most of a source passage was
+ * carried over and it also dominates the new passage. A short contribution
+ * embedded in a broader synthesis must not cause that synthesis to be removed.
+ * Short passages and some embedded copies stay an editorial review matter.
+ */
+export function copiedPassage(text: string, candidates: readonly { id: string; text: string }[]): CopiedPassage | undefined {
+  const mine = sequence(text);
+  if (mine.length < 6) return undefined;
+  let best: CopiedPassage | undefined;
+  for (const candidate of candidates) {
+    const theirs = sequence(candidate.text);
+    if (theirs.length < 6) continue;
+    const shared = orderedOverlap(mine, theirs);
+    if (shared < 6) continue;
+    if (shared / mine.length >= 0.8 || (shared / theirs.length >= 0.85 && shared / mine.length >= 0.6)) {
+      if (!best || shared > best.shared) best = { id: candidate.id, shared };
+    }
+  }
+  return best;
+}
+
+/** A narrow editorial signal, never a factual or semantic check. Regular English
+ * inflections and common role framing are normalized to catch a shortened
+ * sentence that mostly echoes one source contribution. Does not delete text. */
+const ECHO_FRAME = new Set(('a an the and or in of for with to on as at by from through while '
+  + 'software engineer experienc experience professional background focused focus specialist role combin').split(' '));
+function editorialWords(text: string): string[] {
+  return sequence(text).map(word => {
+    if (/^[a-z]{5,}$/.test(word)) {
+      if (/^improv(?:e|ed|ing|ement|ements)?$/.test(word)) return 'improv';
+      if (word.endsWith('ing') && word.length > 6) return word.slice(0, -3);
+      if (word.endsWith('ed') && word.length > 5) return word.slice(0, -2);
+      if (word.endsWith('ies') && word.length > 5) return word.slice(0, -3) + 'y';
+      if (word.endsWith('s') && !word.endsWith('ss') && word.length > 5) return word.slice(0, -1);
+    }
+    return word;
+  }).filter(word => !ECHO_FRAME.has(word));
+}
+export function shortenedSourceEcho(text: string, candidates: readonly { id: string; text: string }[]): boolean {
+  const words = editorialWords(text);
+  if (words.length < 5) return false;
+  return candidates.some(candidate => {
+    const shared = orderedOverlap(words, editorialWords(candidate.text));
+    return shared >= 5 && shared / words.length >= 0.8;
+  });
+}
+/** Extra content words absent from cited facts. Conservative and incomplete;
+ * it cannot establish the meaning, attribution or truth of a sentence. */
+export function editorialNovelWords(text: string, facts: readonly string[]): string[] {
+  const available = new Set(facts.flatMap(editorialWords));
+  return [...new Set(editorialWords(text).filter(word => !available.has(word)))];
+}
+/** Literal token overlap for a cautious alternative-selection signal. */
+export function editorialOverlap(text: string, fact: string): number {
+  const left = new Set(editorialWords(text)), right = new Set(editorialWords(fact));
+  return [...left].filter(word => right.has(word)).length;
+}
+
 /**
  * Numeric quantities in `text` that never appear in `support`, as written.
  * Digit sequences compare after thousand-separator removal. Written-out numbers

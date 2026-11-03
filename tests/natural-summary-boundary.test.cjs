@@ -28,7 +28,7 @@ test('active native compiler removes the listed-skill inflation and retains usef
 });
 test('real practice is preserved and no removal notice is produced',()=>{
  const p=fixture();p.experience.data[0].bullets[0].text='Built and maintained RESTful APIs using Python.';
- const r=response(p);r.summarySegments=[{text:'Built and maintained RESTful APIs using Python.',sourceIds:['work_1_b1','skill_1','skill_2']}];
+ const r=response(p);r.summarySegments=[{text:'Software engineer with hands-on work building and maintaining RESTful APIs in Python.',sourceIds:['work_1_b1','skill_1','skill_2']}];
  const out=n.compileNaturalComposition(p,r);assert.equal(out.candidate.summary.data,r.summarySegments[0].text);
  assert.deepEqual(out.summaryRemovals,[]);assert.deepEqual(out.candidate.experience,p.experience);
 });
