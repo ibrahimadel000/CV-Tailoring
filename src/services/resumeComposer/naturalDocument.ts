@@ -17,7 +17,7 @@ import { guardNaturalDocument } from './claimGuard';
 import { explicitSkillCoverage } from './explicitSkillCoverage';
 import { shortenedSourceEcho, editorialOverlap, editorialNovelWords } from './terms';
 
-export const NATURAL_REVISION = 'document-compose-natural-segments-10-editorial-preview';
+export const NATURAL_REVISION = 'document-compose-natural-segments-11-experience-preview';
 export const NATURAL_SUMMARY_MAX = 2400;
 export const NATURAL_SEGMENTS_MAX = 24;
 export const NATURAL_REFS_MAX = 24;
@@ -129,11 +129,26 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
     guarded.notes.push({ path: 'skillSelections', kind: 'review', message: `Kept your existing skill “${item.name}” because the job mentions “${item.token}”. This is a literal match, not a verified relevance or experience claim; review it.` });
   }
   // Defense in depth: the guard already filtered and deduplicated selections.
+  const warningsForCategory: { path: string; message: string }[] = [];
   const normalized = selectSkills(source, doc.skillSelections);
+  // Correct only unambiguous, whole-label violations of the authoring contract.
+  // Never rename a skill or infer expertise; preserve combined/unknown labels.
+  const professionalMethod = /^(?:project management|technical documentation|agile\s*\/\s*scrum)$/i;
+  for (const selection of normalized.selected) {
+    const fact = facts.get(selection.id);
+    const index = /^skill_(\d+)$/.exec(selection.id);
+    const nativeSkill = index ? profile.skills.data[Number(index[1]) - 1] : undefined;
+    if (selection.category === 'Soft' && fact?.kind === 'skill' && nativeSkill && professionalMethod.test(nativeSkill.name.trim())) {
+      selection.category = 'Technical';
+      for (const item of normalized.normalizations) if (item.retainedId === selection.id)
+        item.reason = 'Equivalent full skill text/level and original context across display categories; retained the first selected native skill without renaming. Its display category was adjusted separately.';
+      warningsForCategory.push({ path: 'skillSelections', message: `Grouped your existing skill “${nativeSkill.name}” under Technical rather than Soft; the skill itself was not changed.` });
+    }
+  }
   renderSummaryCapabilities(source, doc.summaryCapabilityIds, normalized.selected.map(s => s.id));
   const boundary = applySummaryBoundary(source.evidence, profile.skills.data.flatMap((skill, i) =>
     source.skillIds.includes(`skill_${i + 1}`) ? [{ id: `skill_${i + 1}`, name: skill.name }] : []), doc.summarySegments);
-  const warnings: { path: string; message: string }[] = guarded.notes.map(n => ({ path: n.path, message: n.message }));
+  const warnings: { path: string; message: string }[] = [...guarded.notes.map(n => ({ path: n.path, message: n.message })), ...warningsForCategory];
   const summaryRemovals = boundary.removals.map(removal => ({ ...removal, segmentIndex: guarded.summarySegmentIndices[removal.segmentIndex] }));
   for (const removal of summaryRemovals) warnings.push({ path: `summarySegments.${removal.segmentIndex}`, message: summaryRemovalMessage(removal) });
   let text = boundary.retained.map(s => s.text).join(' ');
@@ -253,6 +268,10 @@ AUTHORING MATERIAL: Start with documentBrief.summaryEvidence.primaryFacts: these
 CAPABILITY SEPARATION: Select relevant existing capabilities in skillSelections, retaining exact native names, levels and qualifications. The app does not append a capability inventory or source-group labels to the introduction. Skill listings belong in Skills. A listed skill does not establish performed work at an employer or project, proficiency, years of use, or results. Mention technology naturally in summarySegments only when cited non-skill facts support that actual statement; neither a matching job keyword nor a skill ID establishes practice.
 
 COMPOSITION DECISION: Use supported actions and their purpose to explain what the candidate contributes. Retain actor, responsibility, limitations, unfinished degrees and the scope of results. The summary should add an interpretation of supported background, not additional facts, an employer-by-employer recap, a vague opening followed by a copied bullet, or a second skills inventory. A useful introduction can be short; do not remove specificity merely to be concise. Do not demand new facts or a rewrite quota. Preserve a strong original sentence when appropriate. Within each experience/project entry, lead with the strongest contribution relevant to the job's central work, then useful adjacent evidence. Edit for clarity and remove repetition without deleting important limitations or manufacturing keyword-rich duties.
+
+EXPERIENCE EDITING: Consider each unlocked contribution for a concrete improvement in clarity or target-relevant emphasis. If wording is indirect or padded, rewrite it directly while keeping every important action, object, result, limitation and attribution the source actually states. Do not default to copying all passages just because faithful wording feels safer; if a source passage is already clear and appropriate, retain it. Different wording is not the goal by itself, and never invent tools, outcomes or employer experience from a separate skills list.
+
+FICTIONAL EDITING EXAMPLE, NOT CANDIDATE FACTS: “Was responsible for the organization of weekly team meetings for coordinating project updates.” can become “Organized weekly team meetings to coordinate project updates.” The actor, meeting frequency and purpose stay the same. Do not add who attended, tools, results or metrics. This illustrates direct editing, not a template or a reason to force rewrites.
 
 SYNTHETIC EDITORIAL CONTRASTS, NOT CANDIDATE FACTS: A fictional source says Administrative assistant, Maintained an internal document archive, and Updated retrieval procedures to reduce lookup time; Spreadsheet software is listed only as a skill. For a records-coordination job, an introduction about internal document management and retrieval workflows is supported. Claiming the archive was automated with spreadsheet software is not. Select the listed skill in the Skills section; no employer/tool relationship follows. For a workshop-support job, archive work does not establish training experience. Classroom-only archive practice must remain classroom-only. These are editorial contrasts, not sentence templates. Use only the actual SOURCE; never borrow example facts or force example wording.
 

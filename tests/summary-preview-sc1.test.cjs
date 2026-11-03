@@ -19,10 +19,9 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
 }
 const signal=()=>new AbortController().signal;
 const complete=raw=>({ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}})});
-test('SC5.5 prompt exactly matches its frozen experimental candidate and UI visibly names actual preview/model',()=>{
- // Frozen SC5.5 experimental prompt: encourages meaningful, bounded edits and
- // asks for the qualifying narrative references used by the introduction.
- a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'4bdf32fd79b1858fba7c7fd2bc0fc8af6895349f53cbd135da2b75260ce78840');
+test('experience-editing prompt exactly matches its experimental revision and UI visibly names actual preview/model',()=>{
+ // Frozen experience-editing preview prompt; the hash detects unintended changes.
+ a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'629788c7b203e7334be936dfdeadaae9e6c37ffdd09b64cba4a6da98e996cd10');
  const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental tailoring preview'));a(!ui.includes('Gemini 2.5 Flash'));
 });
 test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full packet/schema and candidate instructions',async()=>{
