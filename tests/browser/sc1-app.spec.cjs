@@ -732,3 +732,27 @@ test('uncited source passage is disclosed after reload without changing original
   expect(pdf).not.toContain('1 original experience passage was not cited');
   checkWire(sc1Harness);
 });
+
+test('a misgrouped qualified method is corrected in the separate copy and survives reload and PDF', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile(true);
+  p.skills.isLocked = false;
+  p.skills.data = [{ id: crypto.randomUUID(), name: 'Project Management', category: 'Soft', level: 'Coursework only' }];
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.skillSelections = [{ id: 'skill_1', category: 'Soft' }];
+    return { body: completed(document) };
+  });
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  let state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(copy.skills.data[0]).toMatchObject({name:'Project Management', category:'Technical', level:'Coursework only'});
+  expect(copy.compositionReview.notes.some(n => n.includes('Grouped your existing skill “Project Management” under Technical'))).toBe(true);
+  await page.reload(); await saved(page);
+  await page.getByText(/Review \d+ content note/).click();
+  await expect(page.getByText(/Grouped your existing skill “Project Management” under Technical/)).toBeVisible();
+  const pdf = await exportedText(page, testInfo);
+  expect(pdf).toContain('Project Management'); expect(pdf).toContain('Coursework only');
+  expect(pdf).not.toContain('Grouped your existing skill');
+  checkWire(sc1Harness);
+});
