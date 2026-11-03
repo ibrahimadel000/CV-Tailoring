@@ -19,7 +19,7 @@ const one=(text='Prepared source-linked text.',sourceIds=['work_1_b1'])=>({text,
 test('natural packet/schema projects the current output only, no planner or old summary wire',()=>{
  const p=n.prepareNaturalComposition(fixture(),job),g=n.googleNaturalSchema(p);
  assert.equal(p.revision,n.NATURAL_REVISION);
- assert.deepEqual(p.outputContract.required,['summarySegments','entries','skillSelections']);
+ assert.deepEqual(p.outputContract.required,['summarySegments','alternativeSummarySegments','entries','skillSelections']);
  assert.deepEqual(g.required,p.outputContract.required);
  assert.equal(g.properties.summarySegments.type,'ARRAY');
  assert.deepEqual(g.properties.summarySegments.items.required,['text','sourceIds']);
@@ -209,10 +209,12 @@ test('tampered source kinds, relationships and extra packet fields cannot bypass
 });
 for(const text of ['Owned production automated testing strategy.','Built REST APIs with MySQL at Example Systems.','Improved application runtime by streamlining delivery workflows.','Expert Python engineer.','Completed the computer science degree.'])test('literal-skill subset removed; other unsupported examples remain unassessed: '+text,()=>{
  const p=fixture(),r=response(p);r.summarySegments=[one(text,['work_1_b1','skill_1'])];
- const out=compile(p,r),removed=text.includes('MySQL')||text.includes('Python');
+ const out=compile(p,r),removedBoundary=text.includes('MySQL')||text.includes('Python');
+ const removedScope=text.includes('production');
  // Claim guard: when every generated sentence is removed, the original summary is kept
  // with a review note instead of saving an empty one.
- assert.equal(out.candidate.summary.data,removed?p.summary.data.trim():text);assert.equal(out.summaryRemovals.length,removed?1:0);
+ assert.equal(out.candidate.summary.data,(removedBoundary||removedScope)?p.summary.data.trim():text);assert.equal(out.summaryRemovals.length,removedBoundary?1:0);
+ if(removedScope)assert(out.guardNotes.some(n=>n.path==='summarySegments.0'&&n.kind==='removed'&&n.message.includes('production setting')));
  assert.equal(out.semanticStatus,'unassessed');
  assert(!('qualityStatus'in out));assert(!('semanticVerified'in out));assert(!('score'in out));
 });

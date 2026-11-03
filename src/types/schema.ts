@@ -352,8 +352,27 @@ export type SupportingEvidence=z.infer<typeof supportingEvidenceItemSchema>;
 export const compositionReviewSchema = z.object({ text: z.string(), notes: z.array(z.string()) });
 export type CompositionReview = z.infer<typeof compositionReviewSchema>;
 
+// Historical comparison with the source at the time of generation.
+// This is local presentation metadata, never resume content or a quality score.
+export const compositionChangesSchema = z.object({
+  summary: z.enum(['changed', 'unchanged']),
+  experience: z.enum(['empty', 'unchanged', 'reordered', 'edited']),
+  projects: z.enum(['empty', 'unchanged', 'reordered', 'edited']),
+  // Literal counts only; no provider response text is stored here.
+  proposal: z.object({ proposed: z.number().int().nonnegative(), different: z.number().int().nonnegative() }).optional(),
+  skills: z.object({
+    retained: z.number().int().nonnegative(),
+    excluded: z.array(z.object({ name: z.string(), level: z.string().optional() })),
+    added: z.number().int().nonnegative(),
+    reordered: z.boolean(),
+    regrouped: z.boolean(),
+  }),
+});
+export type CompositionChanges = z.infer<typeof compositionChangesSchema>;
+
 export interface CVProfile {
   compositionReview?: CompositionReview;
+  compositionChanges?: CompositionChanges;
   supportingEvidence?: SupportingEvidence[];
   importedFrom?: ImportMetadata;
   tailoring?: TailoringMetadata;
@@ -380,6 +399,7 @@ export interface CVProfile {
 
 export const cvProfileSchema = z.object({
   compositionReview: compositionReviewSchema.optional(),
+  compositionChanges: compositionChangesSchema.optional(),
   supportingEvidence: supportingEvidenceSchema.optional(),
   importedFrom: importMetadataSchema.optional(),
   tailoring: tailoringMetadataSchema.optional(),
