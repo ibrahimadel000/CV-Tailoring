@@ -160,6 +160,21 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
   // Native composition path: same-entry references, locks, completeness and chronology.
   const result = compileComposition(profile, { summary: source.locks.summary ? { text: '', sourceIds: [] } : { text, sourceIds }, entries: doc.entries,
     skillIds: normalized.selected.map(s => s.id) }, { normalizeSkills: false });
+  // The model may omit source passages while retaining an entry. References
+  // reveal that omission, not its importance or whether equivalent meaning
+  // survives elsewhere. Surface it so the user can compare against the source;
+  // do not blindly restore irrelevant passages or invent replacement text.
+  for (const section of ['experience', 'projects'] as const) {
+    if (source.locks[section]) continue;
+    for (const entry of result.draft[section]) {
+      const count = entry.omitted.length;
+      if (!count) continue;
+      warnings.push({
+        path: `entries.${entry.id}`,
+        message: `${count} original ${section === 'experience' ? 'experience' : 'project'} passage${count === 1 ? ' was' : 's were'} not cited in this tailored entry. Compare it with your original to check for important omissions; citations do not verify meaning.`,
+      });
+    }
+  }
   if (!profile.skills.isLocked) {
     const categories = new Map(normalized.selected.map(s => [s.id, s.category]));
     result.candidate.skills.data = result.candidate.skills.data.map(skill => {
@@ -189,6 +204,12 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown, job 
   const weakEcho = !profile.summary.isLocked && !first.usedFallback && first.summarySegments.length === 1
     && first.candidate.summary.data !== profile.summary.data.trim()
     && shortenedSourceEcho(first.candidate.summary.data, narrative);
+  // In a multi-sentence introduction a copied first sentence can be masked by
+  // other text. Do not swap or remove the whole introduction on this signal:
+  // later sentences may add valuable synthesis. A review notice is safer.
+  const partialEcho = !profile.summary.isLocked && !first.usedFallback && first.summarySegments.length > 1
+    && first.candidate.summary.data !== profile.summary.data.trim()
+    && first.summarySegments.some(segment => shortenedSourceEcho(segment.text, narrative));
   if (!profile.summary.isLocked && (first.usedFallback || weakEcho) && parsed.data.alternativeSummarySegments.length) {
     const alternative = compileCandidate(profile, { ...parsed.data, summarySegments: parsed.data.alternativeSummarySegments, alternativeSummarySegments: [] }, job);
     // For a weak-but-surviving primary, choose another candidate only when it
@@ -213,6 +234,7 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown, job 
     if (first.usedFallback) first.warnings.push({ path: 'summary', message: 'The alternative AI summary also did not pass local checks. Review the summary before export.' });
   }
   if (weakEcho) first.warnings.push({ path: 'summary', message: 'The generated summary closely echoes one experience passage. Review whether it introduces your background effectively; local checks do not verify facts.' });
+  if (partialEcho) first.warnings.push({ path: 'summary', message: 'A sentence in the generated summary closely echoes an experience or project passage. Review the whole introduction for repetition; local checks do not verify facts.' });
   const { usedFallback: _unused, ...result } = first;
   return result;
 }
