@@ -709,3 +709,26 @@ test('local comparison distinguishes proposed rewrite from restored result witho
   expect(pdf).not.toContain('Before local checks'); expect(pdf).toContain(originalText);
   checkWire(sc1Harness);
 });
+
+test('uncited source passage is disclosed after reload without changing original or PDF notes', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile(true);
+  p.experience.data[0].bullets.push({ id: crypto.randomUUID(), text: 'Wrote technical documentation for internal users.', isVerified: true });
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.entries[0].bullets = document.entries[0].bullets.slice(0, 1);
+    return { body: completed(document) };
+  });
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  let state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(copy.compositionReview.notes.some(n => n.includes('1 original experience passage was not cited'))).toBe(true);
+  expect(copy.experience.data[0].bullets.map(b => b.text)).toEqual(['Developed internal data dashboards for a classroom exercise.']);
+  await page.reload(); await saved(page);
+  await page.getByText(/Review \d+ content note/).click();
+  await expect(page.getByText(/1 original experience passage was not cited/)).toBeVisible();
+  const pdf = await exportedText(page, testInfo);
+  expect(pdf).toContain('Developed internal data dashboards for a classroom exercise.');
+  expect(pdf).not.toContain('1 original experience passage was not cited');
+  checkWire(sc1Harness);
+});
