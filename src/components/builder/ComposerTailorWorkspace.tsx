@@ -8,6 +8,12 @@ import { requestComposition, COMPOSITION_PREVIEW_LABEL } from '@/services/resume
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection } from '@/services/tailorRequest';
 import { summaryBoundaryNotice } from '@/services/resumeComposer/summaryBoundary';
+const entryChangeText = {
+  empty: 'No entries',
+  unchanged: 'Wording and order unchanged',
+  reordered: 'Wording unchanged; order changed',
+  edited: 'Wording or content changed',
+} as const;
 export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
@@ -28,7 +34,9 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
       const reviewNotes = [...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)];
       setNotes(reviewNotes);
-      setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : 'The content was unchanged. No duplicate copy was created.') + (notice ? ` ${notice}` : ''));
+      const draft = result.proposalComparison;
+      const unchangedDetail = ` The AI proposed ${draft.proposed} work/project bullet lines; ${draft.different} did not exactly match a source passage in the same entry before local checks. This is not a quality or accuracy assessment.`;
+      setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : `The content was unchanged. No duplicate copy was created.${unchangedDetail}`) + (notice ? ` ${notice}` : ''));
       if (result.status === 'created') onCreated(result.profileId, notice, reviewNotes);
     } catch (e) {
       if (alive.current) setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. No automatic retry. Check your original before trying again.');
@@ -37,8 +45,24 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   return <aside className="tailor-pane" aria-labelledby="tailor-heading" aria-busy={busy}>
     <header className="tailor-heading"><span className="tailor-mark"><Sparkles size={20} /></span><div><h2 id="tailor-heading">CV Tailor</h2><p>A focused resume from your real content.</p></div></header>
     <div className="tailor-scroll" role="region" aria-label="CV tailoring inputs" tabIndex={0}>
-      <div className="tailor-feedback" role="note"><strong>{COMPOSITION_PREVIEW_LABEL}</strong><p>Experimental summary-composition preview. Review every claim; factual safety, writing quality and latency are not certified. Use fictional data while evaluating free-tier access.</p></div>
+      <div className="tailor-feedback" role="note"><strong>{COMPOSITION_PREVIEW_LABEL}</strong><p>Experimental tailoring preview. Review every claim; factual safety, writing quality and latency are not certified. Use fictional data while evaluating free-tier access.</p></div>
       {message && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
+      {active?.compositionChanges && <details className="tailor-review" open>
+        <summary>What changed during tailoring</summary>
+        <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
+        <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
+        <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
+        <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
+        {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry. These counts cover the first response for each unlocked entry, not quality or accuracy.</p>}
+        <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>
+        {active.compositionChanges.skills.reordered && <p>Selected skills were reordered.</p>}
+        {active.compositionChanges.skills.regrouped && <p>Some selected skills were moved to different groups.</p>}
+        {active.compositionChanges.skills.excluded.length > 0 && <details>
+          <summary>Skills not selected for this copy</summary>
+          <ul>{active.compositionChanges.skills.excluded.map((skill, i) => <li key={i}>{skill.name}{skill.level ? ` — ${skill.level}` : ''}</li>)}</ul>
+          <p>These remain in the source resume.</p>
+        </details>}
+      </details>}
       <div className="tailor-source"><div className="tailor-source-heading"><label htmlFor="composer-source">Source resume</label><button className="text-button" disabled={busy} onClick={onImport}><Upload size={15} />Import CV</button></div>
         <select id="composer-source" value={activeId ?? ''} disabled={busy} onChange={e => { setActive(e.target.value); setMessage(''); setNotes([]); }}>{profiles.map(p => <option key={p.profileId} value={p.profileId}>{p.profileName}</option>)}</select>
         <p>Uses the currently selected resume, including your edits. Creates a separate copy; your original, identity, dates, design and locked sections stay unchanged.</p>
