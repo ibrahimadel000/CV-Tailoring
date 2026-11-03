@@ -20,7 +20,7 @@ test('native packet aligns summary-content guidance while retaining source and f
  assert(packet.source.skillIds.includes('skill_1'));assert(packet.source.evidence.some(f=>f.id==='skill_1'));
  const schema=n.googleNaturalSchema(packet),ids=packet.outputContract.properties.summarySegments.items.properties.sourceIds.items.enum;
  assert(ids.includes('skill_1'));assert.deepEqual(schema.properties.summarySegments.items.properties.sourceIds.items.enum,ids);
- assert.equal(packet.revision,'document-compose-natural-segments-6-contextual-authoring');
+ assert.equal(packet.revision,'document-compose-natural-segments-10-editorial-preview');
 });
 test('different job focus leaves actual evidence unchanged and never adds candidate facts',()=>{
  const p=fixture(),before=JSON.stringify(p),a=n.prepareNaturalComposition(p,job);
@@ -29,13 +29,13 @@ test('different job focus leaves actual evidence unchanged and never adds candid
  assert.equal(JSON.stringify(p),before);assert(!JSON.stringify(a.documentBrief).includes('SYNTHETIC STYLE CONTRASTS'));
 });
 test('manually authored software-development overview compiles without copying work bullets',()=>{
- const p=fixture(),text='Software engineer combining web application development with improvements to delivery workflows.';
+ const p=fixture(),text='Software engineer combining data dashboard development with improvements to delivery workflows.';
  const r=response(p,[unit(text,['headline','work_1_b1','work_1_b2'])]),out=n.compileNaturalComposition(p,r);
  assert.equal(out.candidate.summary.data,text);assert.deepEqual(out.candidate.experience,p.experience);
  assert(!p.experience.data[0].bullets.some(b=>b.text===text));assert.equal(out.semanticStatus,'unassessed');
 });
 test('manually authored onboarding focus uses existing developer work and training, not a new role',()=>{
- const p=fixture(),text='Software engineer with a background in web application development and developer onboarding.';
+ const p=fixture(),text='Software engineer with a background in data dashboard development and developer onboarding.';
  const out=n.compileNaturalComposition(p,response(p,[unit(text,['headline','work_1_b1','work_1_b3'])]));
  assert.equal(out.candidate.summary.data,text);assert.deepEqual(out.candidate.resumeHeader,p.resumeHeader);
  assert.equal(out.candidate.experience.data[0].roleTitle,'Software Engineer');
@@ -95,7 +95,7 @@ test('modified summary guidance is still part of the authoritative packet bindin
 });
 test('one mock invocation yields one separate native copy; original, locks, IDs and design remain intact',async()=>{
  const p=fixture();p.projects.isLocked=true;const snapshot=JSON.stringify(p);
- let active=p,calls=0,saves=0;const text='Software engineer combining web application development with improvements to delivery workflows.';
+ let active=p,calls=0,saves=0;const text='Software engineer combining data dashboard development with improvements to delivery workflows.';
  const run=createCompositionRunner({readActive:()=>active,appendIfCurrent(s,copy){
   assert.equal(s,snapshot);saves++;active=copy;return true;
  }},async packet=>{calls++;assert(packet.documentBrief.summaryEvidence);n.googleNaturalSchema(packet);
@@ -107,20 +107,24 @@ test('one mock invocation yields one separate native copy; original, locks, IDs 
   assert.deepEqual(active[k],p[k],k);
  assert.equal(active.summary.data,text);assert.equal(out.semanticStatus,'unassessed');
 });
-test('guidance is not a semantic gate: invented interest and copied bullets still require editorial review',()=>{
+test('guidance is not a semantic gate: invented interest still requires editorial review, copied bullets are now removed',()=>{
  const p=fixture();
- for(const segment of [unit('Passionate about interface design.',['work_1_b1']),unit(p.experience.data[0].bullets[0].text,['work_1_b1'])]){
-  const out=n.compileNaturalComposition(p,response(p,[segment]));
-  assert.equal(out.candidate.summary.data,segment.text);assert.equal(out.semanticStatus,'unassessed');
- }
- // Passing here exposes the known gap; it is NOT acceptance of either prose sample.
+ // Invented interest shares no wording with its citation: literal checks cannot
+ // see it, so it still passes unassessed. This is NOT acceptance of the prose.
+ const invented=n.compileNaturalComposition(p,response(p,[unit('Passionate about interface design.',['work_1_b1'])]));
+ assert.equal(invented.candidate.summary.data,'Passionate about interface design.');assert.equal(invented.semanticStatus,'unassessed');
+ // A copied bullet is maximally "supported", so grounding could never catch it;
+ // the duplication guard now removes it and keeps the original summary instead.
+ const copied=n.compileNaturalComposition(p,response(p,[unit(p.experience.data[0].bullets[0].text,['work_1_b1'])]));
+ assert.equal(copied.candidate.summary.data,p.summary.data.trim());
+ assert(copied.guardNotes.some(g=>g.kind==='removed'&&g.message.includes('repeats one experience/project passage')));
 });
 // SC3 editorial reference cases: authored by hand, NOT generated-writing evidence.
 test('SC3 compact architecture and delivery overview survives the unchanged native boundary',()=>{
  const p=fixture(),before=JSON.stringify(p);
- p.summary.data='I work at the intersection of technology and management.';
+ p.summary.data='I develop reporting tools and support project coordination.';
  const snapshot=JSON.stringify(p);
- const text='Software engineer with a background in web application development, technical architecture and delivery workflow improvement.';
+ const text='Software engineer with a background in data dashboard development, reporting architecture and delivery workflow improvement.';
  const out=n.compileNaturalComposition(p,response(p,[unit(text,['headline','work_1_b1','work_1_b2'])]));
  assert.equal(out.candidate.summary.data,text);assert.deepEqual(out.summaryRemovals,[]);
  assert.deepEqual(out.summaryTrace[0].sources.map(f=>f.sourceId),['headline','work_1_b1','work_1_b2']);
@@ -130,11 +134,11 @@ test('SC3 compact architecture and delivery overview survives the unchanged nati
   assert(!out.candidate.summary.data.includes(absent));
 });
 test('profile-only wording keeps the original summary when professional work evidence exists, without rewriting it',()=>{
- const p=fixture();p.summary.data='I work at the intersection of technology and management. I collaborate across teams.';
- const generic=unit('I work at the intersection of technology and management.',['summary']),before=JSON.stringify(p);
+ const p=fixture();p.summary.data='I develop reporting tools and support project coordination. I collaborate across teams.';
+ const generic=unit('I develop reporting tools and support project coordination.',['summary']),before=JSON.stringify(p);
  // Claim guard: the unsupported introduction is dropped and the original summary kept
  // with a review note, instead of failing the whole document.
  const out=n.compileNaturalComposition(p,response(p,[generic]));
  assert.equal(out.candidate.summary.data,p.summary.data);assert.equal(JSON.stringify(p),before);
- assert(out.warnings.some(w=>w.path==='summary'&&w.message.includes('not based on your experience')));
+ assert(out.warnings.some(w=>w.path==='summary'&&w.message.includes('did not cite required experience or qualification evidence')));
 });

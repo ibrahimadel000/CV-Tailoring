@@ -6,8 +6,9 @@
  */
 import type { Source } from '../contentEngine/engine';
 import { isEntryMetadata } from './references';
-import { buildTermIndex, analyzeTerms, unsupportedNumbers, type Term } from './terms';
+import { buildTermIndex, analyzeTerms, unsupportedNumbers, copiedPassage, type Term } from './terms';
 import { containsSkillName } from './summaryBoundary';
+import { scopeRisk } from './scopeRisk';
 
 type Paragraph = { text: string; sourceIds: string[] };
 type Entry = { id: string; overview: Paragraph; bullets: Paragraph[] };
@@ -27,6 +28,9 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
   const facts = new Map(source.evidence.map(f => [f.id, f]));
   const skillNames = source.evidence.filter(f => f.kind === 'skill').map(f => f.text.split(' — ')[0]);
   const index: Term[] = buildTermIndex(skillNames);
+  // Work/project passages a summary or overview must synthesize, not repeat.
+  // Copying is always literally "supported", so grounding checks miss it.
+  const narrative = source.evidence.filter(f => f.kind === 'achievement' || f.kind === 'role');
 
   // Summary: valid, deduplicated references only; budgets enforced by omission, never truncation.
   let summarySegments: Paragraph[] = [];
@@ -47,15 +51,24 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       // A cited term or number is not proof of the claim's meaning or scope.
       // Skill-only practice claims are checked separately by summaryBoundary.
       const cited = ids.map(id => facts.get(id)!);
+      if (copiedPassage(text, narrative)) {
+        notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that repeats one experience/project passage instead of introducing your background.' });
+        continue;
+      }
       const support = cited.map(f => f.text);
-      const narrative = cited.filter(f => f.kind !== 'skill');
+      const citedNarrative = cited.filter(f => f.kind !== 'skill');
       // Let the dedicated boundary handle and report its own removals.
-      const boundaryWillRemove = !narrative.length || skillNames.some(name => containsSkillName(text, name)
-        && !narrative.some(f => containsSkillName(f.text, name)));
+      const boundaryWillRemove = !citedNarrative.length || skillNames.some(name => containsSkillName(text, name)
+        && !citedNarrative.some(f => containsSkillName(f.text, name)));
       const signals = analyzeTerms(text, support, index);
       const terms = signals.unsupported.map(t => t.label), numbers = unsupportedNumbers(text, support);
       if (!boundaryWillRemove && (terms.length || numbers.length)) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: `Removed a generated summary passage because it added ${list([...terms, ...numbers])}, which its cited CV content does not mention.` });
+        continue;
+      }
+      const risks = scopeRisk(text, cited.filter(f => f.kind !== 'skill' && f.kind !== 'headline' && !isEntryMetadata(f.id)).map(f => f.text));
+      if (!boundaryWillRemove && risks.length) {
+        notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: `Removed a generated summary passage because ${risks.join('; ')}. This is a limited local check, not factual verification.` });
         continue;
       }
       const cost = (used ? 1 : 0) + text.length;
@@ -119,6 +132,11 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because the rewrite added ${list([...terms, ...numbers])}, which this part of your CV does not mention.` });
         return ids.map(original);
       }
+      const risks = scopeRisk(p.text, ids.map(id => facts.get(id)!.text));
+      if (risks.length) {
+        notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because ${risks.join('; ')}. This is a limited local check, not factual verification.` });
+        return ids.map(original);
+      }
       if (signals.splitPhrases.length) notes.push({ path: where, kind: 'review', message: `${label}: review ${list(signals.splitPhrases)}. The cited source uses a different word order; this literal match does not verify the claim or its scope.` });
       return null; // accepted as written; no semantic verification
     };
@@ -126,12 +144,21 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     if (u.overviewId && w.overview.text.trim()) {
       const text = w.overview.text.trim();
       const result = check({ text, sourceIds: w.overview.sourceIds }, `entries.${u.id}.overview`, true);
-      overview = result === null ? { text, sourceIds: unique(w.overview.sourceIds) } : original(u.overviewId);
+      // An unchanged original may legitimately resemble its own bullet; a NEW
+      // overview that repeats one contribution adds no overview value.
+      const repeatsOwnBullet = result === null && text !== facts.get(u.overviewId)!.text
+        && copiedPassage(text, u.bulletIds.map(id => facts.get(id)!).filter(Boolean));
+      if (repeatsOwnBullet) {
+        notes.push({ path: `entries.${u.id}.overview`, kind: 'restored', message: `${label}: kept your original overview because the AI version repeated one of this entry's own contributions.` });
+        overview = original(u.overviewId);
+      } else overview = result === null ? { text, sourceIds: unique(w.overview.sourceIds) } : original(u.overviewId);
     } else if (!u.overviewId && (w.overview.text.trim() || w.overview.sourceIds.length)) {
       notes.push({ path: `entries.${u.id}.overview`, kind: 'ignored', message: `${label}: ignored a new overview paragraph; contributions stay in bullets.` });
     }
     const bullets: Paragraph[] = [];
     const seen = new Set<string>();
+    const accepted: Paragraph[] = [];
+    const restoredIds = new Set<string>();
     const push = (p: Paragraph) => { const key = p.text + ' ' + p.sourceIds.join(','); if (!seen.has(key)) { seen.add(key); bullets.push(p); } };
     for (const [j, b] of w.bullets.entries()) {
       const text = b.text.trim();
@@ -143,12 +170,45 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         continue;
       }
       const result = check({ text, sourceIds: b.sourceIds }, `entries.${u.id}.bullets.${j}`);
-      if (result === null) push({ text, sourceIds: unique(b.sourceIds).filter(id => !isEntryMetadata(id)) });
-      else for (const r of result) if (!(overview.text && r.sourceIds[0] === u.overviewId)) push(r);
+      if (result === null) {
+        const paragraph = { text, sourceIds: unique(b.sourceIds).filter(id => !isEntryMetadata(id)) };
+        accepted.push(paragraph);
+        push(paragraph);
+      } else for (const r of result) if (!(overview.text && r.sourceIds[0] === u.overviewId)) {
+        restoredIds.add(r.sourceIds[0]);
+        push(r);
+      }
     }
     if (ambiguousLine) {
       notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept the complete original entry because a rejected line could not be matched safely to its source.` });
       return originalEntry;
+    }
+    // If a rejected split/combined passage causes an original to be restored,
+    // another accepted passage citing that same source can duplicate it. Restore
+    // the connected cited originals instead of trying to merge their meanings.
+    // Independent edits and valid splits with no restoration remain untouched.
+    const originalText = (id: string) => facts.get(id)?.text;
+    const changed = (p: Paragraph) => p.sourceIds.length !== 1 || p.text !== originalText(p.sourceIds[0]);
+    let overlap = false, expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const p of accepted) if (changed(p) && p.sourceIds.some(id => restoredIds.has(id))) {
+        overlap = true;
+        for (const id of p.sourceIds) if (!restoredIds.has(id)) { restoredIds.add(id); expanded = true; }
+      }
+    }
+    if (overlap) {
+      const rebuilt: Paragraph[] = [], emitted = new Set<string>();
+      const sourceOrder = [u.overviewId, ...u.bulletIds].filter((id): id is string => !!id);
+      for (const p of bullets) {
+        if (!p.sourceIds.some(id => restoredIds.has(id))) { rebuilt.push(p); continue; }
+        for (const id of sourceOrder) if (p.sourceIds.includes(id) && restoredIds.has(id) && !emitted.has(id)) {
+          emitted.add(id);
+          if (!(overview.text && id === u.overviewId)) rebuilt.push(original(id));
+        }
+      }
+      bullets.splice(0, bullets.length, ...rebuilt);
+      notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept original wording for overlapping source passages to avoid repeating a rejected rewrite; independent edits were retained.` });
     }
     if (!bullets.length && !overview.text && own.size) {
       notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept your original wording because the AI removed every contribution.` });
