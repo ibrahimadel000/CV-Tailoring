@@ -1,8 +1,9 @@
 import { v4 as uuid } from 'uuid';
 import { cvProfileSchema, type CVProfile } from '@/types/schema';
 import { professionalContent, CompositionError } from './core';
-import { compileNaturalComposition, prepareNaturalComposition, type NaturalPacket } from './naturalDocument';
+import { compileNaturalComposition, naturalDocumentSchema, prepareNaturalComposition, type NaturalPacket } from './naturalDocument';
 import { summaryBoundaryNotice } from './summaryBoundary';
+import { summarizeChanges, summarizeProposal } from './changeSummary';
 
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
 export type ComposeProvider = (packet: NaturalPacket, signal: AbortSignal) => Promise<unknown>;
@@ -37,12 +38,19 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         ensureCurrent();
         const response = await cancellable(provider(packet, token.signal), token.signal); // Exactly one invocation.
         ensureCurrent();
-        const result = compileNaturalComposition(profile, response);
+        const result = compileNaturalComposition(profile, response, packet.job);
+        // Compilation already validates the response. Retain counts only, not
+        // raw provider content, to distinguish AI wording from later checks.
+        const proposalComparison = summarizeProposal(packet.source, naturalDocumentSchema.parse(response));
         if (professionalContent(result.candidate) === professionalContent(profile)) {
           // Keeping already-good wording is a valid outcome, not an AI failure.
-          return { ...result, candidate: profile, status: 'unchanged' as const, profileId: profile.profileId };
+          return { ...result, proposalComparison, candidate: profile, status: 'unchanged' as const, profileId: profile.profileId };
         }
         const copy = result.candidate;
+        // Compare before copy metadata is changed. Kept locally, not sent to
+        // the provider or embedded in the exported resume.
+        copy.compositionChanges = summarizeChanges(profile, copy);
+        copy.compositionChanges.proposal = proposalComparison;
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;
         copy.profileName = `${profile.profileName} — Tailored`;
         copy.targetJob = packet.job; copy.version = profile.version + 1; copy.lastConfirmed = '';
@@ -58,7 +66,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         cvProfileSchema.parse(copy);
         ensureCurrent();
         if (!repository.appendIfCurrent(snapshot, copy)) throw new CompositionError('stale', 'Source changed at commit; nothing was saved.');
-        return { ...result, status: 'created' as const, profileId: copy.profileId };
+        return { ...result, proposalComparison, status: 'created' as const, profileId: copy.profileId };
       } finally { signal.removeEventListener('abort', abort); if (current === token) current = undefined; }
     },
   };

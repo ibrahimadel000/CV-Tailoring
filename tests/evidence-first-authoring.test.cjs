@@ -17,18 +17,18 @@ test('tampering with an authoring-view fact is rejected by actual provider schem
  const packet=n.prepareNaturalComposition(fixture(),job);packet.documentBrief.summaryEvidence.primaryFacts[0].text='Invented production API work';a.throws(()=>n.googleNaturalSchema(packet),/contract mismatch/);
 });
 test('a compact work-based introduction remains accepted without adding a capability inventory',()=>{
- const p=fixture(),text='Software engineer combining web application development with delivery workflow improvement.';
+ const p=fixture(),text='Software engineer combining data dashboard development with delivery workflow improvement.';
  const out=n.compileNaturalComposition(p,written(p,[unit(text,['work_1_b1','work_1_b2'])]));a.equal(out.candidate.summary.data,text);a.deepEqual(out.summaryCapabilityIds,[]);a.equal(out.semanticStatus,'unassessed');
 });
 test('a removed narrative passage cannot rescue a retained profile-only introduction',()=>{
- const p=fixture();p.summary.data='I work at the intersection of technology and management. I collaborate across teams.';
- const r=written(p,[unit('I work at the intersection of technology and management.',['summary']),unit('Expert building production RESTful APIs using Python.',['work_1_b1','skill_1','skill_2'])]);
+ const p=fixture();p.summary.data='I develop reporting tools and support project coordination. I collaborate across teams.';
+ const r=written(p,[unit('I develop reporting tools and support project coordination.',['summary']),unit('Expert building production RESTful APIs using Python.',['work_1_b1','skill_1','skill_2'])]);
  // Claim guard: the document compiles; the unsupported introduction is dropped, the
  // boundary removal stands, and the original summary is kept, with review notes.
  const out=n.compileNaturalComposition(p,r);
  a.equal(out.candidate.summary.data,p.summary.data);
  a.equal(out.summaryRemovals.length,1);
- a(out.warnings.some(w=>w.path==='summary'&&w.message.includes('not based on your experience')));
+ a(out.warnings.some(w=>w.path==='summary'&&w.message.includes('did not cite required experience or qualification evidence')));
 });
 test('qualification-led introduction preserves in-progress scope without pretending it is work',()=>{
  const p=fixture();p.education.data[0].degree='B.Sc. Computer Science (in progress)';
@@ -37,7 +37,7 @@ test('qualification-led introduction preserves in-progress scope without pretend
 });
 test('explicit personal direction can supplement a supported professional introduction',()=>{
  const p=fixture();p.summary.data='Interested in accessible web interfaces.';
- const out=n.compileNaturalComposition(p,written(p,[unit('Background in web application development.',['work_1_b1']),unit(p.summary.data,['summary'])]));a(out.candidate.summary.data.endsWith(p.summary.data));
+ const out=n.compileNaturalComposition(p,written(p,[unit('Background in data dashboard development.',['work_1_b1']),unit(p.summary.data,['summary'])]));a(out.candidate.summary.data.endsWith(p.summary.data));
 });
 test('context-only sparse sources are not forced to invent a work anchor',()=>{
  const p=fixture();p.experience.data=[];p.projects.data=[];p.education.data=[];p.certifications.data=[];p.summary.data='Interested in accessible web interfaces.';
@@ -45,7 +45,7 @@ test('context-only sparse sources are not forced to invent a work anchor',()=>{
  a.equal(n.compileNaturalComposition(p,written(p,[unit(p.summary.data,['summary'])])).candidate.summary.data,p.summary.data);
 });
 test('locked work remains usable as evidence without editing it; locked summary has no authoring facts',()=>{
- const p=fixture();p.experience.isLocked=true;const text='Background in web application development.';
+ const p=fixture();p.experience.isLocked=true;const text='Background in data dashboard development.';
  const out=n.compileNaturalComposition(p,written(p,[unit(text,['work_1_b1'])]));a.equal(out.candidate.summary.data,text);a.deepEqual(out.candidate.experience,p.experience);
  p.summary.isLocked=true;const b=n.prepareNaturalComposition(p,job).documentBrief.summaryEvidence;a.deepEqual(b.primaryFacts,[]);a.deepEqual(b.profileContext,[]);
 });

@@ -19,9 +19,11 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
 }
 const signal=()=>new AbortController().signal;
 const complete=raw=>({ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}})});
-test('SC5 prompt exactly matches frozen candidate and UI visibly names actual preview/model',()=>{
- a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'6cbfcfb6dd7c652e2d5ebf8d7473a32b579279811814d94e489565f64135af3e');
- const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental summary-composition preview'));a(!ui.includes('Gemini 2.5 Flash'));
+test('SC5.5 prompt exactly matches its frozen experimental candidate and UI visibly names actual preview/model',()=>{
+ // Frozen SC5.5 experimental prompt: encourages meaningful, bounded edits and
+ // asks for the qualifying narrative references used by the introduction.
+ a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'4bdf32fd79b1858fba7c7fd2bc0fc8af6895349f53cbd135da2b75260ce78840');
+ const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental tailoring preview'));a(!ui.includes('Gemini 2.5 Flash'));
 });
 test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full packet/schema and candidate instructions',async()=>{
  let calls=0;const raw={summarySegments:[],entries:[],skillSelections:[]};
@@ -31,7 +33,7 @@ test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full
   a.equal(options.headers['x-goog-api-key'],'synthetic-preview-key');a(!options.body.includes('synthetic-preview-key'));return complete(raw);
  });
  a.deepEqual(JSON.parse(JSON.stringify(await x.requestComposition(fakePacket,signal()))),raw);a.equal(calls,1);
- a.equal(x.COMPOSITION_MODEL,'gemini-3.5-flash-lite');a.equal(x.COMPOSITION_PREVIEW_LABEL,'SC5.1 · Gemini 3.5 Flash-Lite · experimental');
+ a.equal(x.COMPOSITION_MODEL,'gemini-3.5-flash-lite');a.equal(x.COMPOSITION_PREVIEW_LABEL,'SC5.9 · Gemini 3.5 Flash-Lite · experimental');
  a.equal(x.records[0].model,'gemini-3.5-flash-lite');a.equal(x.records[0].status,'success');a.equal(x.records[0].attempts,1);a(!JSON.stringify(x.records).includes('NOT_FOR_EXPORT'));
 });
 for(const status of [429,503])test('HTTP'+status+' stops one fetch, records failure, never retries',async()=>{
