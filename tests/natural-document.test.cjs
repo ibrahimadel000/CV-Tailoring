@@ -176,8 +176,9 @@ test('interleaved selected categories keep native binder order; category group o
 });
 test('equivalent duplicates across categories collapse to first chosen native record with visible note',()=>{
  const p=fixture(),r=response(p);r.skillSelections=[{id:'skill_5',category:'Soft'},{id:'skill_4',category:'Technical'}];
- const out=compile(p,r);assert.deepEqual(out.candidate.skills.data,[{...p.skills.data[4],category:'Soft'}]);
+ const out=compile(p,r);assert.deepEqual(out.candidate.skills.data,[{...p.skills.data[4],category:'Technical'}]);
  assert.equal(out.normalizations[0].retainedId,'skill_5');assert.equal(out.normalizations[0].omittedId,'skill_4');
+ assert.match(out.normalizations[0].reason,/display category was adjusted separately/);assert(out.warnings.some(w=>/Grouped your existing skill/.test(w.message)));
  assert.equal(out.draft.omittedSkills.find(s=>s.sourceId==='skill_4').reason,out.normalizations[0].reason);
 });
 test('different levels do not collapse',()=>{
