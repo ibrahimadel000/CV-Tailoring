@@ -378,7 +378,8 @@ test('unsupported summary additions are omitted with a visible review note', asy
   });
   const original = await seed(page, sourceProfile(false)); await tailor(page);
   await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review 2 content notes/).click();
+  await expect(page.getByText(/Only one generated summary sentence remains/).first()).toBeVisible();
   await expect(page.getByText(/Removed a generated summary passage because it added/).first()).toContainText('Kubernetes');
   await expect(page.getByText(/Removed a generated summary passage because it added/).first()).toContainText('500');
   await saved(page);
@@ -389,7 +390,7 @@ test('unsupported summary additions are omitted with a visible review note', asy
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.summary.data).toBe(NARRATIVE_SUMMARY);
   await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review 2 content notes/).click();
   await expect(page.getByText(/Removed a generated summary passage because it added/).first()).toContainText('500');
   await expect(page.getByText(/These notes were recorded during tailoring and may not reflect later edits/)).toBeVisible();
   const copyId = copy.profileId;
@@ -410,7 +411,7 @@ test('unsupported summary additions are omitted with a visible review note', asy
   await page.getByLabel('Your professional summary', { exact: true }).fill('Built applications in a classroom exercise.');
   await expect.poll(async () => (await stored(page)).profiles.find(p => p.profileId === copyId).summary.data).toBe('Built applications in a classroom exercise.');
   await saved(page); await page.reload(); await saved(page);
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review 2 content notes/).click();
   await expect(page.getByText(/may not reflect later edits/)).toBeVisible();
   expect((await stored(page)).profiles.find(p => p.profileId === original.profileId)).toEqual(original);
   checkWire(sc1Harness);
@@ -434,7 +435,8 @@ test('copied introduction passage is removed, with note and separate copy preser
   });
   const original = await seed(page, source); await tailor(page);
   await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review 2 content notes/).click();
+  await expect(page.getByText(/Only one generated summary sentence remains/).first()).toBeVisible();
   await expect(page.getByText(/Removed a summary sentence that repeats one experience\/project passage/).first()).toBeVisible();
   await saved(page); let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.summary.data).toBe(synthesized);
@@ -443,7 +445,7 @@ test('copied introduction passage is removed, with note and separate copy preser
   await page.reload(); await saved(page);
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.summary.data).toBe(synthesized);
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review 2 content notes/).click();
   await expect(page.getByText(/Removed a summary sentence that repeats one experience\/project passage/).first()).toBeVisible();
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain(synthesized); expect(pdf).toContain(copied); // The original experience remains.
@@ -754,5 +756,39 @@ test('a misgrouped qualified method is corrected in the separate copy and surviv
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain('Project Management'); expect(pdf).toContain('Coursework only');
   expect(pdf).not.toContain('Grouped your existing skill');
+  checkWire(sc1Harness);
+});
+
+test('narrowed reordered summary is disclosed and compared without altering source or PDF', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile(false); p.experience.isLocked = false;
+  p.summary.data = 'I support reporting work and team coordination.';
+  const first = 'Designed and engineered customer reporting dashboards and technical architectures for daily operations.';
+  const second = 'Streamlined approval workflows and delivery pipelines, reducing manual overhead and improving release timelines.';
+  const kept = 'Streamlined approval workflows and delivery pipelines to improve release timelines and reduce manual overhead.';
+  p.experience.data[0].bullets = [first, second].map(text => ({ id: crypto.randomUUID(), text, isVerified: true }));
+  sc1Harness.respond(packet => {
+    const doc = authoredDocument(packet);
+    doc.summarySegments = [{ text: 'Engineered customer reporting dashboards and technical architectures for daily operations.', sourceIds: ['work_1_b1'] }, { text: kept, sourceIds: ['work_1_b2'] }];
+    doc.alternativeSummarySegments = [];
+    return { body: completed(doc) };
+  });
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  let state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(copy.summary.data).toBe(kept);
+  expect(copy.compositionReview.notes.some(x => x.includes('Only one generated summary sentence remains'))).toBe(true);
+  expect(copy.compositionReview.notes.some(x => x.includes('possibly in a different order'))).toBe(true);
+  await page.getByText('Compare current summaries', { exact: true }).click();
+  const comparison = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Compare current summaries' }) }).last();
+  await expect(comparison.getByText(original.summary.data, { exact: true })).toBeVisible();
+  await expect(comparison.getByText(kept, { exact: true })).toBeVisible();
+  await page.reload(); await saved(page);
+  await page.getByText(/Review \d+ content note/).click();
+  await expect(page.getByText(/Only one generated summary sentence remains/).first()).toBeVisible();
+  await expect(page.getByText(/possibly in a different order/).first()).toBeVisible();
+  state = await stored(page); expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  const pdf = await exportedText(page, testInfo);
+  expect(pdf).toContain(kept); expect(pdf).not.toContain('Only one generated summary sentence remains');
   checkWire(sc1Harness);
 });
