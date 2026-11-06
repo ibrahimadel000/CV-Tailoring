@@ -19,9 +19,9 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
 }
 const signal=()=>new AbortController().signal;
 const complete=raw=>({ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}})});
-test('alternative-entry prompt exactly matches its experimental revision and UI visibly names actual preview/model',()=>{
- // Frozen alternative-entry preview prompt; the hash detects unintended changes.
- a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'8b8886e7df2f84524e239dacaace562c7afef7afa347d47e56af9275fa41f91d');
+test('draft-first prompt exactly matches its experimental revision and UI visibly names actual preview/model',()=>{
+ // Frozen draft-first preview prompt; the hash detects unintended changes.
+ a.equal(crypto.createHash('sha256').update(instructions).digest('hex'),'ab67009d35ee445d7d91803092a2ca94b96aa6143145228eec9f64e5d824d391');
  const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental tailoring preview'));a(!ui.includes('Gemini 2.5 Flash'));
 });
 test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full packet/schema and candidate instructions',async()=>{

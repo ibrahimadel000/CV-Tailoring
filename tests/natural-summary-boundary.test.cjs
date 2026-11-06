@@ -108,7 +108,8 @@ test('removal notice is outside collapsed review notes and is passed to the edit
  // Static wiring only; browser/mobile visibility still needs user-side checking.
 });
 test('review notes are saved only with the new copy and excluded from AI and resume content',async()=>{
- const p=fixture(),before=JSON.stringify(p),r=response(p);
+ const p=fixture();p.experience.data[0].id='00000000-0000-4000-8500-000000000000'; // IDs are not rendered resume text.
+ const before=JSON.stringify(p),r=response(p);
  r.summarySegments=[r.summarySegments[0],{text:'Built applications for 500 clients.',sourceIds:['work_1_b1']}];
  let active=p,copy,packet;
  const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,next){assert.equal(snapshot,before);copy=next;active=next;return true;}},async sent=>{packet=sent;return r;});
@@ -116,7 +117,8 @@ test('review notes are saved only with the new copy and excluded from AI and res
  assert.equal(out.status,'created');assert.equal(JSON.stringify(p),before);
  assert(copy.compositionReview.notes.some(note=>note.includes('500')));
  assert(copy.compositionReview.text.includes('Some content needs your review'));
- assert(!JSON.stringify(resumeBlocks(copy)).includes('500'));
+ const visible=resumeBlocks(copy).map(({id,...block})=>({...block,items:block.items.map(({entryId,...item})=>item)}));
+ assert(!JSON.stringify(visible).includes('500'));
  assert(!JSON.stringify(packet).includes('compositionReview'));
  const schema=load('types/schema').cvProfileSchema;assert(schema.safeParse(JSON.parse(JSON.stringify(copy))).success);
 });
