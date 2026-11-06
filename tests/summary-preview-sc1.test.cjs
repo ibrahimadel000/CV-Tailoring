@@ -51,3 +51,9 @@ test('metrics contain no packet, prompt, key or response document',async()=>{
  const x=adapter(async()=>complete({summarySegments:[{text:'FICTIONAL_PRIVATE_SENTINEL',sourceIds:['fictional']}],entries:[],skillSelections:[]}));await x.requestComposition(fakePacket,signal());
  for(const value of ['FICTIONAL_PRIVATE_SENTINEL','synthetic-preview-key',instructions])a(!JSON.stringify(x.records).includes(value));
 });
+for(const model of ['gemini-3-flash-preview','gemini-3.8-flash']) test('explicit '+model+' selection makes one request and records the selected model',async()=>{
+ let calls=0;const x=adapter(async(url)=>{calls++;a(url.endsWith('/'+model+':generateContent'));return complete({summarySegments:[],entries:[],skillSelections:[]})});
+ await x.requestComposition(fakePacket,signal(),model);a.equal(calls,1);a.equal(x.records[0].model,model);a.equal(x.records[0].attempts,1);
+});
+test('unsupported model fails before any fetch',async()=>{let calls=0;const x=adapter(async()=>{calls++;});await a.rejects(x.requestComposition(fakePacket,signal(),'unknown-model'),/Unsupported model/);a.equal(calls,0);a.equal(x.records.length,0);});
+test('selected model error never falls back to another model',async()=>{let calls=0;const x=adapter(async(url)=>{calls++;a(url.endsWith('/gemini-3.8-flash:generateContent'));return {ok:false,status:503};});await a.rejects(x.requestComposition(fakePacket,signal(),'gemini-3.8-flash'),/No automatic retry/);a.equal(calls,1);a.equal(x.records[0].model,'gemini-3.8-flash');});

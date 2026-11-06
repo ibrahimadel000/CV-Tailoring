@@ -4,11 +4,19 @@ import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraf
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorRequest';
 export const COMPOSITION_MODEL = 'gemini-3.5-flash-lite';
+// Explicit, bounded development choices; never silently switch or retry.
+export const COMPOSITION_MODELS = [
+  { id: COMPOSITION_MODEL, label: 'Gemini 3.5 Flash-Lite' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+] as const;
+export type CompositionModel = typeof COMPOSITION_MODELS[number]['id'];
 export const COMPOSITION_TIMEOUT_MS = 300000;
 export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Flash-Lite · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
-export async function requestComposition(packet: NaturalPacket, signal: AbortSignal): Promise<unknown> {
+export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
+  if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
   if (!getTailorConnection().ready) throw new TailorError('configuration', 'AI is not connected. Public deployment requires a secure server adapter.');
   const { responseSchema: schema, wire } = prepareSingleDraftRequest(packet);
@@ -18,7 +26,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
   const abort = () => controller.abort(); signal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, COMPOSITION_TIMEOUT_MS);
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${COMPOSITION_MODEL}:generateContent`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
       body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig: { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } } }),
     });
@@ -46,6 +54,6 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
     throw new TailorError(reason, timedOut ? 'Request timed out. No automatic retry.' : 'Request could not complete. No automatic retry.');
   } finally {
     clearTimeout(timer); signal.removeEventListener('abort', abort);
-    saveTailorUsage({ id: crypto.randomUUID(), at: new Date().toISOString(), model: COMPOSITION_MODEL, elapsedMs: Math.round(performance.now() - started), attempts: 1, status, reason, ...usage });
+    saveTailorUsage({ id: crypto.randomUUID(), at: new Date().toISOString(), model, elapsedMs: Math.round(performance.now() - started), attempts: 1, status, reason, ...usage });
   }
 }
