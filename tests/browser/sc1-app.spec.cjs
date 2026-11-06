@@ -144,7 +144,7 @@ function checkWire(sc1Harness) {
   expect(packet.job).toBe(JOB);
   expect(packet.documentBrief.summaryEvidence).toBeDefined();
   expect(packet.documentBrief.authoringView).toBeDefined();
-  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'alternativeSummarySegments', 'entries', 'skillSelections']);
+  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'alternativeSummarySegments', 'entries', 'alternativeEntries', 'skillSelections']);
   expect(JSON.stringify(body)).not.toContain('SC5_PRIVATE_CONTACT');
 }
 function checkPreserved(original, copy) {
@@ -790,5 +790,33 @@ test('narrowed reordered summary is disclosed and compared without altering sour
   state = await stored(page); expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain(kept); expect(pdf).not.toContain('Only one generated summary sentence remains');
+  checkWire(sc1Harness);
+});
+
+test('one-response alternative experience is guarded, editable, compared and exported', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile(true), first = 'Was responsible for the organization of weekly team meetings for coordinating project updates.';
+  const second = 'Wrote technical documentation for classroom reporting projects.';
+  const edited = 'Organized weekly team meetings to coordinate project updates.';
+  p.experience.data[0].bullets = [first, second].map(text => ({ id: crypto.randomUUID(), text, isVerified: true }));
+  sc1Harness.respond(packet => {
+    const doc = authoredDocument(packet);
+    doc.alternativeEntries = JSON.parse(JSON.stringify(doc.entries));
+    doc.alternativeEntries[0].bullets[0].text = edited;
+    return { body: completed(doc) };
+  });
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  let state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(copy.experience.data[0].bullets.map(x => x.text)).toEqual([edited, second]);
+  expect(copy.compositionReview.notes.some(x => x.includes('Used an alternative AI draft'))).toBe(true);
+  await page.getByText('Compare current experience and projects', { exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Current source', exact: true }).getByText(first, { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Current tailored copy', exact: true }).getByText(edited, { exact: true })).toBeVisible();
+  await page.reload(); await saved(page);
+  await page.getByText(/Review \d+ content note/).click();
+  await expect(page.getByText(/Used an alternative AI draft/).first()).toBeVisible();
+  state = await stored(page); expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  const pdf = await exportedText(page, testInfo); expect(pdf).toContain(edited); expect(pdf).not.toContain('Used an alternative AI draft');
   checkWire(sc1Harness);
 });
