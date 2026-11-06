@@ -17,6 +17,7 @@ const entryChangeText = {
 export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
+  const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
   const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [notes, setNotes] = useState<string[]>([]);
   const runner = useRef<ReturnType<typeof createStoreComposer>>();
@@ -51,6 +52,12 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
         <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
+        {currentSource && <details>
+          <summary>Compare current summaries</summary>
+          <p>This compares the current source and copy; either may have changed since tailoring. Edit the copy in the editor after reviewing.</p>
+          <p><strong>Current source summary</strong></p><p style={{ whiteSpace: 'pre-wrap' }}>{currentSource.summary.data || '(Empty)'}</p>
+          <p><strong>Current tailored summary</strong></p><p style={{ whiteSpace: 'pre-wrap' }}>{active.summary.data || '(Empty)'}</p>
+        </details>}
         <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
         <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
         {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry. These counts cover the first response for each unlocked entry, not quality or accuracy.</p>}
