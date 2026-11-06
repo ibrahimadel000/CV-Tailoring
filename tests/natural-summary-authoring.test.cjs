@@ -20,7 +20,7 @@ test('native packet aligns summary-content guidance while retaining source and f
  assert(packet.source.skillIds.includes('skill_1'));assert(packet.source.evidence.some(f=>f.id==='skill_1'));
  const schema=n.googleNaturalSchema(packet),ids=packet.outputContract.properties.summarySegments.items.properties.sourceIds.items.enum;
  assert(ids.includes('skill_1'));assert.deepEqual(schema.properties.summarySegments.items.properties.sourceIds.items.enum,ids);
- assert.equal(packet.revision,'document-compose-natural-segments-12-entry-alternatives-preview');
+ assert.equal(packet.revision,'document-compose-natural-segments-13-draft-first-preview');
 });
 test('different job focus leaves actual evidence unchanged and never adds candidate facts',()=>{
  const p=fixture(),before=JSON.stringify(p),a=n.prepareNaturalComposition(p,job);
