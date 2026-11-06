@@ -51,12 +51,37 @@ test('supervised and independently-supported rewrites remain possible',()=>{
  ({actual}=compose('Assisted developers with testing web applications independently.','Supported developers in testing web applications independently.'));
  assert.equal(actual,'Supported developers in testing web applications independently.');
 });
-test('loss of supervision without explicit independence remains a known false negative',()=>{
- const {actual}=compose('Assisted developers with testing web applications under supervision.','Assisted developers with testing web applications.');
- assert.equal(actual,'Assisted developers with testing web applications.');
+test('loss of explicit supervision restores the original and explains why',()=>{
+ const source='Assisted developers with testing web applications under supervision.';
+ const {actual,out}=compose(source,'Assisted developers with testing web applications.');
+ assert.equal(actual,source);
+ assert(out.guardNotes.some(n=>n.path==='entries.work_1.bullets.0'&&n.kind==='restored'&&n.message.includes('supervision qualification')));
+});
+test('guidance and supervised-by qualifications are not silently dropped',()=>{
+ for (const source of ['Developed web applications under the guidance of a mentor.','Developed web applications supervised by a mentor.']) {
+  const {actual}=compose(source,'Developed web applications.');assert.equal(actual,source);
+ }
+});
+test('unchanged explicitly supervised source is not rejected',()=>{
+ const source='Developed web applications under supervision.';
+ const {actual}=compose(source,source);assert.equal(actual,source);
+});
+// A literal signal can reject a valid paraphrase using a different expression.
+test('unrecognized supervision paraphrases are conservatively restored',()=>{
+ const source='Assisted developers with testing web applications under supervision.';
+ const {actual}=compose(source,'Assisted developers with testing web applications while a mentor oversaw the work.');
+ assert.equal(actual,source);
 });
 test('literal negation guard may restore a valid positive-form paraphrase',()=>{
  const source='Improved delivery workflows without modifying customer data.';
  const {actual}=compose(source,'Improved delivery workflows while leaving customer data unchanged.');
  assert.equal(actual,source); // Known false positive; do not claim general semantic understanding.
+});
+test('summary cannot silently drop an explicit supervision qualifier',()=>{
+ const p=fixture();p.experience.data[0].bullets[0].text='Assisted developers with testing web applications under supervision.';
+ const s=n.prepareNaturalComposition(p,job).source,facts=new Map(s.evidence.map(e=>[e.id,e]));
+ const response={summarySegments:[{text:'Supported application testing for developers.',sourceIds:['work_1_b1']}],entries:s.experience.map(e=>({id:e.id,overview:{text:'',sourceIds:[]},bullets:e.bulletIds.map(id=>({text:facts.get(id).text,sourceIds:[id]}))})),skillSelections:[]};
+ const out=n.compileNaturalComposition(p,response,job);
+ assert(out.guardNotes.some(note=>note.path==='summarySegments.0'&&note.kind==='removed'&&note.message.includes('supervision qualification')));
+ assert.equal(out.candidate.summary.data,p.summary.data.trim());
 });

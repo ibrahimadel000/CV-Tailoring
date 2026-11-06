@@ -56,5 +56,7 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
   if (INDEPENDENT.test(proposed) && sources.some(source => SUPERVISED.test(source))
       && !sources.some(source => INDEPENDENT.test(source)))
     risks.push('independent work may conflict with the cited supervision wording');
+  else if (sources.some(source => SUPERVISED.test(source)) && !SUPERVISED.test(proposed))
+    risks.push('a supervision qualification may have been lost');
   return risks;
 }
