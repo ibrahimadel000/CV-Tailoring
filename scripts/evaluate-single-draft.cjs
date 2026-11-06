@@ -9,7 +9,7 @@ const natural=load('services/resumeComposer/naturalDocument');
 const writer=load('services/resumeComposer/singleDraftRequest');
 const {summarizeChanges,summarizeProposal}=load('services/resumeComposer/changeSummary');
 const {providerFailureMessage}=load('services/resumeComposer/providerDiagnostics');
-const MODEL='gemini-3-flash-preview',TIMEOUT_MS=300000,MAX_OUTPUT=8192;
+const MODEL='gemini-3.8-flash',TIMEOUT_MS=300000,MAX_OUTPUT=8192;
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 function isWithin(parent,child){const r=path.relative(parent,child);return !r || (!r.startsWith('..'+path.sep) && r!=='..' && !path.isAbsolute(r));}
 function checkGit(){try{const git=(...args)=>execFileSync('git',['-C',ROOT,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();const commit=git('rev-parse','HEAD');if(!/^[a-f0-9]{40}$/.test(commit)||git('status','--porcelain','--untracked-files=normal'))throw Error();return commit;}catch{throw Error('Use a clean, separate Git checkout. No request was made.');}}

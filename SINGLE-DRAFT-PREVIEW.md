@@ -23,7 +23,7 @@ Browser tests require separate browser-test dependencies and a compatible local 
 
 ## Optional private evaluation
 
-On this evaluation-only branch, the runner uses `gemini-3-flash-preview`, whereas the app's active composition path still uses `gemini-3.5-flash-lite`. The runner tests writing with the alternative model; it does not switch the application model or validate the live application workflow. Model availability, cost, writing quality and factuality remain unverified.
+On this evaluation-only branch, the runner uses `gemini-3.8-flash`, whereas the app's active composition path still uses `gemini-3.5-flash-lite`. The runner tests writing with the alternative model; it does not switch the application model or validate the live application workflow. Model availability, cost, writing quality and factuality remain unverified.
 
 Only after explicitly agreeing to send the chosen case to Google: the private runner reads a JSON case with `profile` and `job`, and reads the existing development key through Vite's development-mode environment selection. It makes at most one request per invocation, never retries, creates a uniquely named results folder outside the repository, and does not change browser data or resumes. Each invocation is another potential billable request and must be within an explicitly agreed request budget. The command requires the explicit `--send-one-request` flag:
 
