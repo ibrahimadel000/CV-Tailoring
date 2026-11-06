@@ -99,7 +99,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     <footer className="tailor-footer"><div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? 'Writing your tailored copy…' : connection.ready ? previewLabel : 'AI server/setup required'}</div>
       {busy ? <button className="secondary-button" onClick={() => { controller.current?.abort(); runner.current?.cancel(); }}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
       {busy && <p><Loader2 size={14} className="spin" />One request in progress. No automatic retry.</p>}
-      <p>Tailor CV sends professional resume content and this job to Google in one request. Contact fields, photos and private notes are excluded. Free-tier quota may apply. No interview or extra AI review is required. New text is not factually certified. Edit and review before export.</p>
+      <p>Tailor CV sends professional resume content and this job to Google in one request. Contact fields, photos and private-note sections are excluded, but personal information typed into professional content or the job can be sent. Check both before tailoring. Free-tier quota may apply. No interview or extra AI review is required. New text is not factually certified. Edit and review before export.</p>
     </footer>
   </aside>;
 }
