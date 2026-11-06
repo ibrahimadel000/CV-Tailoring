@@ -188,6 +188,18 @@ export function shortenedSourceEcho(text: string, candidates: readonly { id: str
     return shared >= 5 && shared / words.length >= 0.8;
   });
 }
+/** Order-insensitive editorial warning only. It can over- or under-report a
+ * near-copy and does not verify meaning. Never delete or replace text based on it. */
+export function reorderedSourceEcho(text: string, candidates: readonly { id: string; text: string }[]): boolean {
+  const words = new Set(editorialWords(text));
+  if (words.size < 6) return false;
+  return candidates.some(candidate => {
+    const original = new Set(editorialWords(candidate.text));
+    if (original.size < 6) return false;
+    const shared = [...words].filter(word => original.has(word)).length;
+    return shared >= 6 && shared / words.size >= 0.8 && shared / original.size >= 0.65;
+  });
+}
 /** Extra content words absent from cited facts. Conservative and incomplete;
  * it cannot establish the meaning, attribution or truth of a sentence. */
 export function editorialNovelWords(text: string, facts: readonly string[]): string[] {

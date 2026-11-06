@@ -15,7 +15,7 @@ import { applySummaryBoundary, summaryRemovalMessage } from './summaryBoundary';
 import { renderSummaryCapabilities, SUMMARY_CAPABILITY_MAX } from './summaryCapabilities';
 import { guardNaturalDocument } from './claimGuard';
 import { explicitSkillCoverage } from './explicitSkillCoverage';
-import { shortenedSourceEcho, editorialOverlap, editorialNovelWords } from './terms';
+import { shortenedSourceEcho, reorderedSourceEcho, editorialOverlap, editorialNovelWords } from './terms';
 
 export const NATURAL_REVISION = 'document-compose-natural-segments-11-experience-preview';
 export const NATURAL_SUMMARY_MAX = 2400;
@@ -250,6 +250,14 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown, job 
   }
   if (weakEcho) first.warnings.push({ path: 'summary', message: 'The generated summary closely echoes one experience passage. Review whether it introduces your background effectively; local checks do not verify facts.' });
   if (partialEcho) first.warnings.push({ path: 'summary', message: 'A sentence in the generated summary closely echoes an experience or project passage. Review the whole introduction for repetition; local checks do not verify facts.' });
+  // Additional literal signal for words reused in a different order. This is
+  // review-only: never discard or replace a sentence based on token overlap.
+  const reorderedEcho = !profile.summary.isLocked && !first.usedFallback && !weakEcho && !partialEcho
+    && first.summarySegments.some(segment => reorderedSourceEcho(segment.text, narrative));
+  if (reorderedEcho) first.warnings.push({ path: 'summary', message: 'A summary sentence shares much of its wording with one original experience or project passage, possibly in a different order. Compare the introduction with your original; this check does not verify meaning.' });
+  const removedSome = first.guardNotes.some(note => note.kind === 'removed' && note.path.startsWith('summarySegments.')) || first.summaryRemovals.length > 0;
+  if (!profile.summary.isLocked && !first.usedFallback && removedSome && first.summarySegments.length === 1 && parsed.data.summarySegments.length > 1)
+    first.warnings.push({ path: 'summary', message: 'Only one generated summary sentence remains after other sentences were removed. Check that it still introduces your background and fits the job; local checks do not verify meaning.' });
   const { usedFallback: _unused, ...result } = first;
   return result;
 }
