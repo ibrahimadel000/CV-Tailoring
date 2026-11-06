@@ -71,11 +71,11 @@ const test = base.extend({
     await context.route('**/*', async route => {
       const request = route.request(), url = request.url();
       if (new URL(url).origin === ORIGIN) return route.continue();
-      if (url === PROVIDER_URL && request.method() === 'POST') {
+      if ([PROVIDER_URL, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'].includes(url) && request.method() === 'POST') {
         const body = request.postDataJSON();
-        calls.push({ body, headers: request.headers() });
+        calls.push({ url, body, headers: request.headers() });
         try {
-          const response = reply(JSON.parse(body.contents[0].parts[0].text));
+          const response = await reply(JSON.parse(body.contents[0].parts[0].text));
           return route.fulfill({ status: response.status ?? 200, contentType: 'application/json', headers: { 'access-control-allow-origin': ORIGIN }, body: JSON.stringify(response.body) });
         } catch (error) {
           pageErrors.push(error.message);
@@ -846,4 +846,49 @@ test('single-draft primary fictional edit survives copy, comparison, reload and 
   copy = state.profiles.find(x => x.profileId === state.activeId); expect(copy.experience.data[0].bullets[0].text).toBe(edited);
   const pdf = await exportedText(page, testInfo); expect(pdf).toContain(edited);
   checkWire(sc1Harness);
+});
+
+
+test('explicit model choice makes exactly one selected 3.8 request and stops on error', async ({page,sc1Harness}) => {
+ sc1Harness.respond(() => ({status:503,body:{error:{code:503,status:'UNAVAILABLE'}}}));
+ const original=await seed(page,sourceProfile());
+ await page.getByLabel('AI model').selectOption('gemini-3.8-flash');
+ await expect(page.getByText('Single-draft preview · Gemini 3.8 Flash · experimental',{exact:true}).first()).toBeVisible();
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByText(ERROR_503,{exact:true})).toBeVisible();
+ await page.waitForTimeout(1200);
+ expect(sc1Harness.calls).toHaveLength(1);
+ expect(sc1Harness.calls[0].url).toContain('/gemini-3.8-flash:generateContent');
+ expect(await stored(page)).toEqual({profiles:[original],activeId:original.profileId});
+});
+
+test('explicit model choice uses 3 Flash Preview and retains the separate copy', async ({page,sc1Harness}) => {
+ sc1Harness.respond(packet=>({body:completed(authoredDocument(packet))}));
+ const original=await seed(page,sourceProfile());
+ await page.getByLabel('AI model').selectOption('gemini-3-flash-preview');
+ await expect(page.getByText('Single-draft preview · Gemini 3 Flash Preview · experimental',{exact:true}).first()).toBeVisible();
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await expect.poll(async()=> (await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page);expect(state.profiles.find(p=>p.profileId===original.profileId)).toEqual(original);
+ expect(sc1Harness.calls).toHaveLength(1);
+ expect(sc1Harness.calls[0].url).toContain('/gemini-3-flash-preview:generateContent');
+});
+
+
+test('model choice is locked while the selected request is in progress', async ({page,sc1Harness}) => {
+ let release;sc1Harness.respond(()=>new Promise(resolve=>{release=resolve;}));
+ await seed(page,sourceProfile());
+ await page.getByLabel('AI model').selectOption('gemini-3-flash-preview');
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByLabel('AI model')).toBeDisabled();
+ await expect.poll(()=>typeof release).toBe('function');
+ release({status:503,body:{error:{code:503,status:'UNAVAILABLE'}}});
+ await expect(page.getByText(ERROR_503,{exact:true})).toBeVisible();
+ await expect(page.getByLabel('AI model')).toBeEnabled();
+ expect(sc1Harness.calls).toHaveLength(1);
+ expect(sc1Harness.calls[0].url).toContain('/gemini-3-flash-preview:generateContent');
 });
