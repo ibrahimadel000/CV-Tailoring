@@ -60,6 +60,16 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         </details>}
         <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
         <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
+        {currentSource && <details>
+          <summary>Compare current experience and projects</summary>
+          <p>These are the current versions, not a saved before-and-after snapshot. Check actions, outcomes, qualifications and attribution; edit the tailored copy in the editor.</p>
+          {[{ label: 'Current source', profile: currentSource }, { label: 'Current tailored copy', profile: active }].map(({ label, profile }) => <section key={label} aria-label={label}>
+            <strong>{label}</strong>
+            {profile.experience.data.map(entry => <div key={entry.id}><p>{entry.roleTitle}{entry.companyName ? ` · ${entry.companyName}` : ''}</p>{entry.description && <p style={{ whiteSpace: 'pre-wrap' }}>{entry.description}</p>}<ul>{entry.bullets.map(b => <li key={b.id} style={{ whiteSpace: 'pre-wrap' }}>{b.text}</li>)}</ul></div>)}
+            {profile.projects.data.map(entry => <div key={entry.id}><p>{entry.name}</p><ul>{entry.bullets.map(b => <li key={b.id} style={{ whiteSpace: 'pre-wrap' }}>{b.text}</li>)}</ul></div>)}
+            {!profile.experience.data.length && !profile.projects.data.length && <p>No experience or project entries.</p>}
+          </section>)}
+        </details>}
         {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry. These counts cover the first response for each unlocked entry, not quality or accuracy.</p>}
         <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>
         {active.compositionChanges.skills.reordered && <p>Selected skills were reordered.</p>}
