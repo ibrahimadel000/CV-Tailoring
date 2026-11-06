@@ -127,7 +127,7 @@ async function seed(page, source) {
   return (await stored(page)).profiles[0]; // Snapshot after the REAL loader's normalization.
 }
 async function tailor(page, job = JOB) {
-  await expect(page.getByText('SC5.9 · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Single-draft preview · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
   await page.getByLabel('Job description', { exact: true }).fill(job);
   await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
 }
@@ -136,15 +136,17 @@ function checkWire(sc1Harness) {
   const { body, headers } = sc1Harness.calls[0];
   expect(headers['x-goog-api-key']).toBe('synthetic-offline-sc1-key');
   expect(body.generationConfig).toEqual({ responseMimeType: 'application/json', responseSchema: expect.any(Object), maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } });
-  expect(body.systemInstruction.parts[0].text).toContain('SUMMARY PURPOSE:');
-  expect(body.systemInstruction.parts[0].text).toContain('Lead directly with relevant supported work');
-  expect(body.systemInstruction.parts[0].text).toContain('CAPABILITY SEPARATION:');
-  expect(body.systemInstruction.parts[0].text).toContain('Skill listings belong in the Skills section');
+  expect(body.systemInstruction.parts[0].text).toContain('one focused, readable resume');
+  expect(body.systemInstruction.parts[0].text).toContain('A listed skill does not prove');
+  expect(body.systemInstruction.parts[0].text).toContain('not independent proof');
   const packet = JSON.parse(body.contents[0].parts[0].text);
   expect(packet.job).toBe(JOB);
-  expect(packet.documentBrief.summaryEvidence).toBeDefined();
-  expect(packet.documentBrief.authoringView).toBeDefined();
-  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'alternativeSummarySegments', 'entries', 'alternativeEntries', 'skillSelections']);
+  expect(packet.guide.primaryFactIds).toBeDefined();
+  expect(packet.referencePolicy).toBeDefined();
+  expect(packet.documentBrief).toBeUndefined();
+  expect(packet.outputContract).toBeUndefined();
+  expect(body.generationConfig.responseSchema.required).toEqual(['summarySegments', 'entries', 'skillSelections']);
+  expect(body.generationConfig.responseSchema.properties.alternativeEntries).toBeUndefined();
   expect(JSON.stringify(body)).not.toContain('SC5_PRIVATE_CONTACT');
 }
 function checkPreserved(original, copy) {
@@ -334,10 +336,10 @@ test('SC5.1 complementary supported summary and selected documentation survive r
   p.experience.data[0].bullets.push({ id: crypto.randomUUID(), text: 'Wrote setup documentation for the classroom application.', isVerified: true });
   const composed = 'Classroom web application work with setup documentation.';
   sc1Harness.respond(packet => {
-    const view = packet.documentBrief.authoringView;
-    expect(view.contributionsByEntry[0].contributions).toHaveLength(2);
-    expect(view.contributionsByEntry[0].locked).toBe(true);
-    expect([...view.capabilityGroups.flatMap(g => g.capabilities), ...view.ungroupedCapabilities].map(s => s.text)).toContain('Technical Documentation');
+    expect(packet.source.experience[0].bulletIds).toHaveLength(2);
+    expect(packet.source.locks.experience).toBe(true);
+    expect(packet.source.evidence.filter(e => e.kind === 'skill').map(e => e.text)).toContain('Technical Documentation');
+    expect(packet.guide.primaryFactIds).toEqual(expect.arrayContaining(['work_1_b1', 'work_1_b2']));
     const raw = authoredDocument(packet);
     raw.summarySegments = [{ text: composed, sourceIds: ['work_1_b1', 'work_1_b2'] }];
     raw.skillSelections = [{ id: 'skill_1', category: 'Languages' }, { id: 'skill_2', category: 'Technical' }];
@@ -818,5 +820,30 @@ test('one-response alternative experience is guarded, editable, compared and exp
   await expect(page.getByText(/Used an alternative AI draft/).first()).toBeVisible();
   state = await stored(page); expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
   const pdf = await exportedText(page, testInfo); expect(pdf).toContain(edited); expect(pdf).not.toContain('Used an alternative AI draft');
+  checkWire(sc1Harness);
+});
+
+test('single-draft primary fictional edit survives copy, comparison, reload and PDF', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile(true);
+  const originalLine = 'Was responsible for the organization of weekly team meetings for coordinating project updates.';
+  const edited = 'Organized weekly team meetings to coordinate project updates.';
+  p.experience.data[0].bullets = [{ id: crypto.randomUUID(), text: originalLine, isVerified: true }];
+  sc1Harness.respond(packet => {
+    const doc = authoredDocument(packet);
+    doc.entries[0].bullets[0].text = edited;
+    return { body: completed(doc) };
+  });
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  let state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(copy.experience.data[0].bullets[0].text).toBe(edited);
+  await page.getByText('Compare current experience and projects', { exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Current source', exact: true }).getByText(originalLine, { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Current tailored copy', exact: true }).getByText(edited, { exact: true })).toBeVisible();
+  await page.reload(); await saved(page);
+  state = await stored(page); expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  copy = state.profiles.find(x => x.profileId === state.activeId); expect(copy.experience.data[0].bullets[0].text).toBe(edited);
+  const pdf = await exportedText(page, testInfo); expect(pdf).toContain(edited);
   checkWire(sc1Harness);
 });
