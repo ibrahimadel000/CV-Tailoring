@@ -1,16 +1,17 @@
 import { providerFailureMessage } from './providerDiagnostics';
-import { naturalInstructions, googleNaturalSchema, type NaturalPacket } from './naturalDocument';
+import type { NaturalPacket } from './naturalDocument';
+import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorRequest';
 export const COMPOSITION_MODEL = 'gemini-3.5-flash-lite';
 export const COMPOSITION_TIMEOUT_MS = 300000;
-export const COMPOSITION_PREVIEW_LABEL = 'SC5.9 · Gemini 3.5 Flash-Lite · experimental';
+export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Flash-Lite · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal): Promise<unknown> {
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
   if (!getTailorConnection().ready) throw new TailorError('configuration', 'AI is not connected. Public deployment requires a secure server adapter.');
-  const schema = googleNaturalSchema(packet), wire = JSON.stringify(packet);
+  const { responseSchema: schema, wire } = prepareSingleDraftRequest(packet);
   if (wire.length > 180000) throw new TailorError('input', 'Source exceeds the request budget. Nothing was sent.');
   const controller = new AbortController(), started = performance.now();
   let timedOut = false, status: 'success' | 'failed' | 'cancelled' = 'failed', reason = '', usage: TokenUsage = {};
@@ -19,7 +20,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${COMPOSITION_MODEL}:generateContent`, {
       method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: naturalInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig: { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } } }),
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig: { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } } }),
     });
     if (!response.ok) {
       const message = await providerFailureMessage(response);
