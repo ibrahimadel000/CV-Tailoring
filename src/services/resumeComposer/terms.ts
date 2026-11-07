@@ -20,7 +20,8 @@ const SENTENCE_START = /[.!?…:;\n]\s+/u;
 const COMMON = new Set(('the a an and or but nor of to in on for with by at from as is are was were be been being this that these those it its ' +
   'into over under across per via while within through using used use uses do does did done have has had having not no nor so such than then thus ' +
   'we i you he she they them their our your my his her their ours yours mine who whom whose which what when where why how all any both each few more most ' +
-  'other some only own same also very just should can could will would shall may might must built worked maintained developed created designed implemented managed delivered supported improved led').split(' '));
+  'other some only own same also very just should can could will would shall may might must built worked maintained developed created designed implemented managed delivered supported improved led ' +
+  'engineered streamlined aligned conducted collaborated integrated coordinated facilitated established reduced accelerated organized').split(' '));
 
 /** Word-boundary containment on normalized text, shared shape with the summary boundary. */
 function contains(text: string, needle: string): boolean {
