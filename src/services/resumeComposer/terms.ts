@@ -16,11 +16,17 @@ const tokenCharacter = /[\p{L}\p{N}\p{M}_+#]/u;
 const TOKEN = /[\p{L}\p{N}][\p{L}\p{N}\p{M}_]*(?:[.+#/-][\p{L}\p{N}]+)*[+#]*/gu;
 const SENTENCE_START = /[.!?…:;\n]\s+/u;
 
-/** Function words whose capitalization at sentence start carries no meaning. */
+/** Grammatical function words whose capitalization carries no proper-noun meaning. */
 const COMMON = new Set(('the a an and or but nor of to in on for with by at from as is are was were be been being this that these those it its ' +
   'into over under across per via while within through using used use uses do does did done have has had having not no nor so such than then thus ' +
   'we i you he she they them their our your my his her their ours yours mine who whom whose which what when where why how all any both each few more most ' +
-  'other some only own same also very just should can could will would shall may might must built worked maintained developed created designed implemented managed delivered supported improved led ' +
+  'other some only own same also very just should can could will would shall may might must').split(' '));
+
+/** Neutral action verbs ignored only when capitalized by sentence-initial position.
+ * Mid-sentence capitalized occurrences (such as "Managed Services" or "Integrated Systems")
+ * remain checkable as salient capitalized terms or phrases.
+ */
+const SENTENCE_START_VERBS = new Set(('built worked maintained developed created designed implemented managed delivered supported improved led ' +
   'engineered streamlined aligned conducted collaborated integrated coordinated facilitated established reduced accelerated organized').split(' '));
 
 /** Word-boundary containment on normalized text, shared shape with the summary boundary. */
@@ -67,10 +73,15 @@ export function analyzeTerms(text: string, support: readonly string[], index: re
   };
   // 1. Protected skill names mentioned anywhere in the passage.
   for (const term of index) if (contains(text, term.normalized)) add(term.label);
-  // 2. Detect consecutive capitalized names, excluding common words and verbs.
+  // 2. Detect consecutive capitalized names, excluding function words and sentence-initial verbs.
   // A single word in a phrase is not reported again as a separate invention.
   const tokens = [...text.matchAll(TOKEN)].map(m => ({ word: m[0], index: m.index ?? 0 }));
   const isCapitalized = (w: string) => /^\p{Lu}/u.test(w);
+  const isSentenceInitial = (at: number, i: number) => at === 0 || i === 0 || /[.!?…:;\n]\s*$/.test(text.slice(0, at));
+  const isIgnoredWord = (word: string, sentenceInitial: boolean) => {
+    const key = normalized(word);
+    return COMMON.has(key) || (sentenceInitial && SENTENCE_START_VERBS.has(key));
+  };
   const phraseMembers = new Set<number>();
   let phrase: number[] = [];
   const flushPhrase = () => {
@@ -93,7 +104,8 @@ export function analyzeTerms(text: string, support: readonly string[], index: re
   let previousEnd = -1;
   for (const [i, { word, index: at }] of tokens.entries()) {
     const gap = previousEnd < 0 ? '' : text.slice(previousEnd, at);
-    const eligible = isCapitalized(word) && !COMMON.has(normalized(word));
+    const sentenceInitial = isSentenceInitial(at, i);
+    const eligible = isCapitalized(word) && !isIgnoredWord(word, sentenceInitial);
     if (!eligible || (phrase.length && (SENTENCE_START.test(gap) || /[,;()\[\]"“”]/u.test(gap)))) flushPhrase();
     if (eligible) phrase.push(i);
     previousEnd = at + word.length;
@@ -102,11 +114,11 @@ export function analyzeTerms(text: string, support: readonly string[], index: re
   // 3. Single salient tokens. Ordinary sentence-initial capitalization alone
   // is ambiguous; these checks remain signals, not semantic verification.
   for (const [i, { word, index: at }] of tokens.entries()) {
-    if (phraseMembers.has(i) || /^\d+$/.test(word) || COMMON.has(normalized(word))) continue;
+    const sentenceInitial = isSentenceInitial(at, i);
+    if (phraseMembers.has(i) || /^\d+$/.test(word) || isIgnoredWord(word, sentenceInitial)) continue;
     const internal = /[.+#/]/.test(word.slice(1, -1)) || /[+#]$/.test(word);
     const acronym = /^\p{Lu}[\p{Lu}\p{N}&]*$/u.test(word) && word.replace(/\P{Lu}/gu, '').length >= 2;
     const camel = /^.\P{Lu}*\p{Lu}/u.test(word);
-    const sentenceInitial = at === 0 || i === 0 || /[.!?…]\s*$/.test(text.slice(0, at));
     const capitalizedWord = isCapitalized(word) && word.length >= 3 && !sentenceInitial;
     if ((internal && word.length >= 2) || acronym || camel || capitalizedWord) add(word);
   }
