@@ -43,3 +43,19 @@ test('ordinary job words and unsupported missing skills are not fabricated',()=>
  a(!result.some(x=>x.id==='skill_2'),'single initial capital is not a distinctive token');
  a(!result.some(x=>x.name.includes('Kubernetes')));
 });
+test('exact duplicate skills in equivalentSkillSets do not self-collide on distinctive job phrases',()=>{
+ const p=profile();
+ p.skills.data.push(
+  {id:crypto.randomUUID(),name:'Technical Documentation',category:'Technical',level:''},
+  {id:crypto.randomUUID(),name:'Technical Documentation',category:'Technical',level:''},
+ );
+ const j='Backend engineer requirements: PHP, MySQL, and APIs. Write clear technical documentation.';
+ const s=plan(p,j);
+ const added=coverage.explicitSkillCoverage(p,s,j,[{id:'skill_3',category:'Technical'}]);
+ const docMatches=added.filter(x=>x.name==='Technical Documentation');
+ a.equal(docMatches.length,1,'must retain exactly one representative of the duplicate skill');
+ a.equal(docMatches[0].id,'skill_5');
+ // If the second duplicate is already selected, do not add the first duplicate
+ const whenSecondSelected=coverage.explicitSkillCoverage(p,s,j,[{id:'skill_3',category:'Technical'},{id:'skill_6',category:'Technical'}]);
+ a(!whenSecondSelected.some(x=>x.name==='Technical Documentation'));
+});
