@@ -7,6 +7,7 @@
  */
 import type { CVProfile } from '@/types/schema';
 import type { Source } from '../contentEngine/engine';
+import { equivalentSkillKey } from './documentEditorial';
 
 type Selection = { id: string; category: 'Technical' | 'Tools' | 'Soft' | 'Languages' };
 type Addition = { id: string; name: string; token: string; category: Selection['category'] };
@@ -40,14 +41,17 @@ function distinctiveTokens(text: string) {
 export function explicitSkillCoverage(profile: CVProfile, source: Source, job: string, selected: readonly Selection[]): Addition[] {
  if (source.locks.skills || !job.trim()) return [];
  const already = new Set(selected.map(s => s.id));
+ const alreadyEquiv = new Set(selected.filter(s => source.skillIds.includes(s.id)).map(s => equivalentSkillKey(source, s.id)));
  const skills = source.skillIds.flatMap(id => {
   const index = /^skill_(\d+)$/.exec(id);
   const native = index ? profile.skills.data[Number(index[1]) - 1] : undefined;
-  return native ? [{ id, native, tokens: distinctiveTokens(native.name), phrases: distinctivePhrases(native.name) }] : [];
+  return native ? [{ id, equivKey: equivalentSkillKey(source, id), native, tokens: distinctiveTokens(native.name), phrases: distinctivePhrases(native.name) }] : [];
  });
+ // Key ownership by equivalentSkillKey so exact duplicate records across groups
+ // do not self-collide, while genuinely distinct skills sharing a token still do.
  const owners = new Map<string, Set<string>>();
  for (const skill of skills) for (const token of [...skill.tokens.map(t => `t:${t}`), ...skill.phrases.map(p => `p:${p}`)]) {
-  const s = owners.get(token) || new Set<string>(); s.add(skill.id); owners.set(token, s);
+  const s = owners.get(token) || new Set<string>(); s.add(skill.equivKey); owners.set(token, s);
  }
  // Delimiters keep a negative requirement from influencing neighboring lines.
  // A negative/ambiguous mention anywhere suppresses that token entirely.
@@ -61,11 +65,12 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
  const matched = (key: string) => owners.get(key)?.size === 1 && positive.has(key) && !negative.has(key);
  const added: Addition[] = [];
  for (const skill of skills) {
-  if (already.has(skill.id)) continue;
+  if (already.has(skill.id) || alreadyEquiv.has(skill.equivKey)) continue;
   const token = skill.tokens.find(t => matched(`t:${t}`));
   const phrase = skill.phrases.find(p => matched(`p:${p}`));
   const match = token || phrase;
   if (!match) continue;
+  alreadyEquiv.add(skill.equivKey);
   added.push({ id: skill.id, name: skill.native.name, token: match, category: skill.native.category });
  }
  return added;
