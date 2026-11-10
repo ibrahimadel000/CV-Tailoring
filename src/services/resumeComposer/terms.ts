@@ -115,7 +115,10 @@ export function analyzeTerms(text: string, support: readonly string[], index: re
   // is ambiguous; these checks remain signals, not semantic verification.
   for (const [i, { word, index: at }] of tokens.entries()) {
     const sentenceInitial = isSentenceInitial(at, i);
-    if (phraseMembers.has(i) || /^\d+$/.test(word) || isIgnoredWord(word, sentenceInitial)) continue;
+    // Numeric tokens (including a simple decimal) are checked separately below;
+    // don't also mistake a decimal point for a technical-name joiner. Indexed
+    // skill names remain checked by the protected-skill pass above.
+    if (phraseMembers.has(i) || /^[0-9٠-٩۰-۹]+(?:\.[0-9٠-٩۰-۹]+)?$/u.test(word) || isIgnoredWord(word, sentenceInitial)) continue;
     const internal = /[.+#/]/.test(word.slice(1, -1)) || /[+#]$/.test(word);
     const acronym = /^\p{Lu}[\p{Lu}\p{N}&]*$/u.test(word) && word.replace(/\P{Lu}/gu, '').length >= 2;
     const camel = /^.\P{Lu}*\p{Lu}/u.test(word);
@@ -226,18 +229,21 @@ export function editorialOverlap(text: string, fact: string): number {
 }
 
 /**
- * Numeric quantities in `text` that never appear in `support`, as written.
- * Digit sequences compare after thousand-separator removal. Written-out numbers
- * and the meaning of any figure stay an editorial review matter, not this
- * literal check.
+ * Numeric tokens in `text` that do not occur in cited `support`. This compares
+ * Western, Arabic-Indic and Eastern Arabic-Indic digits, with selected decimal
+ * and thousands separators. It does not check units, relationships, written-out
+ * numbers, other numeral scripts, rounding or whether a claim is true.
  */
 export function unsupportedNumbers(text: string, support: readonly string[]): string[] {
-  const NUMBER = /\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?/g;
-  const known = new Set((support.join(' ').match(NUMBER) || []).map(n => n.replace(/,/g, '')));
+  const NUMBER = /(?:[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+|[0-9٠-٩۰-۹]+)(?:[.٫][0-9٠-٩۰-۹]+)?/gu;
+  const canonical = (value: string) => value.replace(/[٠-٩۰-۹]/gu, char => {
+    const code = char.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  }).replace(/[,٬]/gu, '').replace(/٫/gu, '.');
+  const known = new Set((support.join(' ').match(NUMBER) || []).map(canonical));
   const found = new Set<string>();
   for (const match of text.matchAll(NUMBER)) {
-    const digits = match[0].replace(/,/g, '');
-    if (!known.has(digits)) found.add(match[0]);
+    if (!known.has(canonical(match[0]))) found.add(match[0]);
   }
   return [...found];
 }

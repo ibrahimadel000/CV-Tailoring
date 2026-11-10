@@ -292,3 +292,27 @@ test('Arabic negation is restored when a proposed edit drops the limitation', as
  expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual(['اختبرت التطبيق ولم أنشره في الإنتاج.','Organized team meetings weekly.']);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('Arabic numeric invention is restored without discarding an independent edit', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);
+ p.experience.data[0].bullets[0].text='راجعت ٣ تقارير.';
+ p.experience.data[0].bullets.push({id:crypto.randomUUID(),text:'Organized weekly team meetings.',isVerified:true});
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0];
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[
+   {text:'راجعت ٨ تقارير.',sourceIds:[e.bulletIds[0]]},
+   {text:'Organized team meetings weekly.',sourceIds:[e.bulletIds[1]]},
+  ]}],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/rewrite added.*does not mention/)).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual(['راجعت ٣ تقارير.','Organized team meetings weekly.']);
+ expect(sc1Harness.calls).toHaveLength(1);
+});
