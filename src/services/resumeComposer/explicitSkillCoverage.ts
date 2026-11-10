@@ -12,6 +12,9 @@ import { equivalentSkillKey } from './documentEditorial';
 type Selection = { id: string; category: 'Technical' | 'Tools' | 'Soft' | 'Languages' };
 type Addition = { id: string; name: string; token: string; category: Selection['category'] };
 const TOKEN = /[A-Za-z][A-Za-z0-9+#]*/g;
+// Treat only these exact native labels as distinctive. Do not infer that a
+// match for C++ justifies selecting a longer combined skill label.
+const SYMBOL_LANGUAGES = new Set(['c++', 'c#', 'f#']);
 // Broad organizational/legal words are not technology-specific signals.
 const EXCLUDE = new Set(['AND','THE','FOR','WITH','FROM','YOU','YOUR','ALL','ANY','NOT','YES','OUR','JOB','CV','USA','USD','UK','EU','EEO','CEO','CTO','HR']);
 const AMBIGUOUS_LINE = /\b(?:no|not|never|without|avoid|exclude|excluded|unnecessary|irrelevant|optional|neither|nor|rather than|not required|no longer|isn['’]t|aren['’]t|don['’]t|doesn['’]t|can['’]t|shouldn['’]t|unrelated|nonessential|non-essential|lack|lacks|lacking)\b/i;
@@ -36,7 +39,11 @@ function distinctivePhrases(text: string): string[] {
  return [...new Set(phrases)];
 }
 function distinctiveTokens(text: string) {
- return [...new Set((text.match(TOKEN) || []).filter(t => t.length >= 3 && (t.match(/[A-Z]/g) || []).length >= 2 && !EXCLUDE.has(t.toUpperCase())).map(lower))];
+ const exactSymbol = SYMBOL_LANGUAGES.has(lower(text.trim()));
+ return [...new Set((text.match(TOKEN) || []).filter(t =>
+  (exactSymbol && lower(t) === lower(text.trim())) ||
+  (t.length >= 3 && (t.match(/[A-Z]/g) || []).length >= 2 && !EXCLUDE.has(t.toUpperCase()))
+ ).map(lower))];
 }
 export function explicitSkillCoverage(profile: CVProfile, source: Source, job: string, selected: readonly Selection[]): Addition[] {
  if (source.locks.skills || !job.trim()) return [];
@@ -59,7 +66,16 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
  const positive = new Set<string>(), negative = new Set<string>();
  for (const line of lines) {
   const terms = AMBIGUOUS_LINE.test(line) ? negative : positive;
-  for (const token of line.match(TOKEN) || []) terms.add(`t:${lower(token)}`);
+  for (const match of line.matchAll(TOKEN)) {
+   const token = lower(match[0]);
+   // Objective-C++ is a distinct language, not an exact mention of C++.
+   if (token === 'c++' && /\bobjective-$/i.test(line.slice(0, match.index))) continue;
+   // Negation detection is English-only. Treat mixed-script mentions as
+   // ambiguous, including when a separate English line is positive.
+   const nonEnglishScript = /[^\x00-\x7F]/u.test(line) && [...line].some(ch => /\p{L}/u.test(ch) && !/[A-Za-z]/u.test(ch));
+   const target = SYMBOL_LANGUAGES.has(token) && nonEnglishScript ? negative : terms;
+   target.add(`t:${token}`);
+  }
   for (const phrase of distinctivePhrases(line)) terms.add(`p:${phrase}`);
  }
  const matched = (key: string) => owners.get(key)?.size === 1 && positive.has(key) && !negative.has(key);
