@@ -240,3 +240,29 @@ test('sparse source gets evidence-proportional summary guidance in the actual ap
  expect(instructions).toContain('a single supported fact is enough');
  expect(instructions).not.toContain('MUST combine and cite at least TWO distinct IDs');
 });
+
+test('a reversed numeric range is restored without discarding an independent rewrite', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);
+ p.experience.data[0].bullets=[
+  {id:crypto.randomUUID(),text:'Reduced time preparing reports from 8 to 3 hours.',isVerified:true},
+  {id:crypto.randomUUID(),text:'Organized weekly team meetings.',isVerified:true},
+ ];
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0];
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[
+   {text:'Reduced time preparing reports from 3 to 8 hours.',sourceIds:[e.bulletIds[0]]},
+   {text:'Organized team meetings weekly.',sourceIds:[e.bulletIds[1]]},
+  ]}],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page,'Operations role: reduce reporting time and coordinate weekly team meetings.');
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/direction of a numeric range may have changed/)).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual(['Reduced time preparing reports from 8 to 3 hours.','Organized team meetings weekly.']);
+ expect(sc1Harness.calls).toHaveLength(1);
+});

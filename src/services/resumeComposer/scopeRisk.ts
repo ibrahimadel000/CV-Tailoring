@@ -1,5 +1,5 @@
 /**
- * Narrow English-language warning signals for changed AI prose. These are
+ * Narrow literal warning signals for changed AI prose, mainly in English. These are
  * conservative literal checks, not a semantic, factual or safety verifier.
  * They can reject supported paraphrases and miss unsupported implications,
  * scope reversals and claims expressed in other languages.
@@ -54,6 +54,30 @@ function negativeActionRoots(text: string): string[] {
   return roots;
 }
 
+// Exact English "from X to Y" and Arabic "من X إلى Y" numeric endpoints
+// only, including ASCII, Arabic-Indic and Eastern Arabic-Indic digits. This
+// cannot understand measurement, units, causation or meaning. If both directions
+// are cited, the relationship is ambiguous and neither direction is judged.
+function numericRanges(text: string): [string, string][] {
+  const digit = String.raw`[0-9٠-٩۰-۹]`;
+  const number = String.raw`(?:${digit}{1,3}(?:[,٬]${digit}{3})+|${digit}+)(?:[.٫]${digit}+)?`;
+  const unit = String.raw`(?:\s*[%٪]|\s+[\p{L}\p{M}]+)?`;
+  const end = String.raw`(?!${digit}|[.,٬٫]${digit})`;
+  const english = new RegExp(String.raw`\bfrom\s+[$€£]?\s*(${number})${unit}\s+to\s+[$€£]?\s*(${number})${end}`, 'gu');
+  const arabic = new RegExp(String.raw`(?:^|[^\p{L}\p{N}_])من\s+[$€£]?\s*(${number})${unit}\s+(?:إلى|الى)\s+[$€£]?\s*(${number})${end}`, 'gu');
+  const canonical = (value: string) => value.replace(/[٠-٩۰-۹]/gu, char => {
+    const code = char.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  }).replace(/[,٬]/gu, '').replace(/٫/gu, '.');
+  return [english, arabic].flatMap(pattern => [...text.matchAll(pattern)].map(m => [canonical(m[1]), canonical(m[2])] as [string, string]));
+}
+function reversesNumericRange(text: string, sources: readonly string[]): boolean {
+  const original = sources.flatMap(numericRanges);
+  return numericRanges(text).some(([a, b]) => a !== b
+    && original.some(([x, y]) => x === b && y === a)
+    && !original.some(([x, y]) => x === a && y === b));
+}
+
 function leadPeopleInOneClause(text: string): boolean {
   return text.split(/[.!?;\n]+/u).some(clause => LEADERSHIP.test(clause) && PEOPLE.test(clause));
 }
@@ -71,6 +95,8 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
       (sourceNegativeActions.some(root => !proposedNegativeActions.includes(root)) ||
        proposedNegativeActions.some(root => !sourceNegativeActions.includes(root))))
     risks.push('the action associated with a negation may have changed');
+  if (reversesNumericRange(proposed, sources))
+    risks.push('the direction of a numeric range may have changed');
   const sourcePlans = sources.flatMap(plannedActions), proposedPlans = plannedActions(proposed);
   if (sourcePlans.length && !proposedPlans.length)
     risks.push('a planned or intended action may have been presented as completed');
