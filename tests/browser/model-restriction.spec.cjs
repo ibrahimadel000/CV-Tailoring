@@ -122,3 +122,24 @@ test('blocked output preserves original', async ({page,sc1Harness}) => {
  expect(sc1Harness.calls).toHaveLength(1);
  expect(await stored(page)).toEqual({profiles:[original],activeId:original.profileId});
 });
+
+test('multi-citation review is visible without changing the source', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);
+ p.experience.data[0].bullets.push({id:crypto.randomUUID(),text:'Documented classroom delivery workflows.',isVerified:true});
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0], first=e.bulletIds[0];
+  const fact=packet.source.evidence.find(x=>x.id===first);
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[{text:fact.text,sourceIds:e.bulletIds}]}],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/this line repeats one cited passage while also citing others/)).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual([original.experience.data[0].bullets[0].text]);
+ expect(sc1Harness.calls).toHaveLength(1);
+});

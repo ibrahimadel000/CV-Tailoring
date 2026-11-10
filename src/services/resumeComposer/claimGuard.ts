@@ -108,6 +108,7 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     if (!w) { notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept your original wording because the AI response skipped this entry.` }); return originalEntry; }
     const own = new Set([u.overviewId, ...u.bulletIds].filter(Boolean));
     let ambiguousLine = false;
+    const possibleCoverageGaps: { path: string; text: string; ids: string[] }[] = [];
     const check = (p: Paragraph, where: string, allowMetadata = false): Paragraph[] | null => {
       const allIds = unique(p.sourceIds);
       const metadata = allIds.filter(isEntryMetadata);
@@ -137,6 +138,11 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because ${risks.join('; ')}. This is a limited local check, not factual verification.` });
         return ids.map(original);
       }
+      // Multiple citations do not establish that their distinct contributions
+      // survived. Flag this narrow exact-copy pattern for human review without
+      // changing the proposed passage or claiming a semantic omission.
+      if (ids.length > 1 && ids.some(id => p.text.trim() === facts.get(id)?.text.trim()))
+        possibleCoverageGaps.push({ path: where, text: p.text.trim(), ids });
       if (signals.splitPhrases.length) notes.push({ path: where, kind: 'review', message: `${label}: review ${list(signals.splitPhrases)}. The cited source uses a different word order; this literal match does not verify the claim or its scope.` });
       return null; // accepted as written; no semantic verification
     };
@@ -213,6 +219,17 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     if (!bullets.length && !overview.text && own.size) {
       notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept your original wording because the AI removed every contribution.` });
       return originalEntry;
+    }
+    // Only report patterns that survived later restoration, and where another
+    // differently worded source is not also cited by another surviving line.
+    // Citation elsewhere is still not proof that its meaning was preserved.
+    const visible = [overview, ...bullets].filter(p => p.text);
+    for (const gap of possibleCoverageGaps) {
+      const line = visible.find(p => p.text === gap.text && gap.ids.every(id => p.sourceIds.includes(id)));
+      if (!line) continue;
+      const otherIds = gap.ids.filter(id => facts.get(id)?.text.trim() !== gap.text);
+      if (otherIds.some(id => !visible.some(p => p !== line && p.sourceIds.includes(id))))
+        notes.push({ path: gap.path, kind: 'review', message: `${label}: this line repeats one cited passage while also citing others. Compare the original passages for possible omissions; citations do not verify meaning.` });
     }
     return { id: u.id, overview, bullets };
   });
