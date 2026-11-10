@@ -25,6 +25,15 @@ const PROTOTYPE = /\b(?:prototype|proof[-\s]+of[-\s]+concept)\b/u;
 const SUPERVISED = /\b(?:under (?:direct )?supervision|under (?:the )?guidance|supervised by)\b/u;
 const INDEPENDENT = /\b(?:independently|without supervision|unsupervised)\b/u;
 
+// Narrow verb + infinitive forms only. This does not identify completion,
+// understand tense or relationships, or cover other languages and synonyms.
+function plannedActions(text: string): string[] {
+  // "Planning to ..." can also be a noun phrase, as in "cross-team planning
+  // to align schedules". Exclude it rather than undo established planning work.
+  const pattern = /\b(?:plan(?:s|ned)?|intend(?:s|ed|ing)?|aim(?:s|ed|ing)?|expect(?:s|ed|ing)?|schedul(?:e|es|ed|ing))\s+to\s+(?:[a-z]+ly\s+)?([a-z]+)\b/gu;
+  return [...text.matchAll(pattern)].map(match => match[1]);
+}
+
 function hasNegation(text: string): boolean {
   // “Not only X but also Y” is a positive idiom, not a qualification.
   return NEGATION.test(text.replace(/\bnot\s+only\b/gu, '')) || /\bnon[-\s]+production\b/u.test(text);
@@ -62,6 +71,15 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
       (sourceNegativeActions.some(root => !proposedNegativeActions.includes(root)) ||
        proposedNegativeActions.some(root => !sourceNegativeActions.includes(root))))
     risks.push('the action associated with a negation may have changed');
+  const sourcePlans = sources.flatMap(plannedActions), proposedPlans = plannedActions(proposed);
+  if (sourcePlans.length && !proposedPlans.length)
+    risks.push('a planned or intended action may have been presented as completed');
+  else if (!sourcePlans.length && proposedPlans.length)
+    risks.push('a planned or intended action was not clearly stated in the cited wording');
+  else if (sourcePlans.length && proposedPlans.length &&
+      (sourcePlans.some(action => !proposedPlans.includes(action)) ||
+       proposedPlans.some(action => !sourcePlans.includes(action))))
+    risks.push('the planned or intended action may have changed');
   if (sources.some(source => LIMITED_PARTICIPATION.test(source)) && ASSERTED_LEADERSHIP.test(proposed)
       && !sources.some(source => LEADERSHIP.test(source)))
     risks.push('leadership was not clearly stated in the cited supporting role');

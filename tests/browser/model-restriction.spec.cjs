@@ -143,3 +143,27 @@ test('multi-citation review is visible without changing the source', async ({pag
  expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual([original.experience.data[0].bullets[0].text]);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('planned work is not silently promoted to completed work', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);
+ p.experience.data[0].bullets[0].text='Planned to deploy web applications.';
+ p.experience.data[0].bullets.push({id:crypto.randomUUID(),text:'Organized weekly team meetings.',isVerified:true});
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0];
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[
+   {text:'Deployed web applications.',sourceIds:[e.bulletIds[0]]},
+   {text:'Organized team meetings weekly.',sourceIds:[e.bulletIds[1]]},
+  ]}],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/planned or intended action may have been presented as completed/)).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual(['Planned to deploy web applications.','Organized team meetings weekly.']);
+ expect(sc1Harness.calls).toHaveLength(1);
+});
