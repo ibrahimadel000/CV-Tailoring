@@ -146,7 +146,7 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
   const normalized = selectSkills(source, doc.skillSelections);
   // Correct only unambiguous, whole-label violations of the authoring contract.
   // Never rename a skill or infer expertise; preserve combined/unknown labels.
-  const professionalMethod = /^(?:project management|technical documentation|agile\s*\/\s*scrum)$/i;
+  const professionalMethod = /^(?:project management|technical documentation|agile\s*\/\s*scrum|strategic planning|business operations|system analysis|workflow automation)$/i;
   for (const selection of normalized.selected) {
     const fact = facts.get(selection.id);
     const index = /^skill_(\d+)$/.exec(selection.id);
