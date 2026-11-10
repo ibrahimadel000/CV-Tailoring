@@ -11,9 +11,9 @@ not establish that a model follows the instructions or writes a good resume.
 | --- | --- | --- | --- |
 | Different target jobs | Same source, backend vs training (`tests/paired-offline-tailoring.test.cjs`; benchmark C01/C04) | Two manually prepared outputs can retain different justified emphases | They are not model-written outputs or proof of job relevance |
 | Sparse and qualification-only CVs | One contribution, ongoing degree, skill-only source (`tests/adaptive-summary-authoring.test.cjs`) | Single-fact and qualification-only examples can compile; locks and source boundaries remain | Prompt compliance and semantic truth are untested |
-| Attribution and limits | Multiple employers (benchmark C05), supervision, planned work, negation (`tests/scope-safety-audit.test.cjs`, `tests/planned-work-scope.test.cjs`) | Certain incorrect citations and literal English scope changes are restored or flagged | Many paraphrases and cross-claim implications remain undetected |
+| Attribution and limits | Multiple employers (benchmark C05), supervision, planned work, negation (`tests/scope-safety-audit.test.cjs`, `tests/planned-work-scope.test.cjs`, `tests/arabic-negation-scenarios.test.cjs`) | Certain incorrect citations and narrow literal English and Arabic scope changes are restored or flagged | Many paraphrases and cross-claim implications remain undetected |
 | Metrics | Reversed English and Arabic numeric ranges, ordinary edits, projects, summaries and locks (`tests/metric-direction-scenarios.test.cjs`) | A narrow endpoint-reversal signal restores or removes affected generated text | It does not verify units, causality, measurement context or every format and language |
-| Arabic | Fictional Arabic source and job (benchmark C06); selected Arabic numeric-range examples | Text fixtures and narrow numeric signals can be exercised offline | This is not general Arabic semantic, import, rendering or PDF validation |
+| Arabic | Fictional Arabic source and job (benchmark C06); selected Arabic numeric-range and negation examples | Text fixtures and narrow numeric and negation signals can be exercised offline | This is not general Arabic semantic, import, rendering or PDF validation |
 | Relevant skills | Exact native skill, level, duplicate, negation and locks (`tests/explicit-skill-coverage.test.cjs`, `tests/symbol-skill-coverage.test.cjs`) | Some literal job mentions can retain an omitted native skill without creating experience | A literal match is not proof of relevance, proficiency or employer use |
 | Locks, persistence and app | Mocked provider, original copy, review and reload (`tests/browser/`) | Selected end-to-end app paths work without contacting a provider | A mocked response says nothing about actual model behavior |
 | Import/export | Synthetic PDF and DOCX browser smoke tests (`tests/browser/import-smoke.spec.cjs`) | The particular fixtures can be imported, edited and exported | Not representative of every layout, scan, language or PDF renderer |
@@ -40,7 +40,8 @@ example that must remain editable. Include, as applicable:
 Record unsupported forms and counterexamples as limitations, not passes. For
 example, the current numeric-range check does not cover arrow notation or all
 languages; matching digits alone does not preserve their units or meaning. Most
-scope signals are English-only. A source citation is traceability, not proof.
+scope signals are English-only; Arabic negation coverage is limited and can
+miss colloquial forms such as some uses of ما or reject valid paraphrases. A source citation is traceability, not proof.
 
 ## Evaluation and review
 

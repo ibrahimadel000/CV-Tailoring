@@ -34,9 +34,27 @@ function plannedActions(text: string): string[] {
   return [...text.matchAll(pattern)].map(match => match[1]);
 }
 
+// Small Arabic signals only: standalone لم، لن، لا، ليس، ليست، دون، بدون,
+// optionally joined to و/ف. Strip common diacritics/tatweel for matching; never
+// alter published text. These are not grammatical or semantic analysis.
+function arabicNegationText(text: string): string {
+  return text.replace(/[\u064b-\u065f\u0670\u0640]/gu, '')
+    .replace(/(^|[^\p{L}\p{N}_])(?:و|ف)?(?:ليس|ليست)\s+فقط(?=$|[^\p{L}\p{N}_])/gu, '$1')
+    .replace(/(^|[^\p{L}\p{N}_])(?:و|ف)?لا\s+(?:سيما|يزال|تزال|زال|بد|شك|بأس|غنى)(?=$|[^\p{L}\p{N}_])/gu, '$1');
+}
+function hasArabicNegation(text: string): boolean {
+  return /(?:^|[^\p{L}\p{N}_])(?:و|ف)?(?:لم|لن|لا|ليس|ليست|دون|بدون)(?=$|[^\p{L}\p{N}_])/u.test(arabicNegationText(text));
+}
 function hasNegation(text: string): boolean {
-  // “Not only X but also Y” is a positive idiom, not a qualification.
-  return NEGATION.test(text.replace(/\bnot\s+only\b/gu, '')) || /\bnon[-\s]+production\b/u.test(text);
+  // “Not only X but also Y” and “ليس فقط” are positive idioms.
+  return NEGATION.test(text.replace(/\bnot\s+only\b/gu, '')) || /\bnon[-\s]+production\b/u.test(text) || hasArabicNegation(text);
+}
+// Compare literal Arabic forms only after لم/لن/لا. Different inflections,
+// synonyms, objects, negation patterns and cross-language relations require
+// human review. Including the particle avoids conflating past and future.
+function arabicNegativeActions(text: string): string[] {
+  const pattern = /(?:^|[^\p{L}\p{N}_])(?:و|ف)?(لم|لن|لا)\s+([\p{Script=Arabic}]+)/gu;
+  return [...arabicNegationText(text).matchAll(pattern)].map(m => m[1] + ' ' + m[2]);
 }
 // A small literal signal for common English negative-action constructions.
 // It does not parse grammar, objects, actors or qualifiers, and can restore a
@@ -95,6 +113,11 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
       (sourceNegativeActions.some(root => !proposedNegativeActions.includes(root)) ||
        proposedNegativeActions.some(root => !sourceNegativeActions.includes(root))))
     risks.push('the action associated with a negation may have changed');
+  const sourceArabicActions = sources.flatMap(arabicNegativeActions), proposedArabicActions = arabicNegativeActions(proposed);
+  if (sourceArabicActions.length && proposedArabicActions.length &&
+      (sourceArabicActions.some(action => !proposedArabicActions.includes(action)) ||
+       proposedArabicActions.some(action => !sourceArabicActions.includes(action))))
+    risks.push('the action or tense associated with an Arabic negation may have changed');
   if (reversesNumericRange(proposed, sources))
     risks.push('the direction of a numeric range may have changed');
   const sourcePlans = sources.flatMap(plannedActions), proposedPlans = plannedActions(proposed);
