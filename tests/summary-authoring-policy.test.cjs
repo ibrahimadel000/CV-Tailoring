@@ -88,3 +88,17 @@ test('valid mixed-kind trace namespace is preserved instead of imposing a new re
  assert(code.includes('summarySourceIds'));assert(code.includes('skill IDs for trace compatibility'));
  assert(!code.includes('semanticStatus: \'verified\''));
 });
+// Instruction presence only: this cannot establish that a model follows the guidance.
+test('SC5 foregrounds professional facts without automatic capability inventory',()=>{
+ for(const text of ["Lead directly with relevant supported work",
+  "The original summary is source material, not a mandatory opening",
+  "AUTHORING MATERIAL:",
+  "not a default opening to copy",
+  "never borrow example facts"])
+  assert(instructions.includes(text),text);
+ for(const text of ["Skill listings belong in the Skills section",
+  "Workflow improvement does not establish runtime performance, debugging or automated testing",
+  "Combining skill and work references does not establish a missing relationship",
+  "Adjacent sentences must not imply a connection the source does not state"])
+  assert(instructions.includes(text),text);
+});

@@ -28,7 +28,7 @@ test('active native compiler removes the listed-skill inflation and retains usef
 });
 test('real practice is preserved and no removal notice is produced',()=>{
  const p=fixture();p.experience.data[0].bullets[0].text='Built and maintained RESTful APIs using Python.';
- const r=response(p);r.summarySegments=[{text:'Built and maintained RESTful APIs using Python.',sourceIds:['work_1_b1','skill_1','skill_2']}];
+ const r=response(p);r.summarySegments=[{text:'Software engineer with hands-on work building and maintaining RESTful APIs in Python.',sourceIds:['work_1_b1','skill_1','skill_2']}];
  const out=n.compileNaturalComposition(p,r);assert.equal(out.candidate.summary.data,r.summarySegments[0].text);
  assert.deepEqual(out.summaryRemovals,[]);assert.deepEqual(out.candidate.experience,p.experience);
 });
@@ -42,23 +42,31 @@ test('locked summary remains byte-for-byte original, even if it names listed-onl
  const p=fixture();p.summary.data='  Original React and Python wording  ';p.summary.isLocked=true;
  const r=response(p);r.summarySegments=[];
  const out=n.compileNaturalComposition(p,r);assert.deepEqual(out.candidate.summary,p.summary);assert.deepEqual(out.summaryRemovals,[]);
- r.summarySegments=[{text:'Python engineer.',sourceIds:['skill_1']}];assert.throws(()=>n.compileNaturalComposition(p,r),/Locked summary/);
+ // Claim guard: segments generated for a locked summary are ignored with a review note.
+ r.summarySegments=[{text:'Python engineer.',sourceIds:['skill_1']}];
+ const again=n.compileNaturalComposition(p,r);assert.deepEqual(again.candidate.summary,p.summary);
+ assert(again.guardNotes.some(g=>g.path==='summary'&&g.kind==='ignored'));
 });
-test('malformed IDs, duplicate refs, oversized raw summary and bad entries still reject before saving',()=>{
- for(const mutate of [
-  r=>r.summarySegments[1].sourceIds.push('unknown'),
-  r=>r.summarySegments[1].sourceIds.push('skill_1'),
-  r=>r.summarySegments=[{text:'x'.repeat(2400),sourceIds:['skill_1']},{text:'x',sourceIds:['skill_2']}],
-  r=>r.entries[0].bullets[0].sourceIds=['skill_1'],
- ]){
+// Claim guard: interpretable-but-flawed content no longer discards the whole document.
+// Each defect is removed or restored with a review note; the original is never mutated.
+test('malformed references, duplicate refs, oversized summaries and bad entries degrade gracefully with notes',()=>{
+ for(const [label,[mutate,expect]]of Object.entries({
+  unknownRef:[r=>r.summarySegments[1].sourceIds.push('unknown'),out=>out.guardNotes.some(g=>g.path==='summarySegments.1'&&g.kind==='removed')],
+  duplicateRef:[r=>r.summarySegments[1].sourceIds.push('skill_1'),out=>out.summaryRemovals.some(x=>x.segmentIndex===1)],
+  oversized:[r=>r.summarySegments=[{text:'x'.repeat(2400),sourceIds:['skill_1']},{text:'x',sourceIds:['skill_2']}],out=>out.guardNotes.some(g=>g.path==='summarySegments.1')],
+  foreignBullet:[r=>r.entries[0].bullets[0].sourceIds=['skill_1'],out=>out.guardNotes.some(g=>g.path==='entries.work_1.bullets.0')],
+ })){
   const p=fixture(),before=JSON.stringify(p),r=response(p);mutate(r);
-  assert.throws(()=>n.compileNaturalComposition(p,r));assert.equal(JSON.stringify(p),before);
+  const out=n.compileNaturalComposition(p,r);assert(expect(out),label);assert.equal(JSON.stringify(p),before);
  }
 });
-test('all summary passages may be removed with an explicit empty result, without inventing a fallback',()=>{
+test('when no generated summary passage survives, the original summary is kept with a note',()=>{
  const p=fixture(),r=response(p);r.summarySegments=r.summarySegments.slice(1);
- const out=n.compileNaturalComposition(p,r);assert.equal(out.candidate.summary.data,'');
- assert.deepEqual(out.draft.summary,{text:'',sourceIds:[]});assert.equal(out.summaryRemovals.length,1);
+ // Claim guard: nothing usable remains, so the candidate's own original summary is
+ // restored; no fallback prose is invented.
+ const out=n.compileNaturalComposition(p,r);assert.equal(out.candidate.summary.data,p.summary.data.trim());
+ assert.equal(out.summaryRemovals.length,1);
+ assert(out.warnings.some(w=>w.path==='summary'&&w.message.includes('no supported AI summary remained')));
 });
 test('front-end selection binds only source skills and omits unrelated skills only in the new copy',async()=>{
  const p=fixture();p.skills.data=[
@@ -93,8 +101,36 @@ test('removal notice is outside collapsed review notes and is passed to the edit
  const ui=fs.readFileSync(path.join(__dirname,'../src/components/builder/ComposerTailorWorkspace.tsx'),'utf8');
  const studio=fs.readFileSync(path.join(__dirname,'../src/components/builder/BuilderStudio.tsx'),'utf8');
  assert(ui.includes('summaryBoundaryNotice(result.summaryRemovals.length'));
- assert(ui.includes('onCreated(result.profileId, notice)'));
- assert(studio.includes('setCompositionNotice(notice ? { profileId, text: notice } : null)'));
+ assert(ui.includes('onCreated(result.profileId, notice, reviewNotes)'));
+ assert(studio.includes('profile.compositionReview'));
  assert(studio.includes('compositionNotice.text'));assert(studio.includes('role="status"'));
+ assert(studio.includes('may not reflect later edits'));
  // Static wiring only; browser/mobile visibility still needs user-side checking.
+});
+test('review notes are saved only with the new copy and excluded from AI and resume content',async()=>{
+ const p=fixture();p.experience.data[0].id='00000000-0000-4000-8500-000000000000'; // IDs are not rendered resume text.
+ const before=JSON.stringify(p),r=response(p);
+ r.summarySegments=[r.summarySegments[0],{text:'Built applications for 500 clients.',sourceIds:['work_1_b1']}];
+ let active=p,copy,packet;
+ const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,next){assert.equal(snapshot,before);copy=next;active=next;return true;}},async sent=>{packet=sent;return r;});
+ const out=await runner.run(job,new AbortController().signal);
+ assert.equal(out.status,'created');assert.equal(JSON.stringify(p),before);
+ assert(copy.compositionReview.notes.some(note=>note.includes('500')));
+ assert(copy.compositionReview.text.includes('Some content needs your review'));
+ const visible=resumeBlocks(copy).map(({id,...block})=>({...block,items:block.items.map(({entryId,...item})=>item)}));
+ assert(!JSON.stringify(visible).includes('500'));
+ assert(!JSON.stringify(packet).includes('compositionReview'));
+ const schema=load('types/schema').cvProfileSchema;assert(schema.safeParse(JSON.parse(JSON.stringify(copy))).success);
+});
+test('later tailored copies preserve inherited historical notes without sending them to the provider',async()=>{
+ const p=fixture();p.compositionReview={text:'Prior review',notes:['PRIVATE_REVIEW_NOTE_SENTINEL']};
+ const before=JSON.stringify(p),r=response(p);r.summarySegments=[r.summarySegments[0],{text:'Built applications for 500 clients.',sourceIds:['work_1_b1']}];
+ let active=p,copy,packet;
+ const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,next){assert.equal(snapshot,before);copy=next;active=next;return true;}},async sent=>{packet=sent;return r;});
+ const out=await runner.run(job,new AbortController().signal);
+ assert.equal(out.status,'created');assert.equal(JSON.stringify(p),before);
+ assert(copy.compositionReview.notes.includes('PRIVATE_REVIEW_NOTE_SENTINEL'));
+ assert(copy.compositionReview.notes.some(note=>note.includes('500')));
+ assert(!JSON.stringify(packet).includes('PRIVATE_REVIEW_NOTE_SENTINEL'));
+ assert(!JSON.stringify(resumeBlocks(copy)).includes('PRIVATE_REVIEW_NOTE_SENTINEL'));
 });

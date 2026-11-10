@@ -54,6 +54,13 @@ export function applySummaryBoundary(
   return { retained, retainedIndices, removals };
 }
 
+/** User-facing wording for one boundary removal. Copy lives here, not at call sites. */
+export function summaryRemovalMessage(removal: SummaryRemoval): string {
+  return removal.reason === 'skill-only-evidence'
+    ? 'Removed a generated summary passage that relied only on skill-list evidence. Skills remain available for selection in the Skills section.'
+    : 'Removed a generated summary passage naming a skill absent from its cited non-skill facts. Literal presence is not factual verification of the remaining text.';
+}
+
 export function summaryBoundaryNotice(removed: number, remaining: number): string {
   if (!removed) return '';
   return `${removed} generated summary passage${removed === 1 ? ' was' : 's were'} removed under the skill-evidence rule. ${

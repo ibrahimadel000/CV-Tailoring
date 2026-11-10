@@ -41,7 +41,7 @@ function safeXML(xml: string): XMLDocument {
   if (doc.getElementsByTagNameNS('*', 'parsererror').length) throw new CVImportError('xml', 'The DOCX text is damaged and could not be read.');
   return doc;
 }
-function xmlText(xml: string, listStyles = new Set<string>(), links = new Map<string, string>()): { text: string; hasImages: boolean; hasTables: boolean; hasRevisions: boolean } {
+function xmlText(xml: string, listStyles = new Set<string>(), links = new Map<string, string>()): { text: string; hasImages: boolean; hasTables: boolean; hasRevisions: boolean; tableRegions?: string[] } {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new CVImportError('xml', 'Document XML declarations are unsupported. Save a standard DOCX copy.');
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length || doc.getElementsByTagNameNS('*', 'parsererror').length) throw new CVImportError('xml', 'The DOCX text is damaged and could not be read.');
@@ -64,13 +64,40 @@ function xmlText(xml: string, listStyles = new Set<string>(), links = new Map<st
     }
     return [...node.childNodes].map(child => walk(child, root)).join('');
   };
-  const lines = paragraphs.filter(p => { let parent = p.parentElement; while (parent) { if (parent.namespaceURI === WORD_NS && parent.localName === 'del') return false; parent = parent.parentElement; } return true; }).map(p => {
+  const visible = (p: Element) => { let parent = p.parentElement; while (parent) { if (parent.namespaceURI === WORD_NS && parent.localName === 'del') return false; parent = parent.parentElement; } return true; };
+  const lineOf = (p: Element) => {
     const t = walk(p, p).trim();
     const style = p.getElementsByTagNameNS(WORD_NS, 'pStyle')[0]?.getAttributeNS(WORD_NS, 'val') || '';
     const numbered = p.getElementsByTagNameNS(WORD_NS, 'numPr').length > 0 || listStyles.has(style);
     return (numbered && t ? '• ' : '') + t;
-  });
-  return { text: lines.join('\n'), hasImages: doc.getElementsByTagNameNS(WORD_NS, 'drawing').length > 0, hasTables: doc.getElementsByTagNameNS(WORD_NS, 'tbl').length > 0, hasRevisions: doc.getElementsByTagNameNS(WORD_NS, 'del').length + doc.getElementsByTagNameNS(WORD_NS, 'ins').length > 0 };
+  };
+  const lines = paragraphs.filter(visible).map(lineOf);
+  // Recognize only a whole-document, single-row sidebar-left / named-main-right layout.
+  // Ordinary data tables, nested/merged cells and mixed body content keep the
+  // previous document-order extraction. Independent regions prevent a sidebar's
+  // last section from swallowing the next cell's candidate name and headline.
+  const body = doc.getElementsByTagNameNS(WORD_NS, 'body')[0];
+  const bodyChildren = body ? [...body.children] : [];
+  const tables = bodyChildren.filter(e => e.namespaceURI === WORD_NS && e.localName === 'tbl');
+  let tableRegions: string[] | undefined;
+  if (body && tables.length === 1 && body.getElementsByTagNameNS(WORD_NS, 'tbl').length === 1 &&
+      bodyChildren.every(e => e.namespaceURI === WORD_NS && (e.localName === 'tbl' || e.localName === 'sectPr' || (e.localName === 'p' && !lineOf(e))))) {
+    const table = tables[0], rows = [...table.children].filter(e => e.namespaceURI === WORD_NS && e.localName === 'tr');
+    const cells = rows.length === 1 ? [...rows[0].children].filter(e => e.namespaceURI === WORD_NS && e.localName === 'tc') : [];
+    const merged = table.getElementsByTagNameNS(WORD_NS, 'gridSpan').length || table.getElementsByTagNameNS(WORD_NS, 'vMerge').length;
+    const section = /^(?:contact|contact details|contact information|skills|technical skills|core skills|expertise|languages|profile|professional profile|summary|professional summary|experience|work experience|professional experience|education|projects|certifications|الملخص المهني|المهارات|الخبرات العملية|التعليم)\s*:?$/i;
+    if (cells.length === 2 && !merged) {
+      const parts = cells.map(cell => [...cell.getElementsByTagNameNS(WORD_NS, 'p')].filter(visible).map(lineOf).join('\n').trim());
+      const [left, right] = parts.map(part => part.split('\n').map(line => line.trim()).filter(Boolean));
+      const sidebar = /^(?:contact|contact details|contact information|skills|technical skills|core skills|expertise|languages|المهارات)\s*:?$/i;
+      const firstRightHeading = right.findIndex(line => section.test(line));
+      const header = firstRightHeading > 0 ? right.slice(0, firstRightHeading) : [];
+      const plausibleName = (line: string) => /^[\p{L}][\p{L}\p{M} .’'-]{2,85}$/u.test(line) && line.split(/\s+/).length >= 2 && line.split(/\s+/).length <= 7 && !/engineer|developer|manager|designer|analyst|مهندس|مطور|مدير/i.test(line);
+      const plausibleTitle = (line: string) => /engineer|developer|manager|designer|analyst|specialist|consultant|student|مهندس|مطور|مدير|طالب|محلل|مصمم/i.test(line) && line.length <= 130;
+      if (left.length >= 3 && right.length >= 3 && left.some(line => sidebar.test(line)) && firstRightHeading >= 2 && header.some(plausibleName) && header.some(plausibleTitle)) tableRegions = parts;
+    }
+  }
+  return { text: tableRegions ? tableRegions.join('\n\n') : lines.join('\n'), tableRegions, hasImages: doc.getElementsByTagNameNS(WORD_NS, 'drawing').length > 0, hasTables: doc.getElementsByTagNameNS(WORD_NS, 'tbl').length > 0, hasRevisions: doc.getElementsByTagNameNS(WORD_NS, 'del').length + doc.getElementsByTagNameNS(WORD_NS, 'ins').length > 0 };
 }
 async function extractDocx(data: Uint8Array, signal: AbortSignal): Promise<ExtractedCV> {
   const selected = inspectDocxArchive(data); checkAbort(signal);
@@ -105,14 +132,18 @@ async function extractDocx(data: Uint8Array, signal: AbortSignal): Promise<Extra
   };
   const main = parsePart('word/document.xml');
   let text = main.text; const warnings: string[] = [];
+  const regions: ImportRegion[] | undefined = main.tableRegions?.map((part, i) => ({page: 1, lane: i === 0 ? 'left' : 'right', text: part}));
   for (const name of [...selected].filter(n => /^word\/(?:header\d+|footer\d+|footnotes|endnotes)\.xml$/.test(n)).sort()) {
     checkAbort(signal); const part = parsePart(name).text.trim();
-    if (part && !text.includes(part)) { text = /^word\/header/.test(name) ? part + '\n\n' + text : text + '\n\n' + (/^word\/footer/.test(name) ? 'IMPORTED FOOTER' : 'IMPORTED NOTES') + '\n' + part; }
+    if (part && !text.includes(part)) {
+      if (/^word\/header/.test(name)) { text = part + '\n\n' + text; regions?.unshift({page: 1, lane: 'full', text: part}); }
+      else { const tail = (/^word\/footer/.test(name) ? 'IMPORTED FOOTER' : 'IMPORTED NOTES') + '\n' + part; text += '\n\n' + tail; regions?.push({page: 1, lane: 'full', text: tail}); }
+    }
   }
   if (main.hasImages) warnings.push('Images and photos in the DOCX were not imported. You can add a photo in Personal details.');
-  if (main.hasTables) warnings.push('Table cells were read in document order. Check section placement for multi-column layouts.');
+  if (main.hasTables) warnings.push(main.tableRegions ? 'Table cells were read as separate sections. Check section placement against the original.' : 'Table cells were read in document order. Check section placement for multi-column layouts.');
   if (main.hasRevisions) warnings.push('Tracked insertions were included and tracked deletions excluded. Review the extracted text.');
-  return { text: validateImportText(text), warnings };
+  return { text: validateImportText(text), warnings, regions };
 }
 async function extractPDF(data: Uint8Array, signal: AbortSignal): Promise<ExtractedCV> {
   const pdfjs = await import('pdfjs-dist');

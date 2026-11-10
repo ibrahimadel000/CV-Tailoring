@@ -41,7 +41,7 @@ export function ResumeHeaderEditor() {
               type="text"
               value={header.data.firstName ?? (header.data.name?.split(' ')[0] || '')}
               onChange={(e) => handleNameChange(e.target.value, undefined)}
-              placeholder="e.g. ibrahim"
+              placeholder="e.g. Alex"
               disabled={header.isLocked}
               className="input text-sm font-medium"
             />
@@ -54,7 +54,7 @@ export function ResumeHeaderEditor() {
               type="text"
               value={header.data.lastName ?? (header.data.name?.split(' ').slice(1).join(' ') || '')}
               onChange={(e) => handleNameChange(undefined, e.target.value)}
-              placeholder="e.g. alsharjabi"
+              placeholder="e.g. Morgan"
               disabled={header.isLocked}
               className="input text-sm font-medium"
             />
@@ -104,7 +104,7 @@ export function ResumeHeaderEditor() {
               type="email"
               value={header.data.email || ''}
               onChange={(e) => updateHeader({ email: e.target.value })}
-              placeholder="ibrahimalsharjabi69@gmail.com"
+              placeholder="name@example.com"
               disabled={header.isLocked}
               className="input text-sm"
             />

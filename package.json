@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:browser:offline": "npm --prefix tests/browser test"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
