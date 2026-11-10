@@ -6,7 +6,7 @@ export const TAILOR_MODEL = 'gemini-2.5-flash';
 export const REQUEST_TIMEOUT_MS = 60000;
 export type TokenUsage = { input?: number; output?: number; thoughts?: number; cached?: number; total?: number };
 export type TailorUsageRecord = TokenUsage & {
-  id: string; at: string; model: string; elapsedMs: number; attempts: number;
+  id: string; at: string; model: string; lastModel?: string; elapsedMs: number; attempts: number;
   status: 'success' | 'failed' | 'cancelled' | 'reused'; reason?: string;
 };
 const USAGE_KEY = 'cv-tailor-usage-v1';
@@ -28,7 +28,7 @@ export function readLatestTailorUsage(): TailorUsageRecord | null {
       || !Number.isFinite(item.elapsedMs) || item.elapsedMs < 0 || !Number.isSafeInteger(item.attempts) || item.attempts < 0) return null;
     const count = (key: string) => Number.isSafeInteger(item[key]) && item[key] >= 0 ? item[key] as number : undefined;
     return { id: typeof item.id === 'string' ? item.id : '', at: typeof item.at === 'string' ? item.at : '',
-      model: typeof item.model === 'string' ? item.model : '', status: item.status, attempts: item.attempts, elapsedMs: item.elapsedMs,
+      model: typeof item.model === 'string' ? item.model : '', lastModel: typeof item.lastModel === 'string' ? item.lastModel : undefined, status: item.status, attempts: item.attempts, elapsedMs: item.elapsedMs,
       input: count('input'), output: count('output'), thoughts: count('thoughts'), cached: count('cached'), total: count('total') };
   } catch { return null; }
 }

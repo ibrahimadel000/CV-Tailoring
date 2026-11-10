@@ -48,7 +48,7 @@ function quotaLabel(value: Record<string, unknown>): string | undefined {
   if (typeof value.quotaValue === 'string' && /^\d{1,10}$/.test(value.quotaValue) && Number(value.quotaValue) <= 1000000000) limit = `; reported limit: ${Number(value.quotaValue)}`;
   return metric + period + limit;
 }
-export async function providerFailureMessage(response: Response): Promise<string> {
+export async function providerFailureMessage(response: Response, attempts = 1): Promise<string> {
   const fields: string[] = []; let retry: number | undefined;
   try {
     retry = seconds(response.headers?.get('retry-after'));
@@ -69,5 +69,6 @@ export async function providerFailureMessage(response: Response): Promise<string
   const safe = [...new Set(fields)].slice(0, 8);
   const note = safe.length ? ' Provider-reported details, not a verification of account usage.' : '';
   const hint = retry !== undefined ? ` Provider retry hint: ${retry}s (not a guarantee).` : '';
-  return `Google rejected the request (HTTP ${response.status}${safe.length ? '; ' + safe.join('; ') : ''}).${note}${hint} No automatic retry. Your resumes are unchanged.`;
+  const retryNote = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
+  return `Google rejected the request (HTTP ${response.status}${safe.length ? '; ' + safe.join('; ') : ''}).${note}${hint}${retryNote} Your resumes are unchanged.`;
 }

@@ -18,6 +18,10 @@ export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Fla
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
 const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+// Shared with the UI so its disclosure cannot drift from the transport order.
+export function liveCompositionCandidates(model: CompositionModel): CompositionModel[] {
+  return [model, ...LIVE_FALLBACKS.filter(m => m !== model)];
+}
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
@@ -25,11 +29,11 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
   const { responseSchema: schema, wire } = prepareSingleDraftRequest(packet);
   if (wire.length > 180000) throw new TailorError('input', 'Source exceeds the request budget. Nothing was sent.');
   const controller = new AbortController(), started = performance.now();
-  let timedOut = false, status: 'success' | 'failed' | 'cancelled' = 'failed', reason = '', usage: TokenUsage = {}, attempts = 0;
+  let timedOut = false, status: 'success' | 'failed' | 'cancelled' = 'failed', reason = '', usage: TokenUsage = {}, attempts = 0, lastModel: CompositionModel | undefined;
   const abort = () => controller.abort(); signal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, COMPOSITION_TIMEOUT_MS);
   const isSynthetic = /^synthetic-/i.test(key);
-  const candidates: CompositionModel[] = isSynthetic ? [model] : [model, ...LIVE_FALLBACKS.filter(m => m !== model)];
+  const candidates: CompositionModel[] = isSynthetic ? [model] : liveCompositionCandidates(model);
   try {
     let response: Response | undefined, body: any;
     for (let i = 0; i < candidates.length; i++) {
@@ -39,14 +43,14 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         : targetModel === COMPOSITION_MODEL
           ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'medium' } }
           : { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 24576, thinkingConfig: { thinkingLevel: 'low' } };
-      attempts++;
+      attempts++; lastModel = targetModel; usage = {};
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
         method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
         body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
       });
       if (!response.ok) {
         if (!isSynthetic && response.status === 503 && i < candidates.length - 1) continue;
-        const message = await providerFailureMessage(response);
+        const message = await providerFailureMessage(response, attempts);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         throw new TailorError('provider', message);
       }
@@ -57,7 +61,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
       const complete = Array.isArray(body?.candidates) && body.candidates.length === 1 && body.candidates[0]?.finishReason === 'STOP';
       if (!complete && !isSynthetic && i < candidates.length - 1) continue;
-      if (!complete) throw new TailorError('incomplete', 'No completed response. No partial resume or automatic retry.');
+      if (!complete) throw new TailorError('incomplete', attempts > 1 ? `No completed response after ${attempts} model requests. No partial resume or further automatic retry.` : 'No completed response. No partial resume or automatic retry.');
       break;
     }
     const parts: unknown = body.candidates[0]?.content?.parts;
@@ -70,9 +74,10 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
     if (signal.aborted) { status = 'cancelled'; reason = 'cancelled'; throw new TailorError(reason, 'Cancelled. No copy was created; provider processing may already have started.'); }
     reason = timedOut ? 'timeout' : e instanceof TailorError ? e.code : 'network';
     if (e instanceof TailorError) throw e;
-    throw new TailorError(reason, timedOut ? 'Request timed out. No automatic retry.' : 'Request could not complete. No automatic retry.');
+    const ending = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
+    throw new TailorError(reason, (timedOut ? 'Request timed out.' : 'Request could not complete.') + ending);
   } finally {
     clearTimeout(timer); signal.removeEventListener('abort', abort);
-    saveTailorUsage({ id: crypto.randomUUID(), at: new Date().toISOString(), model, elapsedMs: Math.round(performance.now() - started), attempts: isSynthetic ? 1 : attempts, status, reason, ...usage });
+    saveTailorUsage({ id: crypto.randomUUID(), at: new Date().toISOString(), model, lastModel, elapsedMs: Math.round(performance.now() - started), attempts, status, reason, ...usage });
   }
 }
