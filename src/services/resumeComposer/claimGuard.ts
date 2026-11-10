@@ -22,6 +22,7 @@ export type GuardNote = { path: string; message: string; kind: 'restored' | 'rem
 const empty = (): Paragraph => ({ text: '', sourceIds: [] });
 const unique = <T>(values: readonly T[]) => [...new Set(values)];
 const list = (terms: readonly string[]) => terms.slice(0, 3).map(t => `“${t}”`).join(', ');
+const redactionMarker = /\[(?:link|contact)\s+omitted\]/iu;
 
 export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax: number, refsMax: number) {
   const notes: GuardNote[] = [];
@@ -45,6 +46,12 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       if (!text) continue;
       if (!ids.length || ids.some(id => !facts.has(id))) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that cited content not found in your CV.' });
+        continue;
+      }
+      // Placeholders in projected context describe withheld spans, not resume
+      // prose. Preserve an exact user-authored summary rather than editing it.
+      if (redactionMarker.test(text) && text !== facts.get(source.summaryId)?.text.trim()) {
+        notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a generated summary sentence containing an internal redaction marker. Review your original summary and source context.' });
         continue;
       }
       // Apply the same literal signals used for work passages to the summary.
@@ -125,6 +132,12 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         if (!ownIds.length) { ambiguousLine = true; notes.push({ path: where, kind: 'restored', message: `${label}: the AI line was not based on this entry; original entry wording was kept.` }); return []; }
         notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because the AI mixed in content from elsewhere.` });
         return ownIds.map(original);
+      }
+      // Do not propagate generated placeholders, but never rewrite a passage
+      // that the user already authored exactly as it appears in the source.
+      if (redactionMarker.test(p.text) && !ids.some(id => p.text.trim() === facts.get(id)?.text.trim())) {
+        notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because the generated line contained an internal redaction marker.` });
+        return ids.map(original);
       }
       const support = allIds.map(id => facts.get(id)!.text);
       const signals = analyzeTerms(p.text, support, index);

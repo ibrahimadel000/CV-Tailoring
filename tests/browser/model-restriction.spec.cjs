@@ -167,3 +167,27 @@ test('planned work is not silently promoted to completed work', async ({page,sc1
  expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual(['Planned to deploy web applications.','Organized team meetings weekly.']);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('internal redaction markers do not appear in generated summary', async ({page,sc1Harness}) => {
+ const p=sourceProfile();
+ p.customSections=[{id:crypto.randomUUID(),title:'VOLUNTEERING',kind:'text',paragraphs:['Mentored students. Materials: https://fictional.invalid/methods.']}];
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0];
+  const document={summarySegments:[
+   {text:'Software Engineer mentoring students [link omitted].',sourceIds:['headline','context_1']},
+   {text:'Software engineer with classroom experience building internal data dashboards.',sourceIds:['headline',e.bulletIds[0]]},
+  ],entries:[],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/internal redaction marker/)).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.summary.data).toBe('Software engineer with classroom experience building internal data dashboards.');
+ expect(copy.summary.data).not.toContain('[link omitted]');
+ expect(sc1Harness.calls).toHaveLength(1);
+});
