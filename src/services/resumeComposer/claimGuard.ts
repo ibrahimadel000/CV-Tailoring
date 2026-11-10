@@ -58,7 +58,9 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       // A cited term or number is not proof of the claim's meaning or scope.
       // Skill-only practice claims are checked separately by summaryBoundary.
       const cited = ids.map(id => facts.get(id)!);
-      if (copiedPassage(text, narrative)) {
+      const originalSummary = facts.get(source.summaryId)?.text.trim();
+      const isOriginalSummary = !!originalSummary && text === originalSummary && ids.includes(source.summaryId);
+      if (!isOriginalSummary && copiedPassage(text, narrative)) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that repeats one experience/project passage instead of introducing your background.' });
         continue;
       }

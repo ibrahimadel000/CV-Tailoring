@@ -214,3 +214,29 @@ test('an omitted exact C++ skill remains in the tailored copy with its qualifica
  expect(copy.experience).toEqual(original.experience);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('sparse source gets evidence-proportional summary guidance in the actual app request', async ({page,sc1Harness}) => {
+ const p=sourceProfile();
+ p.summary.data='';p.experience.isLocked=false;
+ p.experience.data[0].bullets=[{id:crypto.randomUUID(),text:'Reviewed incident trends for operations teams in weekly reports.',isVerified:true}];
+ p.education.data=[];p.certifications.data=[];p.projects.data=[];
+ const summary='Software Engineer with experience reviewing incident trends for operations teams.';
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0],id=e.bulletIds[0],fact=packet.source.evidence.find(x=>x.id===id);
+  expect(packet.guide.primaryFactIds).toEqual([id]);
+  expect(packet.guide.qualificationFactIds).toEqual([]);
+  const document={summarySegments:[{text:summary,sourceIds:['headline',id]}],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[{text:fact.text,sourceIds:[id]}]}],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page,'Operations role: review incident trends and prepare accurate weekly reports for teams.');
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.summary.data).toBe(summary);
+ expect(sc1Harness.calls).toHaveLength(1);
+ const instructions=sc1Harness.calls[0].body.systemInstruction.parts[0].text;
+ expect(instructions).toContain('a single supported fact is enough');
+ expect(instructions).not.toContain('MUST combine and cite at least TWO distinct IDs');
+});
