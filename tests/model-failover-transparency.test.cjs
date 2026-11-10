@@ -46,3 +46,39 @@ test('fallback exhaustion stops at the disclosed four attempts',async()=>{
 test('network failure stops immediately rather than silently falling back',async()=>{
  const x=await mock([new Error('fictional network error')]);assert.equal(x.calls.length,1);assert.equal(x.usage.attempts,1);assert.equal(x.usage.status,'failed');assert.match(x.error.message,/No automatic retry/);
 });
+
+function candidateReason(reason, extra={}){return new Response(JSON.stringify({candidates:[{finishReason:reason,finishMessage:'PRIVATE_PROVIDER_MESSAGE',content:{parts:[{text:'PRIVATE_PARTIAL_OUTPUT'}]}}],...extra}),{status:200})}
+for(const reason of ['SAFETY','RECITATION','BLOCKLIST','PROHIBITED_CONTENT','SPII','LANGUAGE','IMAGE_SAFETY']){
+ test('provider restriction '+reason+' stops without trying another model',async()=>{
+  const x=await mock([candidateReason(reason),complete(10)]);assert.equal(x.calls.length,1);assert.equal(x.result,undefined);assert.equal(x.error.code,'blocked');assert(!x.error.message.includes('PRIVATE_PROVIDER_MESSAGE'));assert(!x.error.message.includes('PRIVATE_PARTIAL_OUTPUT'));assert.equal(x.usage.status,'failed');
+ });
+}
+for(const reason of ['SAFETY','OTHER','BLOCKLIST','PROHIBITED_CONTENT','UNKNOWN_PRIVATE_REASON']){
+ test('prompt block '+reason+' prevents fallback and never exposes raw reason',async()=>{
+  const x=await mock([new Response(JSON.stringify({promptFeedback:{blockReason:reason,blockReasonMessage:'PRIVATE_PROVIDER_MESSAGE'}}),{status:200}),complete(10)]);assert.equal(x.calls.length,1);assert.equal(x.result,undefined);assert.equal(x.error.code,'blocked');assert(!x.error.message.includes('PRIVATE_PROVIDER_MESSAGE'));assert(!x.error.message.includes('UNKNOWN_PRIVATE_REASON'));
+ });
+}
+test('a prompt block takes precedence even with an inconsistent MAX_TOKENS candidate',async()=>{
+ const x=await mock([candidateReason('MAX_TOKENS',{promptFeedback:{blockReason:'SAFETY'}}),complete(10)]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'blocked');
+});
+test('a prompt block takes precedence even with an inconsistent STOP candidate',async()=>{
+ const body={promptFeedback:{blockReason:'SAFETY'},candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]}}]};const x=await mock([new Response(JSON.stringify(body),{status:200})]);assert.equal(x.calls.length,1);assert.equal(x.result,undefined);assert.equal(x.error.code,'blocked');
+});
+for(const body of [{},{candidates:[]},{candidates:[{}]},{candidates:[{finishReason:'OTHER'}]},{candidates:[{finishReason:'MAX_TOKENS'},{finishReason:'OTHER'}]}]){
+ test('unknown or malformed response stops rather than switching models',async()=>{
+  const x=await mock([new Response(JSON.stringify(body),{status:200}),complete(10)]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'incomplete');assert.equal(x.result,undefined);
+ });
+}
+test('a restriction after a 503 stops the sequence and records both attempts',async()=>{
+ const x=await mock([new Response('',{status:503}),candidateReason('SAFETY'),complete(10)]);assert.equal(x.calls.length,2);assert.equal(x.error.code,'blocked');assert.equal(x.usage.attempts,2);assert.equal(x.usage.lastModel,'gemini-3.6-flash');assert.match(x.error.message,/No further automatic retry/);
+});
+
+test('blocked safety ratings take precedence over an otherwise successful candidate',async()=>{
+ const body={candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]},safetyRatings:[{blocked:true}]}]};const x=await mock([new Response(JSON.stringify(body),{status:200})]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'blocked');assert.equal(x.result,undefined);
+});
+test('a restricted candidate among inconsistent multiple candidates prevents fallback',async()=>{
+ const body={candidates:[{finishReason:'MAX_TOKENS'},{finishReason:'SAFETY'}]};const x=await mock([new Response(JSON.stringify(body),{status:200}),complete(10)]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'blocked');
+});
+test('nonblocked safety ratings do not prevent an ordinary successful response',async()=>{
+ const body={candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]},safetyRatings:[{blocked:false}]}]};const x=await mock([new Response(JSON.stringify(body),{status:200})]);assert.equal(x.error,undefined);assert.deepEqual(x.result,{});
+});

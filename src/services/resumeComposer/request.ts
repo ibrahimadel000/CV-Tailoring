@@ -59,8 +59,21 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       const count = (k: string) => Number.isSafeInteger(u[k]) && u[k] >= 0 ? u[k] as number : undefined;
       usage = { input: count('promptTokenCount'), output: count('candidatesTokenCount'), thoughts: count('thoughtsTokenCount'), total: count('totalTokenCount') };
       if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-      const complete = Array.isArray(body?.candidates) && body.candidates.length === 1 && body.candidates[0]?.finishReason === 'STOP';
-      if (!complete && !isSynthetic && i < candidates.length - 1) continue;
+      // A prompt/candidate restriction must never be bypassed by trying another
+      // model. Never reflect provider text or partial output in diagnostics.
+      const restrictedReasons = new Set(['SAFETY', 'RECITATION', 'LANGUAGE', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION']);
+      const blockReason = body?.promptFeedback?.blockReason;
+      const promptBlocked = blockReason !== undefined && blockReason !== null && blockReason !== '';
+      const blockedRatings = (value: unknown) => Array.isArray(value) && value.some(r => r?.blocked === true);
+      const candidateList = Array.isArray(body?.candidates) ? body.candidates : [];
+      const restricted = promptBlocked || blockedRatings(body?.promptFeedback?.safetyRatings)
+        || candidateList.some((candidate: any) => restrictedReasons.has(candidate?.finishReason) || blockedRatings(candidate?.safetyRatings));
+      if (restricted) throw new TailorError('blocked', attempts > 1
+        ? `Google blocked or restricted the request or response after ${attempts} model requests. No further automatic retry. Your resumes are unchanged.`
+        : 'Google blocked or restricted the request or response. No automatic retry. Your resumes are unchanged.');
+      const complete = candidateList.length === 1 && candidateList[0]?.finishReason === 'STOP';
+      const outputLimit = candidateList.length === 1 && candidateList[0]?.finishReason === 'MAX_TOKENS';
+      if (outputLimit && !isSynthetic && i < candidates.length - 1) continue;
       if (!complete) throw new TailorError('incomplete', attempts > 1 ? `No completed response after ${attempts} model requests. No partial resume or further automatic retry.` : 'No completed response. No partial resume or automatic retry.');
       break;
     }
