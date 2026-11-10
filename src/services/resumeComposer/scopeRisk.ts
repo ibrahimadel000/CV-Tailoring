@@ -8,6 +8,8 @@
 const normalize = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[’]/g, "'");
 const NEGATION = /\b(?:no|not|never|without|cannot|can't|couldn't|didn't|doesn't|don't|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't|won't|wouldn't)\b/u;
 const LEADERSHIP = /\b(?:led|lead|leads|leading|managed|manages|managing|directed|directs|directing|headed|heading|supervised|supervises|supervising)\b/u;
+// Exclude the ambiguous noun 'lead' (for example, lead time).
+const ASSERTED_LEADERSHIP = /\b(?:led|leading|managed|managing|directed|directing|headed|heading|supervised|supervising)\b/u;
 const PEOPLE = /\b(?:team|teams|staff|employees|engineers|developers|workers|personnel|people|colleagues)\b/u;
 const EXTERNAL_AUDIENCE = /\bexternal\s+(?:users?|clients?|customers?|partners?|audiences?)\b/u;
 const PRODUCTION = /\b(?:production|live\s+environment)\b/u;
@@ -27,6 +29,22 @@ function hasNegation(text: string): boolean {
   // “Not only X but also Y” is a positive idiom, not a qualification.
   return NEGATION.test(text.replace(/\bnot\s+only\b/gu, '')) || /\bnon[-\s]+production\b/u.test(text);
 }
+// A small literal signal for common English negative-action constructions.
+// It does not parse grammar, objects, actors or qualifiers, and can restore a
+// faithful paraphrase when the model uses a synonym. It is not a semantic guard.
+function negativeActionRoots(text: string): string[] {
+  const roots: string[] = [];
+  const pattern = /\b(?:not(?!\s+only\b)|never|without|cannot|can't|couldn't|didn't|doesn't|don't|won't|wouldn't)\s+(?:[a-z]+ly\s+)?([a-z]+)\b/gu;
+  for (const match of text.matchAll(pattern)) {
+    let word = match[1];
+    if (word.endsWith('ing') && word.length > 5) word = word.slice(0, -3);
+    else if (word.endsWith('ed') && word.length > 4) word = word.slice(0, -2);
+    if (word.endsWith('e') && word.length > 3) word = word.slice(0, -1);
+    roots.push(word);
+  }
+  return roots;
+}
+
 function leadPeopleInOneClause(text: string): boolean {
   return text.split(/[.!?;\n]+/u).some(clause => LEADERSHIP.test(clause) && PEOPLE.test(clause));
 }
@@ -39,6 +57,14 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
     risks.push('a limitation in the cited wording may have been lost');
   if (hasNegation(proposed) && !sources.some(hasNegation))
     risks.push('a negative statement was not clearly stated in the cited wording');
+  const sourceNegativeActions = sources.flatMap(negativeActionRoots), proposedNegativeActions = negativeActionRoots(proposed);
+  if (sourceNegativeActions.length && proposedNegativeActions.length &&
+      (sourceNegativeActions.some(root => !proposedNegativeActions.includes(root)) ||
+       proposedNegativeActions.some(root => !sourceNegativeActions.includes(root))))
+    risks.push('the action associated with a negation may have changed');
+  if (sources.some(source => LIMITED_PARTICIPATION.test(source)) && ASSERTED_LEADERSHIP.test(proposed)
+      && !sources.some(source => LEADERSHIP.test(source)))
+    risks.push('leadership was not clearly stated in the cited supporting role');
   if (leadPeopleInOneClause(proposed) && !sources.some(leadPeopleInOneClause))
     risks.push('team leadership was not clearly stated in the cited wording');
   if (EXTERNAL_AUDIENCE.test(proposed) && !sources.some(source => EXTERNAL_AUDIENCE.test(source)))

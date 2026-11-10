@@ -85,3 +85,44 @@ test('summary cannot silently drop an explicit supervision qualifier',()=>{
  assert(out.guardNotes.some(note=>note.path==='summarySegments.0'&&note.kind==='removed'&&note.message.includes('supervision qualification')));
  assert.equal(out.candidate.summary.data,p.summary.data.trim());
 });
+
+test('moving negation to a different action restores the source',()=>{
+ const source='Tested applications but did not deploy production systems.';
+ const {out,actual}=compose(source,'Deployed production systems but did not test applications.');
+ assert.equal(actual,source);
+ assert(out.guardNotes.some(n=>n.path==='entries.work_1.bullets.0'&&n.message.includes('negation may have changed')));
+});
+test('same negative action remains editable in fictional examples',()=>{
+ for(const [source,proposed] of [
+  ['Tested applications but did not deploy production systems.','Tested applications without deploying production systems.'],
+  ['Improved delivery workflows without modifying customer data.','Improved workflows without modifying customer data.'],
+ ]) {const {actual}=compose(source,proposed);assert.equal(actual,proposed);}
+});
+test('a supporting role cannot silently turn into leadership of a task',()=>{
+ const source='Helped developers test applications and review documentation.';
+ const {out,actual}=compose(source,'Supported documentation and led application testing.');
+ assert.equal(actual,source);
+ assert(out.guardNotes.some(n=>n.path==='entries.work_1.bullets.0'&&n.message.includes('leadership was not clearly stated')));
+});
+test('leadership already stated in a supporting role remains eligible',()=>{
+ const source='Helped lead application testing with developers.';
+ const proposed='Helped lead testing of applications with developers.';
+ assert.equal(compose(source,proposed).actual,proposed);
+});
+test('negative action matching is a literal signal, not a semantic guarantee',()=>{
+ const source='Tested applications but did not deploy production systems.';
+ const proposed='Tested applications but did not release production systems.';
+ assert.equal(compose(source,proposed).actual,source); // Conservative false positive.
+});
+test('a summary cannot silently move a negative action to another activity',()=>{
+ const p=fixture();p.experience.data[0].bullets[0].text='Tested applications but did not deploy production systems.';
+ const s=n.prepareNaturalComposition(p,job).source,facts=new Map(s.evidence.map(e=>[e.id,e]));
+ const response={summarySegments:[{text:'Deployed production systems but did not test applications.',sourceIds:['work_1_b1']}],entries:s.experience.map(e=>({id:e.id,overview:{text:'',sourceIds:[]},bullets:e.bulletIds.map(id=>({text:facts.get(id).text,sourceIds:[id]}))})),skillSelections:[]};
+ const out=n.compileNaturalComposition(p,response,job);
+ assert(out.guardNotes.some(n=>n.path==='summarySegments.0'&&n.kind==='removed'&&n.message.includes('negation may have changed')));
+});
+
+test('lead time as a noun is not itself a claim of task leadership',()=>{
+ const {scopeRisk}=load('services/resumeComposer/scopeRisk');
+ assert(!scopeRisk('Supported developers in reducing lead times.', ['Helped developers reduce lead times.']).some(x=>x.includes('leadership')));
+});
