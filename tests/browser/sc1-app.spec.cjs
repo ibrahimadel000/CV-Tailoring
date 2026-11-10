@@ -892,3 +892,27 @@ test('model choice is locked while the selected request is in progress', async (
  expect(sc1Harness.calls).toHaveLength(1);
  expect(sc1Harness.calls[0].url).toContain('/gemini-3-flash-preview:generateContent');
 });
+
+
+test('model selection discloses fallback order and budget without a request', async ({page,sc1Harness}) => {
+ await seed(page,sourceProfile());
+ await expect(page.getByText(/Up to 3 requests may be made/)).toBeVisible();
+ await page.getByLabel('AI model').selectOption('gemini-3-flash-preview');
+ await expect(page.getByText(/Gemini 3 Flash Preview → Gemini 3.6 Flash → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite/)).toBeVisible();
+ await expect(page.getByText(/Up to 4 requests may be made/)).toBeVisible();
+ expect(sc1Harness.calls).toHaveLength(0);
+});
+
+test('completed synthetic request displays selected and actual model', async ({page,sc1Harness}) => {
+ sc1Harness.respond(packet=>({body:completed(authoredDocument(packet))}));
+ await seed(page,sourceProfile());
+ await page.getByLabel('AI model').selectOption('gemini-3-flash-preview');
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText('Latest model request',{exact:true}).click();
+ await expect(page.getByText(/Selected model: gemini-3-flash-preview/)).toBeVisible();
+ await expect(page.getByText(/Model producing the response: gemini-3-flash-preview/)).toBeVisible();
+ await expect(page.getByText(/1 request attempted/)).toBeVisible();
+ expect(sc1Harness.calls).toHaveLength(1);
+});
