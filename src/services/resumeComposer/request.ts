@@ -1,4 +1,5 @@
 import { providerFailureMessage } from './providerDiagnostics';
+import { fallbackDelayMs, waitForFallback } from './failoverBackoff';
 import type { NaturalPacket } from './naturalDocument';
 import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
@@ -49,7 +50,15 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
       });
       if (!response.ok) {
-        if (!isSynthetic && response.status === 503 && i < candidates.length - 1) continue;
+        if (!isSynthetic && response.status === 503 && i < candidates.length - 1) {
+          // If the exposed HTTP hint exceeds our wait budget, stop rather than retry early.
+          const delay = fallbackDelayMs(response.headers.get('retry-after'), i);
+          if (delay !== null) {
+            void response.body?.cancel().catch(() => {});
+            await waitForFallback(delay, controller.signal);
+            continue;
+          }
+        }
         const message = await providerFailureMessage(response, attempts);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         throw new TailorError('provider', message);

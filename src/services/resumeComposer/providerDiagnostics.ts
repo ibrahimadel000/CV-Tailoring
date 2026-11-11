@@ -49,6 +49,11 @@ function quotaLabel(value: Record<string, unknown>): string | undefined {
   return metric + period + limit;
 }
 export async function providerFailureMessage(response: Response, attempts = 1): Promise<string> {
+  if (response.status === 505) {
+    void response.body?.cancel().catch(() => {});
+    const retryNote = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
+    return `The server or a network intermediary rejected the HTTP protocol version (HTTP 505). Check the network or proxy configuration; retrying the same request may not help.${retryNote} Your resumes are unchanged.`;
+  }
   const fields: string[] = []; let retry: number | undefined;
   try {
     retry = seconds(response.headers?.get('retry-after'));

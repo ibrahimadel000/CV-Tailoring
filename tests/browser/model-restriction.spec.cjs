@@ -568,3 +568,15 @@ test('reversed percentage direction restores the source and preserves another ed
  expect(copy.compositionReview.notes.some(x=>x.includes('percentage direction may have changed'))).toBe(true);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+
+test('HTTP 505 explains protocol failure and preserves the source offline', async ({page,sc1Harness}) => {
+ sc1Harness.respond(()=>({status:505,body:{error:{message:'PRIVATE_PROVIDER_SENTINEL'}}}));
+ const original=await seed(page,sourceProfile());
+ await tailor(page);
+ await expect(page.getByText(/HTTP 505/)).toBeVisible();
+ await expect(page.getByText(/rejected the HTTP protocol version/)).toBeVisible();
+ await expect(page.getByText('PRIVATE_PROVIDER_SENTINEL')).toHaveCount(0);
+ expect(sc1Harness.calls).toHaveLength(1);
+ expect(await stored(page)).toEqual({profiles:[original],activeId:original.profileId});
+});
