@@ -118,6 +118,46 @@ function changesNumericSign(text: string, sources: readonly string[]): boolean {
     && !original.some(([v, n]) => v === value && n === negative));
 }
 
+// Literal directional-verb + percentage signals, not a measurement or
+// attribution parser. Only compare the same written magnitude and unit. Split
+// common clause boundaries and decline intervening directional verbs to reduce
+// accidental associations. Conflicting cited directions remain ambiguous.
+function percentageDirections(text: string): [string, 'up' | 'down'][] {
+  const clean = text.replace(/[\u064b-\u065f\u0670\u0640]/gu, '');
+  const digit = String.raw`[0-9٠-٩۰-۹]`;
+  const number = String.raw`(?:${digit}{1,3}(?:[,٬]${digit}{3})+|${digit}+)(?:[.٫]${digit}+)?`;
+  const unit = String.raw`(?:%|٪|percentage\s+points?|percent\s+points?|percent(?:age)?)`;
+  const enUp = String.raw`(?:increas(?:e|ed|es|ing)|rais(?:e|ed|es|ing)|grew|grow(?:s|ing)?|rose|ris(?:e|es|ing))`;
+  const enDown = String.raw`(?:decreas(?:e|ed|es|ing)|reduc(?:e|ed|es|ing)|cut|lower(?:ed|s|ing)?|fell|fall(?:s|ing)?|declin(?:e|ed|es|ing)|drop(?:ped|s|ping)?)`;
+  const arUp = String.raw`(?:زاد(?:ت)?|ازداد(?:ت)?|ارتفع(?:ت)?|رفع(?:ت|نا)?)`;
+  const arDown = String.raw`(?:خفض(?:ت|نا)?|قلل(?:ت|نا)?|انخفض(?:ت)?|تراجع(?:ت)?)`;
+  const english = new RegExp(String.raw`\b(${enUp}|${enDown})\b(.{0,100}?)\bby\s+(${number})\s*(${unit})(?![\p{L}\p{N}_])`, 'gu');
+  const arabic = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:و|ف)?(${arUp}|${arDown})(?![\p{L}\p{N}_])(.{0,100}?)(?:بنسبة|ب)\s*(${number})\s*(${unit})(?![\p{L}\p{N}_])`, 'gu');
+  const enDirection = new RegExp(String.raw`\b(?:${enUp}|${enDown})\b`, 'u');
+  const arDirection = new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:و|ف)?(?:${arUp}|${arDown})(?![\p{L}\p{N}_])`, 'u');
+  const clauses = clean.split(/[;!?\n،]|(?<![0-9٠-٩۰-۹]),(?![0-9٠-٩۰-۹])|\.(?![0-9٠-٩۰-۹])|\b(?:and|but|while|whereas)\b/gu);
+  const up = new RegExp(`^(?:${enUp}|${arUp})$`, 'u');
+  const result: [string, 'up' | 'down'][] = [];
+  for (const clause of clauses) for (const [pattern, another] of [[english, enDirection], [arabic, arDirection]] as const) {
+    for (const m of clause.matchAll(pattern)) {
+      if (another.test(m[2])) continue;
+      const value = m[3].replace(/[٠-٩۰-۹]/gu, char => {
+        const code = char.charCodeAt(0);
+        return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+      }).replace(/[,٬]/gu, '').replace(/٫/gu, '.');
+      if (/^0+(?:\.0+)?$/u.test(value)) continue;
+      const measure = /points?/u.test(m[4]) ? 'percentage-point' : 'percent';
+      result.push([`${value}:${measure}`, up.test(m[1]) ? 'up' : 'down']);
+    }
+  }
+  return result;
+}
+function reversesPercentageDirection(text: string, sources: readonly string[]): boolean {
+  const original = sources.flatMap(percentageDirections);
+  return percentageDirections(text).some(([key, direction]) => original.some(([k, d]) => k === key && d !== direction)
+    && !original.some(([k, d]) => k === key && d === direction));
+}
+
 // Compare only a small set of explicit units attached to the same written
 // number. This cannot associate figures with measurements, check conversions,
 // or catch omitted units, unlisted units, or changed values. Shared numbers
@@ -178,6 +218,8 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
     risks.push('the direction of a numeric range may have changed');
   if (changesNumericSign(proposed, sources))
     risks.push('the sign associated with a numeric value may have changed');
+  if (reversesPercentageDirection(proposed, sources))
+    risks.push('the percentage direction may have changed');
   if (changesMeasuredUnit(proposed, sources))
     risks.push('the unit associated with a numeric value may have changed');
   const sourcePlans = sources.flatMap(plannedActions), proposedPlans = plannedActions(proposed);
