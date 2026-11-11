@@ -4,18 +4,18 @@ import type { NaturalPacket } from './naturalDocument';
 import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorRequest';
-export const COMPOSITION_MODEL = 'gemini-3.5-flash-lite';
+export const COMPOSITION_MODEL = 'gemini-3.8-flash';
 // Explicit, bounded development choices; never silently switch or retry in synthetic tests.
 export const COMPOSITION_MODELS = [
-  { id: COMPOSITION_MODEL, label: 'Gemini 3.5 Flash-Lite' },
+  { id: COMPOSITION_MODEL, label: 'Gemini 3.8 Flash' },
   { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
   { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
   { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
-  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
 ] as const;
 export type CompositionModel = typeof COMPOSITION_MODELS[number]['id'];
 export const COMPOSITION_TIMEOUT_MS = 300000;
-export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Flash-Lite · experimental';
+export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.8 Flash · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
 const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
@@ -41,7 +41,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       const targetModel = candidates[i];
       const generationConfig = isSynthetic
         ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } }
-        : targetModel === COMPOSITION_MODEL
+        : targetModel === 'gemini-3.5-flash-lite'
           ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'medium' } }
           : { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 24576, thinkingConfig: { thinkingLevel: 'low' } };
       attempts++; lastModel = targetModel; usage = {};

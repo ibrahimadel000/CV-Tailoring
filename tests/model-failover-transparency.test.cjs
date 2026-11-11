@@ -13,7 +13,7 @@ async function mock(responses,model='gemini-3.5-flash-lite'){
  const oldFetch=global.fetch,oldStorage=global.localStorage,storage=new Map(),calls=[],bodies=[];
  global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
  global.fetch=async (url,options)=>{calls.push(String(url));bodies.push(JSON.parse(options.body));assert(responses.length,'unexpected extra fetch');const next=responses.shift();if(next instanceof Error)throw next;return next};
- try{let result,error;try{result=await requestComposition(packet(),new AbortController().signal,model)}catch(e){error=e}return {result,error,calls,bodies,usage:readLatestTailorUsage(),raw:JSON.stringify([...storage.values()])}}
+ try{let result,error;try{result=model===null ? await requestComposition(packet(),new AbortController().signal) : await requestComposition(packet(),new AbortController().signal,model)}catch(e){error=e}return {result,error,calls,bodies,usage:readLatestTailorUsage(),raw:JSON.stringify([...storage.values()])}}
  finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
 }
 test('live fallback order is bounded, starts with selection and avoids duplicates',()=>{
@@ -81,4 +81,9 @@ test('a restricted candidate among inconsistent multiple candidates prevents fal
 });
 test('nonblocked safety ratings do not prevent an ordinary successful response',async()=>{
  const body={candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]},safetyRatings:[{blocked:false}]}]};const x=await mock([new Response(JSON.stringify(body),{status:200})]);assert.equal(x.error,undefined);assert.deepEqual(x.result,{});
+});
+
+
+test('default 3.8 keeps its existing low-thinking configuration and bounded fallbacks',async()=>{
+ const x=await mock([complete(12)],null);assert.equal(x.error,undefined);assert.equal(x.calls.length,1);assert.match(x.calls[0],/gemini-3\.8-flash:generateContent$/);assert.equal(x.bodies[0].generationConfig.maxOutputTokens,24576);assert.equal(x.bodies[0].generationConfig.thinkingConfig.thinkingLevel,'low');assert.deepEqual(liveCompositionCandidates('gemini-3.8-flash'),['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite']);
 });
