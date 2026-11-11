@@ -389,3 +389,71 @@ test('mixed-script job text does not auto-add omitted skills', async ({page,sc1H
  expect(copy.experience).toEqual(original.experience);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('current comparison pairs entries and labels exact-text differences without changing resumes', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);
+ p.experience.data[0].bullets=[
+  {id:crypto.randomUUID(),text:'Built internal data dashboards for a classroom exercise.',isVerified:true},
+  {id:crypto.randomUUID(),text:'Wrote technical documentation for internal users.',isVerified:true},
+  {id:crypto.randomUUID(),text:'Organized weekly team meetings.',isVerified:true},
+ ];
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0];
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[
+   {text:'Developed internal data dashboards for a classroom exercise.',sourceIds:[e.bulletIds[0]]},
+   {text:'Organized weekly team meetings.',sourceIds:[e.bulletIds[2]]},
+  ]}],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ await saved(page);
+ let state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ await page.getByText('Compare current experience and projects',{exact:true}).click();
+ await expect(page.getByText(/A reworded bullet may preserve the same meaning/)).toBeVisible();
+ const pair=page.getByRole('article',{name:'Experience comparison 1'}),source=pair.getByRole('region',{name:'Current source'}),tailored=pair.getByRole('region',{name:'Current tailored copy'});
+ await expect(source.getByText('Built internal data dashboards for a classroom exercise.')).toBeVisible();
+ await expect(tailored.getByText('Developed internal data dashboards for a classroom exercise.')).toBeVisible();
+ const flagged=source.getByText('No exact text match in current tailored bullets');
+ await expect(flagged).toHaveCount(2);
+ await expect(source.getByRole('listitem').filter({hasText:'Organized weekly team meetings.'}).getByText('No exact text match in current tailored bullets')).toHaveCount(0);
+ if(process.env.CV_COMPARE_SCREENSHOT_DIR){
+  await fs.mkdir(process.env.CV_COMPARE_SCREENSHOT_DIR,{recursive:true});
+  const capture = async (section, name) => {
+   await section.evaluate(el => { const scroll=el.closest('.tailor-scroll'); const r=el.getBoundingClientRect(), s=scroll.getBoundingClientRect(); scroll.scrollTop += r.top-s.top-8; });
+   await page.screenshot({path:process.env.CV_COMPARE_SCREENSHOT_DIR+'/comparison-'+name+'.png'});
+  };
+  await capture(source,'desktop-source');
+  await capture(tailored,'desktop-copy');
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+  await capture(source,'mobile-source');
+  await capture(tailored,'mobile-copy');
+  await page.setViewportSize({width:1600,height:1000});
+ }
+ await page.reload();await saved(page);
+ await page.getByText('Compare current experience and projects',{exact:true}).click();
+ await expect(page.getByRole('article',{name:'Experience comparison 1'}).getByText('Wrote technical documentation for internal users.')).toBeVisible();
+ state=await stored(page);expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ // Simulate a later source edit: the live comparison must never imply a frozen snapshot.
+ const changed=state.profiles.map(x=>x.profileId===original.profileId?{...x,experience:{...x.experience,data:x.experience.data.map((e,i)=>i?e:{...e,bullets:e.bullets.map((b,j)=>j?b:{...b,text:'Later source edit for comparison.'})})}}:x);
+ await page.evaluate(async({profiles,key})=>{
+  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+  await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put(profiles,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+ },{profiles:changed,key:PROFILE_KEY});
+ await page.reload();await saved(page);await page.getByText('Compare current experience and projects',{exact:true}).click();
+ await expect(page.getByRole('article',{name:'Experience comparison 1'}).getByText('Later source edit for comparison.')).toBeVisible();
+ // If a source is removed later, the UI must explain that comparison is unavailable.
+ state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+ await page.evaluate(async({profiles,key})=>{
+  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+  await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put(profiles,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+ },{profiles:[copy],key:PROFILE_KEY});
+ await page.reload();await saved(page);
+ await expect(page.getByText(/The source resume is not available, so a current comparison cannot be displayed/)).toBeVisible();
+ await expect(page.getByText('Compare current experience and projects',{exact:true})).toHaveCount(0);
+ expect(sc1Harness.calls).toHaveLength(1);
+});

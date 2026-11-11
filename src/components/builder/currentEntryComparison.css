@@ -1,0 +1,9 @@
+.tailor-comparison-heading { margin: 16px 0 8px; color: #344054; font-size: 14px; }
+.tailor-comparison-entry { margin: 8px 0 16px; border: 1px solid #dce3e9; border-radius: 8px; overflow-wrap: anywhere; }
+.tailor-comparison-entry section { padding: 12px; }
+.tailor-comparison-entry section + section { border-top: 1px solid #dce3e9; }
+.tailor-comparison-entry strong { color: #344054; }
+.tailor-comparison-title { font-weight: 600; margin: 8px 0; }
+.tailor-comparison-text { white-space: pre-wrap; }
+.tailor-comparison-flag { display: block; margin-top: 4px; color: #79501e; font-size: 14px; }
+.tailor-comparison-entry li > span[dir="auto"] { white-space: pre-wrap; }
