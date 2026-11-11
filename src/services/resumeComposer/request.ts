@@ -1,5 +1,6 @@
 import { providerFailureMessage } from './providerDiagnostics';
 import { fallbackDelayMs, waitForFallback } from './failoverBackoff';
+import { inspect503Retry } from './retryInfo';
 import type { NaturalPacket } from './naturalDocument';
 import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
@@ -51,13 +52,21 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       });
       if (!response.ok) {
         if (!isSynthetic && response.status === 503 && i < candidates.length - 1) {
-          // If the exposed HTTP hint exceeds our wait budget, stop rather than retry early.
-          const delay = fallbackDelayMs(response.headers.get('retry-after'), i);
+          // Respect both exposed HTTP and bounded Google RetryInfo hints.
+          // Unknown/oversized/stalled JSON stops rather than guessing an early retry.
+          const inspection = await inspect503Retry(response, controller.signal);
+          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+          if (!inspection.ok) {
+            const retryNote = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
+            throw new TailorError('provider', `The AI service returned HTTP 503, but retry timing could not be safely checked.${retryNote} Your resumes are unchanged.`);
+          }
+          const delay = fallbackDelayMs(response.headers.get('retry-after'), i, undefined, undefined, inspection.retryMs);
           if (delay !== null) {
-            void response.body?.cancel().catch(() => {});
             await waitForFallback(delay, controller.signal);
             continue;
           }
+          // Reconstruct only the bounded error body for the existing allowlisted diagnostic.
+          response = new Response(inspection.body, { status: 503, headers: response.headers });
         }
         const message = await providerFailureMessage(response, attempts);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');

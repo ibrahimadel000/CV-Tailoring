@@ -67,7 +67,10 @@ export async function providerFailureMessage(response: Response, attempts = 1): 
           const violation = object(rawViolation), label = violation && quotaLabel(violation);
           if (label) fields.push('quota: ' + label);
         }
-        if (detail['@type'] === 'type.googleapis.com/google.rpc.RetryInfo') retry = seconds(detail.retryDelay) ?? retry;
+        if (detail['@type'] === 'type.googleapis.com/google.rpc.RetryInfo') {
+          const hint = seconds(detail.retryDelay);
+          if (hint !== undefined) retry = Math.max(retry ?? 0, hint);
+        }
       }
     }
   } catch { /* Malformed, oversized or unreadable errors stay generic. */ }
