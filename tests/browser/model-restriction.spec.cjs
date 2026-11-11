@@ -364,3 +364,28 @@ test('an unfinished degree is not silently presented as completed', async ({page
  expect(copy.education).toEqual(original.education);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('mixed-script job text does not auto-add omitted skills', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);
+ p.skills.isLocked=false;
+ p.skills.data=[
+  {id:crypto.randomUUID(),name:'SaaS',category:'Technical',level:'Coursework only'},
+  {id:crypto.randomUUID(),name:'Technical Documentation',category:'Technical',level:''},
+  {id:crypto.randomUUID(),name:'PHP',category:'Technical',level:''},
+ ];
+ const job='لا نحتاج إلى SaaS أو technical documentation لهذا المنصب. العمل يشمل PHP.';
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0],id=e.bulletIds[0],fact=packet.source.evidence.find(x=>x.id===id);
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[{text:fact.text,sourceIds:[id]}]}],skillSelections:[{id:'skill_3',category:'Technical'}]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page,job);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.skills.data.map(x=>x.name)).toEqual(['PHP']);
+ expect(copy.experience).toEqual(original.experience);
+ expect(sc1Harness.calls).toHaveLength(1);
+});

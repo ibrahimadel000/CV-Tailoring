@@ -2,7 +2,8 @@
  * This is not a relevance, proficiency, or factuality classifier. The optional
  * safeguard retains an existing uniquely identified native skill when a clear
  * acronym/mixed-case technology token or a narrowly matched two-word phrase
- * appears in the job without negation.
+ * appears on an unambiguous English-only job line without negation. Mixed-script
+ * mentions suppress automatic retention because negation is not multilingual.
  * It never creates a skill or changes its native name, level, or qualification.
  */
 import type { CVProfile } from '@/types/schema';
@@ -65,16 +66,17 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
  const lines = job.split(/[\n;!?]+/u).map(s => s.trim()).filter(Boolean);
  const positive = new Set<string>(), negative = new Set<string>();
  for (const line of lines) {
-  const terms = AMBIGUOUS_LINE.test(line) ? negative : positive;
+  // Negation recognition is English-only. A line containing non-ASCII
+  // letters can qualify or negate ANY English token or phrase, not only C++.
+  // Suppress all of its matches, including a separate positive mention of the
+  // same skill; this can decline valid bilingual mentions rather than infer fit.
+  const nonEnglishScript = /[^\x00-\x7F]/u.test(line) && [...line].some(ch => /\p{L}/u.test(ch) && !/[A-Za-z]/u.test(ch));
+  const terms = AMBIGUOUS_LINE.test(line) || nonEnglishScript ? negative : positive;
   for (const match of line.matchAll(TOKEN)) {
    const token = lower(match[0]);
    // Objective-C++ is a distinct language, not an exact mention of C++.
    if (token === 'c++' && /\bobjective-$/i.test(line.slice(0, match.index))) continue;
-   // Negation detection is English-only. Treat mixed-script mentions as
-   // ambiguous, including when a separate English line is positive.
-   const nonEnglishScript = /[^\x00-\x7F]/u.test(line) && [...line].some(ch => /\p{L}/u.test(ch) && !/[A-Za-z]/u.test(ch));
-   const target = SYMBOL_LANGUAGES.has(token) && nonEnglishScript ? negative : terms;
-   target.add(`t:${token}`);
+   terms.add(`t:${token}`);
   }
   for (const phrase of distinctivePhrases(line)) terms.add(`p:${phrase}`);
  }
