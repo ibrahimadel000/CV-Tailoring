@@ -484,3 +484,32 @@ test('changed signed result restores original while retaining an independent edi
  expect(copy.compositionReview.notes.some(x=>x.includes('sign associated with a numeric value may have changed'))).toBe(true);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('explicit programming context keeps omitted native language skills without inventing experience', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);p.skills.isLocked=false;
+ p.skills.data=[
+  {id:crypto.randomUUID(),name:'Python',category:'Languages',level:'Coursework only'},
+  {id:crypto.randomUUID(),name:'Java',category:'Technical',level:'Beginner'},
+  {id:crypto.randomUUID(),name:'PHP',category:'Technical',level:''},
+ ];
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0], fact=packet.source.evidence.find(x=>x.id===e.bulletIds[0]);
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[{text:fact.text,sourceIds:[e.bulletIds[0]]}]}],skillSelections:[{id:'skill_3',category:'Technical'}]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page,'Software engineer role: Build software using Python and support Java development for internal applications.');
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();await saved(page);
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ let state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.experience).toEqual(original.experience);
+ expect(copy.skills.data.map(x=>x.name)).toEqual(['PHP','Python','Java']);
+ expect(copy.skills.data[1]).toEqual(original.skills.data[0]);expect(copy.skills.data[2]).toEqual(original.skills.data[1]);
+ expect(copy.compositionReview.notes.filter(x=>x.includes('literal match'))).toHaveLength(2);
+ await page.reload();await saved(page);
+ state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.skills.data.map(x=>x.name)).toEqual(['PHP','Python','Java']);
+ expect(sc1Harness.calls).toHaveLength(1);
+});
