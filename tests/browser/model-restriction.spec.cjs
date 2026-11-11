@@ -340,3 +340,27 @@ test('changed metric units restore original and preserve an independent edit', a
  expect(copy.experience.data[0].bullets.map(x=>x.text)).toEqual(['Reduced processing time by 5 hours.','Organized team meetings weekly.']);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('an unfinished degree is not silently presented as completed', async ({page,sc1Harness}) => {
+ const p=sourceProfile();
+ Object.assign(p.education.data[0],{degree:'Bachelor degree in progress',institution:'Fictional University',startDate:'',endDate:'',graduationDate:'',description:'',gpa:'',honors:[]});
+ p.education.data=p.education.data.slice(0,1);
+ sc1Harness.respond(()=>{
+  const document={summarySegments:[
+   {text:'Earned a bachelor degree.',sourceIds:['education_1']},
+   {text:'Pursuing a bachelor degree.',sourceIds:['education_1']},
+  ],entries:[],skillSelections:[]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page);
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/cited degree is explicitly in progress/)).toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.summary.data).toBe('Pursuing a bachelor degree.');
+ expect(copy.education).toEqual(original.education);
+ expect(sc1Harness.calls).toHaveLength(1);
+});

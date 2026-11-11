@@ -9,6 +9,7 @@ import { isEntryMetadata } from './references';
 import { buildTermIndex, analyzeTerms, unsupportedNumbers, copiedPassage, type Term } from './terms';
 import { containsSkillName } from './summaryBoundary';
 import { scopeRisk } from './scopeRisk';
+import { incompleteDegreeConflict } from './degreeStatus';
 
 type Paragraph = { text: string; sourceIds: string[] };
 type Entry = { id: string; overview: Paragraph; bullets: Paragraph[] };
@@ -73,6 +74,12 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       const terms = signals.unsupported.map(t => t.label), numbers = unsupportedNumbers(text, support);
       if (!boundaryWillRemove && (terms.length || numbers.length)) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: `Removed a generated summary passage because it added ${list([...terms, ...numbers])}, which its cited CV content does not mention.` });
+        continue;
+      }
+      // Only explicit, unambiguous ongoing-study/completion wording is checked.
+      // Preserve an exact user-authored introduction and leave other cases for review.
+      if (!boundaryWillRemove && !isOriginalSummary && incompleteDegreeConflict(text, cited)) {
+        notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a generated summary passage because a cited degree is explicitly in progress but the passage may claim it was completed. Review your education details.' });
         continue;
       }
       const risks = scopeRisk(text, cited.filter(f => f.kind !== 'skill' && f.kind !== 'headline' && !isEntryMetadata(f.id)).map(f => f.text));
