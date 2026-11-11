@@ -513,3 +513,32 @@ test('explicit programming context keeps omitted native language skills without 
  expect(copy.skills.data.map(x=>x.name)).toEqual(['PHP','Python','Java']);
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('required skills list retains omitted native skills without inventing qualifications', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);p.skills.isLocked=false;
+ p.skills.data=[
+  {id:crypto.randomUUID(),name:'Accounting',category:'Technical',level:'Coursework only'},
+  {id:crypto.randomUUID(),name:'Bookkeeping',category:'Technical',level:'Beginner'},
+  {id:crypto.randomUUID(),name:'Excel',category:'Tools',level:''},
+  {id:crypto.randomUUID(),name:'Budgeting',category:'Technical',level:''},
+ ];
+ sc1Harness.respond(packet=>{
+  const e=packet.source.experience[0],fact=packet.source.evidence.find(x=>x.id===e.bulletIds[0]);
+  const document={summarySegments:[],entries:[{id:e.id,overview:{text:'',sourceIds:[]},bullets:[{text:fact.text,sourceIds:[e.bulletIds[0]]}]}],skillSelections:[{id:'skill_4',category:'Technical'}]};
+  return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(document)}]}}]}};
+ });
+ const original=await seed(page,p);
+ await tailor(page,'Fictional operations role involving internal reporting.\nRequired skills: Accounting, Bookkeeping, Excel, Kubernetes.');
+ await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();await saved(page);
+ await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
+ let state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.experience).toEqual(original.experience);
+ expect(copy.skills.data.map(x=>x.name)).toEqual(['Budgeting','Accounting','Bookkeeping','Excel']);
+ expect(copy.skills.data.slice(1)).toEqual(original.skills.data.slice(0,3));
+ expect(copy.compositionReview.notes.filter(x=>x.includes('literal match'))).toHaveLength(3);
+ await page.reload();await saved(page);state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.skills.data.map(x=>x.name)).toEqual(['Budgeting','Accounting','Bookkeeping','Excel']);
+ expect(sc1Harness.calls).toHaveLength(1);
+});
