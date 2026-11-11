@@ -5,7 +5,7 @@ const { load } = require('../helpers/editorial-loader.cjs');
 const { createSampleProfile } = load('mock/profile');
 
 const ORIGIN = 'http://127.0.0.1:4187';
-const PROVIDER_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+const PROVIDER_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
 const JOB = 'Software Engineer: build internal data dashboards, document delivery work and collaborate with the team. Classroom experience is acceptable.';
 const NARRATIVE_SUMMARY = 'Software engineer with classroom experience building internal data dashboards.';
 const GENERATED_SUMMARY = NARRATIVE_SUMMARY;
@@ -51,7 +51,7 @@ const test = base.extend({
     await context.route('**/*', async route => {
       const request = route.request(), url = request.url();
       if (new URL(url).origin === ORIGIN) return route.continue();
-      if ([PROVIDER_URL, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'].includes(url) && request.method() === 'POST') {
+      if ([PROVIDER_URL, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent'].includes(url) && request.method() === 'POST') {
         const body = request.postDataJSON();
         calls.push({ url, body, headers: request.headers() });
         try {
@@ -107,7 +107,7 @@ async function seed(page, source) {
   return (await stored(page)).profiles[0]; // Snapshot after the REAL loader's normalization.
 }
 async function tailor(page, job = JOB) {
-  await expect(page.getByText('Single-draft preview · Gemini 3.5 Flash-Lite · experimental', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Single-draft preview · Gemini 3.8 Flash · experimental', { exact: true }).first()).toBeVisible();
   await page.getByLabel('Job description', { exact: true }).fill(job);
   await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
 }
