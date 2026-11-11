@@ -115,7 +115,7 @@ async function tailor(page, job = JOB) {
 test('blocked output preserves original', async ({page,sc1Harness}) => {
  sc1Harness.respond(()=>({body:{candidates:[{finishReason:'SAFETY',finishMessage:'PRIVATE_SENTINEL'}]}}));
  const original=await seed(page,sourceProfile());
- await expect(page.getByText(/On HTTP 503 or an output-limit \(MAX_TOKENS\) response/)).toBeVisible();
+ await expect(page.getByText(/On HTTP 500, 502, 503, 504 or an output-limit \(MAX_TOKENS\) response/)).toBeVisible();
  await tailor(page);
  await expect(page.getByText(/Google blocked or restricted the request or response/)).toBeVisible();
  await expect(page.getByText('PRIVATE_SENTINEL')).toHaveCount(0);
@@ -576,6 +576,19 @@ test('HTTP 505 explains protocol failure and preserves the source offline', asyn
  await tailor(page);
  await expect(page.getByText(/HTTP 505/)).toBeVisible();
  await expect(page.getByText(/rejected the HTTP protocol version/)).toBeVisible();
+ await expect(page.getByText('PRIVATE_PROVIDER_SENTINEL')).toHaveCount(0);
+ expect(sc1Harness.calls).toHaveLength(1);
+ expect(await stored(page)).toEqual({profiles:[original],activeId:original.profileId});
+});
+
+
+test('HTTP 504 synthetic failure keeps the original and shows no provider text', async ({page,sc1Harness}) => {
+ sc1Harness.respond(()=>({status:504,body:{error:{code:504,message:'PRIVATE_PROVIDER_SENTINEL'}}}));
+ const original=await seed(page,sourceProfile());
+ await expect(page.getByText(/On HTTP 500, 502, 503, 504 or an output-limit/)).toBeVisible();
+ await expect(page.getByText(/even if a request timed out/)).toBeVisible();
+ await tailor(page);
+ await expect(page.getByText(/HTTP 504/)).toBeVisible();
  await expect(page.getByText('PRIVATE_PROVIDER_SENTINEL')).toHaveCount(0);
  expect(sc1Harness.calls).toHaveLength(1);
  expect(await stored(page)).toEqual({profiles:[original],activeId:original.profileId});
