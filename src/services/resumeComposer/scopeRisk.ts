@@ -96,6 +96,40 @@ function reversesNumericRange(text: string, sources: readonly string[]): boolean
     && !original.some(([x, y]) => x === a && y === b));
 }
 
+// Compare only a small set of explicit units attached to the same written
+// number. This cannot associate figures with measurements, check conversions,
+// or catch omitted units, unlisted units, or changed values. Shared numbers
+// across multiple claims can cause conservative restoration.
+function measuredUnits(text: string): [string, string][] {
+  const clean = text.replace(/[\u064b-\u065f\u0670\u0640]/gu, '');
+  const pattern = /(?<![\p{L}\p{N}_.,٬٫])((?:[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+|[0-9٠-٩۰-۹]+)(?:[.٫][0-9٠-٩۰-۹]+)?)(?:\s*([%٪])|\s+(percentage\s+points?|percent\s+points?|percent(?:age)?|milliseconds?|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?|ثانية|ثواني|ثوان|دقيقة|دقائق|ساعة|ساعات|يوم|أيام|ايام|أسبوع|اسبوع|أسابيع|اسابيع|شهر|أشهر|اشهر|شهور|سنة|سنوات|عام|أعوام|اعوام))(?=$|[^\p{L}\p{N}_])/gu;
+  const aliases: Record<string, string> = {
+    '%':'percent', '٪':'percent', percent:'percent', percentage:'percent',
+    'percentage point':'percentage-point', 'percentage points':'percentage-point', 'percent point':'percentage-point', 'percent points':'percentage-point',
+    millisecond:'millisecond', milliseconds:'millisecond', ms:'millisecond',
+    second:'second', seconds:'second', 'ثانية':'second', 'ثواني':'second', 'ثوان':'second',
+    minute:'minute', minutes:'minute', 'دقيقة':'minute', 'دقائق':'minute',
+    hour:'hour', hours:'hour', 'ساعة':'hour', 'ساعات':'hour',
+    day:'day', days:'day', 'يوم':'day', 'أيام':'day', 'ايام':'day',
+    week:'week', weeks:'week', 'أسبوع':'week', 'اسبوع':'week', 'أسابيع':'week', 'اسابيع':'week',
+    month:'month', months:'month', 'شهر':'month', 'أشهر':'month', 'اشهر':'month', 'شهور':'month',
+    year:'year', years:'year', 'سنة':'year', 'سنوات':'year', 'عام':'year', 'أعوام':'year', 'اعوام':'year',
+  };
+  return [...clean.matchAll(pattern)].map(m => {
+    const value = m[1].replace(/[٠-٩۰-۹]/gu, char => {
+      const code = char.charCodeAt(0);
+      return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+    }).replace(/[,٬]/gu, '').replace(/٫/gu, '.');
+    const unit = (m[2] || m[3]).replace(/\s+/gu, ' ');
+    return [value, aliases[unit]];
+  });
+}
+function changesMeasuredUnit(text: string, sources: readonly string[]): boolean {
+  const original = sources.flatMap(measuredUnits);
+  return measuredUnits(text).some(([value, unit]) => original.some(([v]) => v === value)
+    && !original.some(([v, u]) => v === value && u === unit));
+}
+
 function leadPeopleInOneClause(text: string): boolean {
   return text.split(/[.!?;\n]+/u).some(clause => LEADERSHIP.test(clause) && PEOPLE.test(clause));
 }
@@ -120,6 +154,8 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
     risks.push('the action or tense associated with an Arabic negation may have changed');
   if (reversesNumericRange(proposed, sources))
     risks.push('the direction of a numeric range may have changed');
+  if (changesMeasuredUnit(proposed, sources))
+    risks.push('the unit associated with a numeric value may have changed');
   const sourcePlans = sources.flatMap(plannedActions), proposedPlans = plannedActions(proposed);
   if (sourcePlans.length && !proposedPlans.length)
     risks.push('a planned or intended action may have been presented as completed');
