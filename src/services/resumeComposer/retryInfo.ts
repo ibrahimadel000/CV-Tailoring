@@ -1,8 +1,8 @@
-// Inspect only bounded, short-lived 503 error bodies. Never expose provider text.
+// Inspect only bounded, short-lived transient error bodies. Never expose provider text.
 const MAX_BYTES = 32768;
 const MAX_READ_MS = 1500;
 type Inspection = { ok: true; retryMs: number; body: Uint8Array | null } | { ok: false };
-export async function inspect503Retry(response: Response, signal: AbortSignal, timeoutMs = MAX_READ_MS): Promise<Inspection> {
+export async function inspectRetryAdvice(response: Response, signal: AbortSignal, timeoutMs = MAX_READ_MS): Promise<Inspection> {
   const declared = response.headers.get('content-length');
   if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_BYTES) {
     void response.body?.cancel().catch(() => {}); return { ok: false };
@@ -36,7 +36,7 @@ export async function inspect503Retry(response: Response, signal: AbortSignal, t
     }
     const error = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.error : undefined;
     if (!error || typeof error !== 'object' || Array.isArray(error)) return { ok: true, retryMs: 0, body: bytes };
-    if (error.code !== undefined && error.code !== 503) return { ok: false };
+    if (error.code !== undefined && error.code !== response.status) return { ok: false };
     if (error.details !== undefined && !Array.isArray(error.details)) return { ok: false };
     // If details are too numerous, a later hint cannot safely be ruled out.
     if (error.details?.length > 16) return { ok: false };

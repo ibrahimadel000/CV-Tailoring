@@ -87,3 +87,26 @@ test('nonblocked safety ratings do not prevent an ordinary successful response',
 test('default 3.8 keeps its existing low-thinking configuration and bounded fallbacks',async()=>{
  const x=await mock([complete(12)],null);assert.equal(x.error,undefined);assert.equal(x.calls.length,1);assert.match(x.calls[0],/gemini-3\.8-flash:generateContent$/);assert.equal(x.bodies[0].generationConfig.maxOutputTokens,24576);assert.equal(x.bodies[0].generationConfig.thinkingConfig.thinkingLevel,'low');assert.deepEqual(liveCompositionCandidates('gemini-3.8-flash'),['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite']);
 });
+
+
+for(const code of [500,502,503,504]) test('HTTP '+code+' uses bounded disclosed fallback without exposing provider text',async()=>{
+ const x=await mock([new Response(JSON.stringify({error:{code,status:'INTERNAL',message:'PRIVATE_PROVIDER_SENTINEL'}}),{status:code,headers:{'content-type':'application/json'}}),complete(12)]);
+ assert.equal(x.error,undefined);assert.equal(x.calls.length,2);assert.deepEqual(x.result,{});assert.equal(x.usage.attempts,2);assert.equal(x.usage.lastModel,'gemini-3.6-flash');assert(!x.raw.includes('PRIVATE_PROVIDER_SENTINEL'));assert.deepEqual(x.bodies[0].contents,x.bodies[1].contents);
+});
+for(const code of [400,401,402,403,404,408,429,501,505]) test('HTTP '+code+' never silently falls back',async()=>{
+ const x=await mock([new Response('PRIVATE_PROVIDER_SENTINEL',{status:code}),complete(12)]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'provider');assert.match(x.error.message,/No automatic retry/);assert(!x.error.message.includes('PRIVATE_PROVIDER_SENTINEL'));
+});
+test('a network failure after an HTTP 500 fallback stops without a third request',async()=>{const x=await mock([new Response('',{status:500}),new Error('PRIVATE_NETWORK_SENTINEL'),complete(12)]);assert.equal(x.calls.length,2);assert.equal(x.error.code,'network');assert.match(x.error.message,/No further automatic retry/);assert(!x.error.message.includes('PRIVATE_NETWORK_SENTINEL'));});
+
+for(const code of [500,502,504])test('HTTP '+code+' with a long retry hint stops without an early request',async()=>{
+ const body={error:{code,status:'UNAVAILABLE',message:'PRIVATE_PROVIDER_SENTINEL',details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'30s'}]}};
+ const x=await mock([new Response(JSON.stringify(body),{status:code,headers:{'content-type':'application/json'}}),complete(12)]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'provider');assert.match(x.error.message,/30s/);assert.match(x.error.message,/No automatic retry/);assert(!x.error.message.includes('PRIVATE_PROVIDER_SENTINEL'));
+});
+
+test('a recovered fictional 500 creates a separate copy without mutating the original',async()=>{
+ const {fixture,job:fictionalJob}=require('./helpers/composer-editorial-v4-fixture.cjs');
+ const {createCompositionRunner}=get('services/resumeComposer/workflow');const p=fixture(),before=JSON.stringify(p),source=prepareNaturalComposition(p,fictionalJob).source;
+ const facts=new Map(source.evidence.map(f=>[f.id,f.text]));const raw={summarySegments:[],skillSelections:[],entries:source.experience.map(e=>({id:e.id,overview:{text:'',sourceIds:[]},bullets:e.bulletIds.toReversed().map(id=>({text:facts.get(id),sourceIds:[id]}))}))};
+ let active=p,calls=0;const oldFetch=global.fetch;global.fetch=async()=>{calls++;if(calls===1)return new Response('',{status:500});if(calls===2)return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(raw)}]}}]}),{status:200});throw Error('unexpected extra request')};
+ try{const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,copy){assert.equal(snapshot,before);active=copy;return true}},requestComposition);const result=await runner.run(fictionalJob,new AbortController().signal);assert.equal(result.status,'created');assert.equal(calls,2);assert.equal(JSON.stringify(p),before);assert.notEqual(active.profileId,p.profileId);assert.deepEqual(active.experience.data[0].bullets.map(b=>b.text),p.experience.data[0].bullets.map(b=>b.text).toReversed());}finally{global.fetch=oldFetch;}
+});

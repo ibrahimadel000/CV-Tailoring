@@ -1,6 +1,6 @@
 import { providerFailureMessage } from './providerDiagnostics';
 import { fallbackDelayMs, waitForFallback } from './failoverBackoff';
-import { inspect503Retry } from './retryInfo';
+import { inspectRetryAdvice } from './retryInfo';
 import type { NaturalPacket } from './naturalDocument';
 import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
@@ -16,6 +16,8 @@ export const COMPOSITION_MODELS = [
 ] as const;
 export type CompositionModel = typeof COMPOSITION_MODELS[number]['id'];
 export const COMPOSITION_TIMEOUT_MS = 300000;
+// Restricted to transient server/gateway statuses; do not retry quota, auth or 505.
+export const TRANSIENT_HTTP_STATUSES = [500, 502, 503, 504] as const;
 export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.8 Flash · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
@@ -51,22 +53,22 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
       });
       if (!response.ok) {
-        if (!isSynthetic && response.status === 503 && i < candidates.length - 1) {
+        if (!isSynthetic && TRANSIENT_HTTP_STATUSES.some(status => status === response!.status)) {
           // Respect both exposed HTTP and bounded Google RetryInfo hints.
           // Unknown/oversized/stalled JSON stops rather than guessing an early retry.
-          const inspection = await inspect503Retry(response, controller.signal);
+          const inspection = await inspectRetryAdvice(response, controller.signal);
           if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           if (!inspection.ok) {
             const retryNote = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
-            throw new TailorError('provider', `The AI service returned HTTP 503, but retry timing could not be safely checked.${retryNote} Your resumes are unchanged.`);
+            throw new TailorError('provider', `The AI service returned HTTP ${response.status}, but retry timing could not be safely checked.${retryNote} Your resumes are unchanged.`);
           }
           const delay = fallbackDelayMs(response.headers.get('retry-after'), i, undefined, undefined, inspection.retryMs);
-          if (delay !== null) {
+          if (delay !== null && i < candidates.length - 1) {
             await waitForFallback(delay, controller.signal);
             continue;
           }
           // Reconstruct only the bounded error body for the existing allowlisted diagnostic.
-          response = new Response(inspection.body, { status: 503, headers: response.headers });
+          response = new Response(inspection.body, { status: response.status, headers: response.headers });
         }
         const message = await providerFailureMessage(response, attempts);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -106,7 +108,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
     reason = timedOut ? 'timeout' : e instanceof TailorError ? e.code : 'network';
     if (e instanceof TailorError) throw e;
     const ending = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
-    throw new TailorError(reason, (timedOut ? 'Request timed out.' : 'Request could not complete.') + ending);
+    throw new TailorError(reason, (timedOut ? 'Request timed out.' : 'Request could not complete.') + ending + ' No tailored copy was created; the provider may still have processed or charged the request.');
   } finally {
     clearTimeout(timer); signal.removeEventListener('abort', abort);
     saveTailorUsage({ id: crypto.randomUUID(), at: new Date().toISOString(), model, lastModel, elapsedMs: Math.round(performance.now() - started), attempts, status, reason, ...usage });
