@@ -79,14 +79,15 @@ function negativeActionRoots(text: string): string[] {
 function numericRanges(text: string): [string, string][] {
   const digit = String.raw`[0-9٠-٩۰-۹]`;
   const number = String.raw`(?:${digit}{1,3}(?:[,٬]${digit}{3})+|${digit}+)(?:[.٫]${digit}+)?`;
+  const signedNumber = String.raw`[+\-−]?${number}`;
   const unit = String.raw`(?:\s*[%٪]|\s+[\p{L}\p{M}]+)?`;
   const end = String.raw`(?!${digit}|[.,٬٫]${digit})`;
-  const english = new RegExp(String.raw`\bfrom\s+[$€£]?\s*(${number})${unit}\s+to\s+[$€£]?\s*(${number})${end}`, 'gu');
-  const arabic = new RegExp(String.raw`(?:^|[^\p{L}\p{N}_])من\s+[$€£]?\s*(${number})${unit}\s+(?:إلى|الى)\s+[$€£]?\s*(${number})${end}`, 'gu');
+  const english = new RegExp(String.raw`\bfrom\s+[$€£]?\s*(${signedNumber})${unit}\s+to\s+[$€£]?\s*(${signedNumber})${end}`, 'gu');
+  const arabic = new RegExp(String.raw`(?:^|[^\p{L}\p{N}_])من\s+[$€£]?\s*(${signedNumber})${unit}\s+(?:إلى|الى)\s+[$€£]?\s*(${signedNumber})${end}`, 'gu');
   const canonical = (value: string) => value.replace(/[٠-٩۰-۹]/gu, char => {
     const code = char.charCodeAt(0);
     return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
-  }).replace(/[,٬]/gu, '').replace(/٫/gu, '.');
+  }).replace(/[,٬]/gu, '').replace(/٫/gu, '.').replace(/^\+/, '').replace(/^−/, '-').replace(/^-0(?:\.0+)?$/, '0');
   return [english, arabic].flatMap(pattern => [...text.matchAll(pattern)].map(m => [canonical(m[1]), canonical(m[2])] as [string, string]));
 }
 function reversesNumericRange(text: string, sources: readonly string[]): boolean {
@@ -94,6 +95,27 @@ function reversesNumericRange(text: string, sources: readonly string[]): boolean
   return numericRanges(text).some(([a, b]) => a !== b
     && original.some(([x, y]) => x === b && y === a)
     && !original.some(([x, y]) => x === a && y === b));
+}
+
+// Literal sign comparison only. Recognize a directly attached +, - or Unicode
+// minus on standalone numeric tokens (including currency prefixes); do not
+// interpret hyphens within words or digit ranges as negative signs. A cited
+// magnitude with both signs is ambiguous. This does not associate a number with
+// its object or establish that a metric is true; unsupported forms need review.
+function signedNumbers(text: string): [string, boolean][] {
+  const pattern = /(?<![\p{L}\p{N}_.,٬٫+\-−])(?:[$€£]\s*)?([+\-−]?)(?:[$€£]\s*)?((?:[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+|[0-9٠-٩۰-۹]+)(?:[.٫][0-9٠-٩۰-۹]+)?)(?![\p{L}\p{N}_]|[.,٬٫][0-9٠-٩۰-۹])/gu;
+  return [...text.matchAll(pattern)].map(m => {
+    const value = m[2].replace(/[٠-٩۰-۹]/gu, char => {
+      const code = char.charCodeAt(0);
+      return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+    }).replace(/[,٬]/gu, '').replace(/٫/gu, '.');
+    return [value, /^0+(?:\.0+)?$/u.test(value) ? false : m[1] === '-' || m[1] === '−'];
+  });
+}
+function changesNumericSign(text: string, sources: readonly string[]): boolean {
+  const original = sources.flatMap(signedNumbers);
+  return signedNumbers(text).some(([value, negative]) => original.some(([v]) => v === value)
+    && !original.some(([v, n]) => v === value && n === negative));
 }
 
 // Compare only a small set of explicit units attached to the same written
@@ -154,6 +176,8 @@ export function scopeRisk(text: string, support: readonly string[]): string[] {
     risks.push('the action or tense associated with an Arabic negation may have changed');
   if (reversesNumericRange(proposed, sources))
     risks.push('the direction of a numeric range may have changed');
+  if (changesNumericSign(proposed, sources))
+    risks.push('the sign associated with a numeric value may have changed');
   if (changesMeasuredUnit(proposed, sources))
     risks.push('the unit associated with a numeric value may have changed');
   const sourcePlans = sources.flatMap(plannedActions), proposedPlans = plannedActions(proposed);
