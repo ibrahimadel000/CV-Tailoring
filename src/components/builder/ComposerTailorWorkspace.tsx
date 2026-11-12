@@ -19,8 +19,10 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
+  const hasCurrentSource = !!currentSource;
   const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [notes, setNotes] = useState<string[]>([]);
+  const [comparing, setComparing] = useState(false);
   const [usage, setUsage] = useState<TailorUsageRecord | null>(null);
   const [model, setModel] = useState<CompositionModel>(COMPOSITION_MODEL);
   const selectedModel = useRef<CompositionModel>(COMPOSITION_MODEL);
@@ -32,10 +34,13 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const controller = useRef<AbortController>(), alive = useRef(true);
   const changeDetails = useRef<HTMLDetailsElement>(null), comparisonDetails = useRef<HTMLDetailsElement>(null);
   const comparisonSummary = useRef<HTMLElement>(null);
+  const syncComparison = () => setComparing(!!(changeDetails.current?.open && comparisonDetails.current?.open));
+  useEffect(() => { setComparing(!!(changeDetails.current?.open && comparisonDetails.current?.open)); }, [activeId, hasCurrentSource]);
   useEffect(() => {
     if (!reviewComparisonRequest || !changeDetails.current || !comparisonDetails.current) return;
     changeDetails.current.open = true;
     comparisonDetails.current.open = true;
+    setComparing(true);
     const frame = requestAnimationFrame(() => {
       comparisonSummary.current?.scrollIntoView({ block: 'start' });
       comparisonSummary.current?.focus({ preventScroll: true });
@@ -64,12 +69,12 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       if (alive.current) setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. Check your original before trying again.');
     } finally { if (controller.current === task) { controller.current = undefined; if (alive.current) { const latest = readLatestTailorUsage(); setUsage(latest && latest.id !== previousUsageId ? latest : null); setBusy(false); } } }
   }
-  return <aside className="tailor-pane" aria-labelledby="tailor-heading" aria-busy={busy}>
+  return <aside className={`tailor-pane ${comparing && !busy ? 'is-comparing' : ''}`} aria-labelledby="tailor-heading" aria-busy={busy}>
     <header className="tailor-heading"><span className="tailor-mark"><Sparkles size={20} /></span><div><h2 id="tailor-heading">CV Tailor</h2><p>A focused resume from your real content.</p></div></header>
     <div className="tailor-scroll" role="region" aria-label="CV tailoring inputs" tabIndex={0}>
       <div className="tailor-feedback" role="note"><strong>{previewLabel}</strong><p>Experimental tailoring preview. Review every claim; factual safety, writing quality and latency are not certified. Use fictional data while evaluating free-tier access.</p></div>
       {message && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
-      {active?.compositionChanges && <details className="tailor-review" open ref={changeDetails}>
+      {active?.compositionChanges && <details className="tailor-review" open ref={changeDetails} onToggle={syncComparison}>
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
         <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
@@ -81,9 +86,11 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         </details>}
         <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
         <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
-        {currentSource ? <details ref={comparisonDetails}>
+        {currentSource ? <details ref={comparisonDetails} onToggle={syncComparison}>
           <summary ref={comparisonSummary}>Compare current experience and projects</summary>
+          <p>On smaller screens, close this comparison to return to the tailoring controls. If a request is running, cancellation stays available.</p>
           <CurrentEntryComparison source={currentSource} copy={active} />
+          <button type="button" className="text-button" onClick={() => { if (comparisonDetails.current) comparisonDetails.current.open = false; syncComparison(); comparisonSummary.current?.focus({ preventScroll: true }); comparisonSummary.current?.scrollIntoView({ block: 'start' }); }}>Close comparison and return to tailoring</button>
         </details> : <p>The source resume is not available, so a current comparison cannot be displayed. The remaining change summary describes when the copy was made.</p>}
         {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry. These counts cover the first response for each unlocked entry, not quality or accuracy.</p>}
         <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>

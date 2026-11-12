@@ -36,3 +36,8 @@ Limitations: the signal misses inserted details, paraphrased prefixes, short sou
 ## Making review actionable
 
 On a tailored copy with notes and an available source, the notes offer **Compare experience and projects**. It switches to the tailoring pane, opens the live experience/project comparison and focuses its heading, including on mobile. The comparison now labels text without an exact counterpart on both sides. Entry matching still uses unique native IDs; it does not guess which bullet corresponds to which. These labels are literal and presence-based, not proof that a claim is supported or missing. Both resumes may have been edited since tailoring. If the source is no longer available, the shortcut is omitted rather than displaying a false comparison. The user can edit the tailored copy in the regular editor.
+
+
+## Mobile comparison space
+
+On a smaller screen, opening the experience/project comparison temporarily hides the idle tailoring footer, leaving more space for review. Opening from a note also collapses the note, which can otherwise consume most of a short screen; it remains available to reopen. Closing the comparison or its parent restores the complete footer and unchanged sending/privacy disclosures. The footer and cancellation remain available throughout an in-flight request. Desktop retains the footer while comparing. The comparison still uses current source/copy state, not a generation-time snapshot, and does not judge factual accuracy.

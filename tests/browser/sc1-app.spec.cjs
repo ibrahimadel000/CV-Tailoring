@@ -950,6 +950,10 @@ test('appended wording review survives save and reload without claiming verifica
   await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
   await page.getByRole('button', { name: 'Compare experience and projects' }).click();
   await expect(page.getByRole('button', { name: 'CV Tailor', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const footer = page.locator('.tailor-pane .tailor-footer');
+  await expect(footer).toBeHidden();
+  const scroll = page.getByRole('region', { name: 'CV tailoring inputs' });
+  const openHeight = await scroll.evaluate(el => el.clientHeight);
   const comparison = page.locator('summary').filter({ hasText: 'Compare current experience and projects' });
   await expect(comparison).toBeFocused();
   const pair = page.getByRole('article', { name: 'Experience comparison 1' });
@@ -957,12 +961,30 @@ test('appended wording review survives save and reload without claiming verifica
   const copySide = pair.getByRole('region', { name: 'Current tailored copy' });
   await expect(copySide.getByText(proposed, { exact: true })).toBeVisible();
   await expect(copySide.getByText('No exact text match in current source bullets')).toBeVisible();
-  await comparison.click();
+  await page.getByRole('button', { name: 'Close comparison and return to tailoring' }).click();
   await expect(pair).toBeHidden();
+  await expect(footer).toBeVisible();
+  await expect(footer).toContainText('Tailor CV sends professional resume content and this job to Google');
+  await expect(footer).toContainText('automatic fallback may send the same content again');
+  await expect(footer).toContainText('personal information typed into professional content or the job can be sent');
+  await expect(footer).toContainText('New text is not factually certified');
+  const closedHeight = await scroll.evaluate(el => el.clientHeight);
+  expect(openHeight - closedHeight).toBeGreaterThan(100);
+  await page.getByText(/Review 1 content note/).click();
   await page.getByRole('button', { name: 'Compare experience and projects' }).click();
   await expect(comparison).toBeFocused();
   await expect(pair).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expect(footer).toBeHidden();
+  await expect.poll(() => scroll.evaluate(el => el.clientHeight)).toBeGreaterThan(150);
+  // Collapsing the parent also restores the footer, even if the nested
+  // comparison itself remains open, and reopening the parent hides it again.
+  const parent = page.locator('summary').filter({ hasText: 'What changed during tailoring' });
+  await parent.click(); await expect(footer).toBeVisible();
+  await parent.click(); await expect(footer).toBeHidden();
   await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect(footer).toBeVisible(); // Desktop keeps its normal footer.
+
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain(proposed); // Advisory only; the user must review/edit.
   expect(pdf).not.toContain('compare the added wording');
@@ -979,4 +1001,34 @@ test('appended wording review survives save and reload without claiming verifica
   await expect(page.getByRole('button', { name: 'Compare experience and projects' })).toHaveCount(0);
   await expect(page.getByText(/The source resume is not available, so a current comparison cannot be displayed/)).toBeVisible();
   checkWire(sc1Harness);
+});
+
+test('mobile comparison never hides cancellation during an in-flight request', async ({ page, sc1Harness }) => {
+  const p = sourceProfile(true);
+  p.experience.data[0].bullets[0].text = 'Documented API behavior for the developer team.';
+  let delay = false, release;
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.entries[0].bullets[0].text = 'Documented API behavior for the developer team and deployed the APIs.';
+    if (!delay) return { body: completed(document) };
+    return new Promise(resolve => { release = () => resolve({ body: completed(document) }); });
+  });
+  const original = await seed(page, p); await tailor(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  await saved(page); await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'CV Tailor', exact: true }).click();
+  delay = true;
+  await page.getByRole('button', { name: 'Tailor CV', exact: true }).click();
+  await expect.poll(() => sc1Harness.calls.length).toBe(2);
+  const footer = page.locator('.tailor-pane .tailor-footer');
+  await expect(page.getByRole('button', { name: 'Cancel tailoring' })).toBeVisible();
+  await page.getByText(/Review 1 content note/).click();
+  await page.getByRole('button', { name: 'Compare experience and projects' }).click();
+  await expect(page.getByRole('article', { name: 'Experience comparison 1' })).toBeVisible();
+  await expect(footer).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel tailoring' })).toBeVisible();
+  release();
+  await expect(page.getByRole('button', { name: 'Cancel tailoring' })).toHaveCount(0);
+  await expect(footer).toBeHidden(); // The open comparison gets space again once idle.
+  expect(sc1Harness.calls).toHaveLength(2);
 });
