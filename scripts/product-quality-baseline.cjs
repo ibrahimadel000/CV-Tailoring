@@ -1,6 +1,6 @@
 'use strict';
 // Offline fictional diagnostic of the ACTIVE single-draft pipeline.
-// The two responses per case are hand-authored, not model outputs. This script
+// The responses per case are hand-authored, not model outputs. This script
 // does not read keys, use fetch, judge semantics, or call an AI provider.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -39,6 +39,18 @@ const CASES = [
     risky: 'أدرت الإدارة بالكامل دون إشراف.', skill: ['تنظيم المواعيد', 'Technical', ''] },
 ];
 
+
+// Intended faithful rewrites and subtler invented details for human review.
+// Fixture labels are hypotheses, not semantic or safety verdicts.
+const ADDITIONAL = {
+  'care-en': { faithful: 'Helped with patient transfers under nurse supervision.', subtle: 'Assisted patient transfers under nurse supervision in the intensive care unit.' },
+  'education-en': { faithful: 'Prepared learning activities for the classroom.', subtle: 'Prepared classroom learning activities for students with disabilities.' },
+  'trade-en': { faithful: 'Helped a licensed electrician install fixtures.', subtle: 'Assisted a licensed electrician with fixture installation in commercial buildings.' },
+  'hospitality-en': { faithful: 'Organized table reservations and welcomed guests.', subtle: 'Welcomed VIP guests and organized table reservations.' },
+  'software-en': { faithful: 'Documented the behavior of APIs for the developer team.', subtle: 'Documented API behavior for the developer team and deployed the APIs.' },
+  'admin-ar': { faithful: 'أعددت المستندات ونظمت مواعيد الفريق.', subtle: 'نظمت مواعيد الفريق وأعددت المستندات السرية.' },
+};
+
 function profileFor(c) {
   const p = fixture();
   p.profileName = `Fictional baseline ${c.id}`;
@@ -63,7 +75,7 @@ function responseFor(packet, c, variant) {
     summarySegments: [],
     entries: source.experience.map(entry => ({
       id: entry.id, overview: { text: '', sourceIds: [] },
-      bullets: entry.bulletIds.map((id, i) => ({ text: variant === 'scope-risk' && i === 0 ? c.risky : facts.get(id), sourceIds: [id] })),
+      bullets: entry.bulletIds.map((id, i) => ({ text: i === 0 ? ({ 'scope-risk': c.risky, 'faithful': ADDITIONAL[c.id].faithful, 'subtle-risk': ADDITIONAL[c.id].subtle }[variant] || facts.get(id)) : facts.get(id), sourceIds: [id] })),
     })),
     skillSelections: [{ id: source.skillIds[0], category: c.skill[1] }],
   };
@@ -94,7 +106,7 @@ function runCase(c, variant) {
     reviewRequired: 'Compare source, proposed and retained wording for scope, attribution, job relevance and omissions; no automatic quality verdict.',
   };
 }
-function run() { return CASES.flatMap(c => ['copy', 'scope-risk'].map(variant => runCase(c, variant))); }
+function run() { return CASES.flatMap(c => ['copy', 'faithful', 'scope-risk', 'subtle-risk'].map(variant => runCase(c, variant))); }
 if (require.main === module) {
   const results = run();
   console.log(JSON.stringify({
