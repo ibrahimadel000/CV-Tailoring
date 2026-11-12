@@ -1074,3 +1074,30 @@ test('current comparison exposes changed and missing entry metadata without chan
   expect(after.profiles.find(x => x.profileId === copy.profileId)).toEqual(copy);
   expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('safe shorter pagination matches the preview and downloaded PDF', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile();
+  Object.assign(p.resumeHeader.data, { name: 'Fictional Person', firstName: 'Fictional', lastName: 'Person', email: 'fictional@example.invalid', phone: '', location: '', linkedin: '', github: '', portfolio: '', desiredJobPosition: 'Coordinator' });
+  p.summary.data = 'Fictional coordinator supporting local community programs.';
+  Object.assign(p.experience.data[0], { roleTitle: 'Program Coordinator', companyName: 'Example Association', startDate: '2022', endDate: '2025', city: '', description: '', bullets: Array.from({ length: 15 }, (_, i) => ({ id: crypto.randomUUID(), text: `Item ${i+1}: Coordinated fictional community events and organized volunteer schedules and materials.`, isVerified: true })) });
+  p.education.data = Array.from({ length: 6 }, (_, i) => ({ id: crypto.randomUUID(), degree: `Fictional Diploma ${i+1}`, institution: 'Example College', city: '', startDate: '2020', endDate: '2021', description: '' }));
+  p.certifications.data = Array.from({ length: 12 }, (_, i) => ({ id: crypto.randomUUID(), name: `Fictional Certificate ${String(i+1).padStart(2, '0')}`, issuer: 'Example Institute', date: 'Jan 2023' }));
+  p.skills.data = []; p.projects.data = [];
+  const original = await seed(page, p);
+  await expect(page.locator('[data-pagination-current="true"]')).toContainText('2 pages · A4', { timeout: 30000 });
+  await expect(page.locator('.pdf-preview-page')).toHaveCount(2);
+  const pdf = await exportedText(page, testInfo);
+  const downloadedBytes = await fs.readFile(testInfo.outputPath('synthetic-tailored.pdf'));
+  const downloadedPages = await page.evaluate(async bytes => {
+    const pdfjs = await import('/node_modules/pdfjs-dist/build/pdf.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc = '/node_modules/pdfjs-dist/build/pdf.worker.mjs';
+    const doc = await pdfjs.getDocument({ data: Uint8Array.from(bytes) }).promise;
+    try { return doc.numPages; } finally { await doc.destroy(); }
+  }, Array.from(downloadedBytes));
+  expect(downloadedPages).toBe(2);
+  for (let i = 1; i <= 6; i++) expect(pdf).toContain(`Fictional Diploma ${i}`);
+  for (let i = 1; i <= 12; i++) expect(pdf).toContain(`Fictional Certificate ${String(i).padStart(2, '0')}`);
+  for (let i = 1; i <= 15; i++) expect(pdf).toContain(`Item ${i}:`);
+  expect((await stored(page)).profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(sc1Harness.calls).toHaveLength(0);
+});

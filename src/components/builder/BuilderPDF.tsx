@@ -3,15 +3,17 @@ import type { CVProfile } from '@/types/schema';
 import type { DocumentTheme } from '@/store/useAppStore';
 import { visiblePhoto } from './photoModel';
 import { contacts, fullName, headline, resumeBlocks, themeMetrics } from './resumeModel';
+import type { ResumeBlock } from './resumeModel';
 
 // A first, naturally wrapped render measures the real font/layout heights and the
 // page on which every entry and bullet starts. Never disable wrapping on a guessed
 // character count: an oversized entry must flow.
-export type PDFMeasurements = { heights: Record<string, number>; pages: Record<string, number> };
+export type PDFMeasurements = { heights: Record<string, number>; pages: Record<string, number>; pageCount: number };
 export interface PDFLayoutNode { type?: string; props?: { id?: string }; box?: { height?: number }; children?: PDFLayoutNode[] }
 export function measurePDFLayout(node: PDFLayoutNode): PDFMeasurements {
   const heights: Record<string, number> = {};
   const pages: Record<string, number> = {};
+  let pageCount = 0;
   const visit = (n: PDFLayoutNode, page: number) => {
     const id = n.props?.id; const height = n.box?.height;
     if (id?.startsWith('measure-') && typeof height === 'number' && Number.isFinite(height)) {
@@ -23,10 +25,11 @@ export function measurePDFLayout(node: PDFLayoutNode): PDFMeasurements {
     if (n.type === 'DOCUMENT') {
       let next = 0;
       for (const child of n.children ?? []) visit(child, child.type === 'PAGE' ? ++next : page);
+      pageCount = next;
     } else n.children?.forEach(child => visit(child, page));
   };
   visit(node, 0);
-  return { heights, pages };
+  return { heights, pages, pageCount };
 }
 
 // Per section: items (after the first) and individual bullets that start on a
@@ -61,9 +64,19 @@ export function deriveContinuations(profile: CVProfile, measurements?: PDFMeasur
   return result;
 }
 
-export function BuilderPDF({ profile, theme, measurements, continuations, onMeasure }: {
+// Only short, discrete entries may be considered for an alternate section split.
+// Narrative sections and large entries retain the normal keep-together behavior.
+export function canFlowShortSection(block: ResumeBlock, measurements: PDFMeasurements, bodyHeight: number): boolean {
+  return block.items.length >= 4 && block.items.every((item, i) => {
+    const height = measurements.heights[`measure-entry-${block.id}-${i}`];
+    return !item.text?.trim() && !item.bullets?.length && !!height && height <= bodyHeight * 0.6;
+  });
+}
+
+export function BuilderPDF({ profile, theme, measurements, continuations, onMeasure, flowShortSections = false }: {
   profile: CVProfile; theme: DocumentTheme;
   measurements?: PDFMeasurements;
+  flowShortSections?: boolean;
   // undefined derives continuation points from measurements; null disables them.
   continuations?: PDFContinuations | null;
   onMeasure?: (node: PDFLayoutNode) => void;
@@ -94,9 +107,10 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
         // An explicit per-entry page break is a deliberate split: never override it.
         const manualEntryBreak = block.items.some(item => item.entryId && profile.pageLayout?.entries?.[item.entryId] === 'new-page');
         const blockHeight = measurements?.heights[blockKey];
-        // A section that fits on one page is never straddled: it moves whole to
-        // the next page instead of leaving one orphaned entry behind.
-        const keepTogether = !measuring && !manualEntryBreak && blockHeight !== undefined && blockHeight <= bodyHeight - 2;
+        // Normally keep one-page sections intact. The optional measured alternate
+        // may flow eligible short sections; the pipeline validates its grouping.
+        const keepTogether = !measuring && !manualEntryBreak && blockHeight !== undefined && blockHeight <= bodyHeight - 2
+          && !(flowShortSections && canFlowShortSection(block, measurements, bodyHeight));
         const points = continued[block.id] ?? { items: [] as number[], bullets: {} as Record<number, number[]> };
         const heading = <Text minPresenceAhead={28} style={titleStyle}>{`${block.title} (continued)`}</Text>;
         const items = block.items.map((item, i) => {
