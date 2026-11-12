@@ -15,7 +15,7 @@ const entryChangeText = {
   reordered: 'Wording unchanged; order changed',
   edited: 'Wording or content changed',
 } as const;
-export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
+export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport, reviewComparisonRequest }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void; reviewComparisonRequest: number }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
@@ -30,6 +30,18 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const runner = useRef<ReturnType<typeof createStoreComposer>>();
   if (!runner.current) runner.current = createStoreComposer((packet, signal) => requestComposition(packet, signal, selectedModel.current));
   const controller = useRef<AbortController>(), alive = useRef(true);
+  const changeDetails = useRef<HTMLDetailsElement>(null), comparisonDetails = useRef<HTMLDetailsElement>(null);
+  const comparisonSummary = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!reviewComparisonRequest || !changeDetails.current || !comparisonDetails.current) return;
+    changeDetails.current.open = true;
+    comparisonDetails.current.open = true;
+    const frame = requestAnimationFrame(() => {
+      comparisonSummary.current?.scrollIntoView({ block: 'start' });
+      comparisonSummary.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reviewComparisonRequest]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); runner.current?.cancel(); }; }, []);
   const connection = getTailorConnection();
   async function tailor() {
@@ -57,7 +69,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     <div className="tailor-scroll" role="region" aria-label="CV tailoring inputs" tabIndex={0}>
       <div className="tailor-feedback" role="note"><strong>{previewLabel}</strong><p>Experimental tailoring preview. Review every claim; factual safety, writing quality and latency are not certified. Use fictional data while evaluating free-tier access.</p></div>
       {message && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
-      {active?.compositionChanges && <details className="tailor-review" open>
+      {active?.compositionChanges && <details className="tailor-review" open ref={changeDetails}>
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
         <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
@@ -69,8 +81,8 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         </details>}
         <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
         <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
-        {currentSource ? <details>
-          <summary>Compare current experience and projects</summary>
+        {currentSource ? <details ref={comparisonDetails}>
+          <summary ref={comparisonSummary}>Compare current experience and projects</summary>
           <CurrentEntryComparison source={currentSource} copy={active} />
         </details> : <p>The source resume is not available, so a current comparison cannot be displayed. The remaining change summary describes when the copy was made.</p>}
         {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry. These counts cover the first response for each unlocked entry, not quality or accuracy.</p>}

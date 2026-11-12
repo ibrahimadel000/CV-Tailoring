@@ -420,6 +420,8 @@ test('current comparison pairs entries and labels exact-text differences without
  const flagged=source.getByText('No exact text match in current tailored bullets');
  await expect(flagged).toHaveCount(2);
  await expect(source.getByRole('listitem').filter({hasText:'Organized weekly team meetings.'}).getByText('No exact text match in current tailored bullets')).toHaveCount(0);
+ await expect(tailored.getByRole('listitem').filter({hasText:'Developed internal data dashboards for a classroom exercise.'}).getByText('No exact text match in current source bullets')).toBeVisible();
+ await expect(tailored.getByRole('listitem').filter({hasText:'Organized weekly team meetings.'}).getByText('No exact text match in current source bullets')).toHaveCount(0);
  if(process.env.CV_COMPARE_SCREENSHOT_DIR){
   await fs.mkdir(process.env.CV_COMPARE_SCREENSHOT_DIR,{recursive:true});
   const capture = async (section, name) => {

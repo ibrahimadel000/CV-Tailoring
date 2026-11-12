@@ -945,13 +945,38 @@ test('appended wording review survives save and reload without claiming verifica
   expect(copy.experience.data[0].bullets[0].text).toBe(proposed);
   expect(copy.compositionReview.notes.some(n => n.includes('compare the added wording'))).toBe(true);
   await page.reload(); await saved(page);
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByText(/Review 1 content note/).click();
   await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
-  await page.getByText('Compare current experience and projects', { exact: true }).click();
-  await expect(page.getByText(source, { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(proposed, { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Compare experience and projects' }).click();
+  await expect(page.getByRole('button', { name: 'CV Tailor', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const comparison = page.locator('summary').filter({ hasText: 'Compare current experience and projects' });
+  await expect(comparison).toBeFocused();
+  const pair = page.getByRole('article', { name: 'Experience comparison 1' });
+  await expect(pair.getByRole('region', { name: 'Current source' }).getByText(source, { exact: true })).toBeVisible();
+  const copySide = pair.getByRole('region', { name: 'Current tailored copy' });
+  await expect(copySide.getByText(proposed, { exact: true })).toBeVisible();
+  await expect(copySide.getByText('No exact text match in current source bullets')).toBeVisible();
+  await comparison.click();
+  await expect(pair).toBeHidden();
+  await page.getByRole('button', { name: 'Compare experience and projects' }).click();
+  await expect(comparison).toBeFocused();
+  await expect(pair).toBeVisible();
+  await page.setViewportSize({ width: 1600, height: 1000 });
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain(proposed); // Advisory only; the user must review/edit.
   expect(pdf).not.toContain('compare the added wording');
+  // A later-deleted source cannot be guessed or compared. Notes remain visible.
+  state = await stored(page); copy = state.profiles.find(x => x.profileId === state.activeId);
+  await page.evaluate(async ({ profile, profileKey }) => {
+    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+    await new Promise((resolve, reject) => { const tx = db.transaction('keyval', 'readwrite'); tx.objectStore('keyval').put([profile], profileKey); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+    db.close();
+  }, { profile: copy, profileKey: PROFILE_KEY });
+  await page.reload(); await saved(page);
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Compare experience and projects' })).toHaveCount(0);
+  await expect(page.getByText(/The source resume is not available, so a current comparison cannot be displayed/)).toBeVisible();
   checkWire(sc1Harness);
 });
