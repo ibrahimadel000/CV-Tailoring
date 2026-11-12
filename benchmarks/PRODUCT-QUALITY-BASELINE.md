@@ -41,3 +41,7 @@ On a tailored copy with notes and an available source, the notes offer **Compare
 ## Mobile comparison space
 
 On a smaller screen, opening the experience/project comparison temporarily hides the idle tailoring footer, leaving more space for review. Opening from a note also collapses the note, which can otherwise consume most of a short screen; it remains available to reopen. Closing the comparison or its parent restores the complete footer and unchanged sending/privacy disclosures. The footer and cancellation remain available throughout an in-flight request. Desktop retains the footer while comparing. The comparison still uses current source/copy state, not a generation-time snapshot, and does not judge factual accuracy.
+
+## Current entry metadata review
+
+The current comparison previously omitted experience location and dates and project links, even though either resume may have been edited after tailoring. A fictional offline browser regression reproduces this blind spot by changing the saved copy independently of its source. The comparison now displays labeled experience title, organization, location, start/end dates and overview, and project name, role and link on both sides. Empty fields are labeled “Not provided”; values are shown as text, not verified or automatically judged, and the view does not edit either resume. Bullet labels remain exact-text, entry-local comparisons only. This exposes current metadata for human review; it is not a generation-time audit and does not cover other sections.

@@ -1032,3 +1032,45 @@ test('mobile comparison never hides cancellation during an in-flight request', a
   await expect(footer).toBeHidden(); // The open comparison gets space again once idle.
   expect(sc1Harness.calls).toHaveLength(2);
 });
+
+test('current comparison exposes changed and missing entry metadata without changing resumes', async ({ page, sc1Harness }) => {
+  const p = sourceProfile(true);
+  Object.assign(p.experience.data[0], { city: 'North Harbor', startDate: 'Jan 2024', endDate: 'Jun 2024', description: 'Supported a fictional training project.' });
+  p.projects.data = [{ id: crypto.randomUUID(), name: 'Community Garden', role: 'Volunteer', url: 'https://example.invalid/garden', bullets: [{ id: crypto.randomUUID(), text: 'Coordinated planting days.', isVerified: true }] }];
+  sc1Harness.respond(packet => ({ body: completed(authoredDocument(packet)) }));
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await expect.poll(async () => (await stored(page)).activeId).not.toBe(original.profileId);
+  const state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  Object.assign(copy.experience.data[0], { city: '', startDate: 'Feb 2024', endDate: '', description: '' });
+  Object.assign(copy.projects.data[0], { role: 'Coordinator', url: '' });
+  await page.evaluate(async ({ profiles, profileKey }) => {
+    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+    await new Promise((resolve, reject) => { const tx = db.transaction('keyval', 'readwrite'); tx.objectStore('keyval').put(profiles, profileKey); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+    db.close();
+  }, { profiles: state.profiles, profileKey: PROFILE_KEY });
+  await page.reload(); await saved(page);
+  await page.getByText('Compare current experience and projects', { exact: true }).click();
+  const exp = page.getByRole('article', { name: 'Experience comparison 1' });
+  const expSource = exp.getByRole('region', { name: 'Current source' });
+  const expCopy = exp.getByRole('region', { name: 'Current tailored copy' });
+  await expect(expSource).toContainText('Job title: Software Engineer');
+  await expect(expSource).toContainText('Organization: Fictional Classroom');
+  await expect(expSource).toContainText('Location: North Harbor');
+  await expect(expSource).toContainText('Start date: Jan 2024');
+  await expect(expSource).toContainText('End date: Jun 2024');
+  await expect(expSource).toContainText('Supported a fictional training project.');
+  await expect(expCopy).toContainText('Location: Not provided');
+  await expect(expCopy).toContainText('Start date: Feb 2024');
+  await expect(expCopy).toContainText('End date: Not provided');
+  await expect(expCopy).toContainText('Overview: Not provided');
+  const proj = page.getByRole('article', { name: 'Projects comparison 1' });
+  await expect(proj.getByRole('region', { name: 'Current source' })).toContainText('Project name: Community Garden');
+  await expect(proj.getByRole('region', { name: 'Current source' })).toContainText('Project role: Volunteer');
+  await expect(proj.getByRole('region', { name: 'Current source' })).toContainText('Project link: https://example.invalid/garden');
+  await expect(proj.getByRole('region', { name: 'Current tailored copy' })).toContainText('Project link: Not provided');
+  await expect(proj.getByRole('region', { name: 'Current tailored copy' })).toContainText('Project role: Coordinator');
+  const after = await stored(page);
+  expect(after.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(after.profiles.find(x => x.profileId === copy.profileId)).toEqual(copy);
+  expect(sc1Harness.calls).toHaveLength(1);
+});

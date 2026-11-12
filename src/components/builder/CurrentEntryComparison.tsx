@@ -2,19 +2,26 @@ import './currentEntryComparison.css';
 import type { CVProfile } from '@/types/schema';
 import { hasExactBullet, pairCurrentEntries } from '@/services/resumeComposer/currentEntryComparison';
 
-type ReviewEntry = { id: string; title: string; description?: string; bullets: { id: string; text: string }[] };
+type ReviewEntry = { id: string; fields: { label: string; value?: string }[]; bullets: { id: string; text: string }[] };
 function reviewEntries(profile: CVProfile, section: 'experience' | 'projects'): ReviewEntry[] {
   return section === 'experience' ? profile.experience.data.map(entry => ({
-    id: entry.id, title: [entry.roleTitle, entry.companyName].filter(Boolean).join(' · '),
-    description: entry.description, bullets: entry.bullets,
+    id: entry.id, fields: [
+      { label: 'Job title', value: entry.roleTitle }, { label: 'Organization', value: entry.companyName },
+      { label: 'Location', value: entry.city }, { label: 'Start date', value: entry.startDate },
+      { label: 'End date', value: entry.endDate }, { label: 'Overview', value: entry.description },
+    ], bullets: entry.bullets,
   })) : profile.projects.data.map(entry => ({
-    id: entry.id, title: [entry.name, entry.role].filter(Boolean).join(' · '), bullets: entry.bullets,
+    id: entry.id, fields: [
+      { label: 'Project name', value: entry.name }, { label: 'Project role', value: entry.role },
+      { label: 'Project link', value: entry.url },
+    ], bullets: entry.bullets,
   }));
 }
 function EntryContent({ entry, compareWith, unmatchedLabel }: { entry: ReviewEntry; compareWith?: ReviewEntry; unmatchedLabel: string }) {
   return <>
-    <p className="tailor-comparison-title" dir="auto">{entry.title || 'Untitled entry'}</p>
-    {entry.description && <p className="tailor-comparison-text" dir="auto">{entry.description}</p>}
+    {entry.fields.map(field => <p className="tailor-comparison-field" key={field.label}>
+      <span className="tailor-comparison-field-label">{field.label}: </span><span dir="auto">{field.value?.trim() ? field.value : 'Not provided'}</span>
+    </p>)}
     {entry.bullets.length > 0 ? <ul>{entry.bullets.map((bullet, index) => <li key={`${bullet.id}-${index}`}>
       <span dir="auto">{bullet.text}</span>
       {compareWith && !hasExactBullet(bullet.text, compareWith.bullets) && <span className="tailor-comparison-flag">{unmatchedLabel}</span>}
@@ -24,7 +31,7 @@ function EntryContent({ entry, compareWith, unmatchedLabel }: { entry: ReviewEnt
 export function CurrentEntryComparison({ source, copy }: { source: CVProfile; copy: CVProfile }) {
   return <>
     <p>These are the current versions, not a saved before-and-after snapshot. Entries are paired by ID. Either resume may have changed since tailoring.</p>
-    <p>Labels on both sides compare exact bullet text within the same entry only. They do not pair individual bullets. A reworded bullet may preserve the same meaning; a match does not verify a claim. Review actions, outcomes, qualifications and attribution.</p>
+    <p>Entry fields are shown as currently saved; missing values are marked Not provided. Labels on bullets compare exact text within the same entry only. They do not pair individual bullets. A reworded bullet may preserve the same meaning; a match does not verify a claim. Review actions, outcomes, qualifications and attribution.</p>
     {(['experience', 'projects'] as const).map(section => {
       const label = section === 'experience' ? 'Experience' : 'Projects';
       const pairs = pairCurrentEntries(reviewEntries(source, section), reviewEntries(copy, section));
