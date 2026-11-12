@@ -35,7 +35,7 @@ test('numbers must literally appear in the cited support',()=>{
 });
 
 // --- claim guard through the real compiler ---
-test('a fully supported rewritten document passes unchanged with zero guard notes',()=>{
+test('rewritten document is retained and newly appended scope is flagged for review',()=>{
  const p=fixture(),before=JSON.stringify(p),r=response(p);
  r.entries[0].bullets=[
   {text:'Developed web applications and technical architectures aligned with daily business operations.',sourceIds:['work_1_b1']},
@@ -43,7 +43,12 @@ test('a fully supported rewritten document passes unchanged with zero guard note
   {text:r.entries[0].bullets[2].text,sourceIds:['work_1_b3']},
  ];
  const out=n.compileNaturalComposition(p,r);
- a.deepEqual(out.guardNotes,[]);a.deepEqual(out.summaryRemovals,[]);
+ a.equal(out.guardNotes.length,1);
+ a.equal(out.guardNotes[0].path,'entries.work_1.bullets.1');
+ a.equal(out.guardNotes[0].kind,'review');
+ a(out.guardNotes[0].message.includes('compare the added wording'));
+ a.deepEqual(out.summaryRemovals,[]);
+ a.equal(out.candidate.experience.data[0].bullets[1].text,r.entries[0].bullets[1].text);
  a.equal(out.candidate.summary.data,r.summarySegments[0].text);
  a.equal(out.candidate.experience.data[0].bullets[0].text,r.entries[0].bullets[0].text);
  a.equal(out.candidate.experience.data[0].bullets[0].isVerified,false,'rewritten bullets are new records');

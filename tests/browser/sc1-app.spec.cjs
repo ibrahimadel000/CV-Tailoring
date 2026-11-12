@@ -920,3 +920,38 @@ test('completed synthetic request displays selected and actual model', async ({p
  await expect(page.getByText(/1 request attempted/)).toBeVisible();
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+test('appended wording review survives save and reload without claiming verification', async ({ page, sc1Harness }, testInfo) => {
+  const p = sourceProfile(true);
+  const source = 'Documented API behavior for the developer team.';
+  const proposed = 'Documented API behavior for the developer team and deployed the APIs.';
+  p.experience.data[0].bullets[0].text = source;
+  sc1Harness.respond(packet => {
+    const document = authoredDocument(packet);
+    document.entries[0].bullets[0].text = proposed;
+    return { body: completed(document) };
+  });
+  const original = await seed(page, p); await tailor(page); await saved(page);
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
+  // The banner can render before IndexedDB catches up with the active copy.
+  await expect.poll(async () => {
+    const state = await stored(page);
+    const active = state.profiles.find(x => x.profileId === state.activeId);
+    return state.activeId !== original.profileId && active?.experience.data[0].bullets[0].text === proposed;
+  }).toBe(true);
+  let state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+  expect(state.profiles.find(x => x.profileId === original.profileId)).toEqual(original);
+  expect(copy.experience.data[0].bullets[0].text).toBe(proposed);
+  expect(copy.compositionReview.notes.some(n => n.includes('compare the added wording'))).toBe(true);
+  await page.reload(); await saved(page);
+  await page.getByText(/Review 1 content note/).click();
+  await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
+  await page.getByText('Compare current experience and projects', { exact: true }).click();
+  await expect(page.getByText(source, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(proposed, { exact: true }).first()).toBeVisible();
+  const pdf = await exportedText(page, testInfo);
+  expect(pdf).toContain(proposed); // Advisory only; the user must review/edit.
+  expect(pdf).not.toContain('compare the added wording');
+  checkWire(sc1Harness);
+});

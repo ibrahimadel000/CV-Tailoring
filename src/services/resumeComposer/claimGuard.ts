@@ -10,6 +10,7 @@ import { buildTermIndex, analyzeTerms, unsupportedNumbers, copiedPassage, type T
 import { containsSkillName } from './summaryBoundary';
 import { scopeRisk } from './scopeRisk';
 import { incompleteDegreeConflict } from './degreeStatus';
+import { appendedWordingNeedsReview } from './appendedWordingReview';
 
 type Paragraph = { text: string; sourceIds: string[] };
 type Entry = { id: string; overview: Paragraph; bullets: Paragraph[] };
@@ -125,6 +126,7 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     const own = new Set([u.overviewId, ...u.bulletIds].filter(Boolean));
     let ambiguousLine = false;
     const possibleCoverageGaps: { path: string; text: string; ids: string[] }[] = [];
+    const possibleAppendedWording: { path: string; text: string; ids: string[] }[] = [];
     const check = (p: Paragraph, where: string, allowMetadata = false): Paragraph[] | null => {
       const allIds = unique(p.sourceIds);
       const metadata = allIds.filter(isEntryMetadata);
@@ -201,6 +203,10 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       if (result === null) {
         const paragraph = { text, sourceIds: unique(b.sourceIds).filter(id => !isEntryMetadata(id)) };
         accepted.push(paragraph);
+        // Defer the note until after overlap restoration: only surviving
+        // candidate text should be described as needing review.
+        if (appendedWordingNeedsReview(text, paragraph.sourceIds.map(id => facts.get(id)!.text)))
+          possibleAppendedWording.push({ path: `entries.${u.id}.bullets.${j}`, text, ids: paragraph.sourceIds });
         push(paragraph);
       } else for (const r of result) if (!(overview.text && r.sourceIds[0] === u.overviewId)) {
         restoredIds.add(r.sourceIds[0]);
@@ -246,6 +252,10 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     // differently worded source is not also cited by another surviving line.
     // Citation elsewhere is still not proof that its meaning was preserved.
     const visible = [overview, ...bullets].filter(p => p.text);
+    for (const item of possibleAppendedWording) {
+      if (visible.some(p => p.text === item.text && item.ids.length === p.sourceIds.length && item.ids.every(id => p.sourceIds.includes(id))))
+        notes.push({ path: item.path, kind: 'review', message: `${label}: compare the added wording in this bullet with your original. It repeats a cited passage and adds words; those words may be accurate or may change the facts. This literal check does not verify meaning.` });
+    }
     for (const gap of possibleCoverageGaps) {
       const line = visible.find(p => p.text === gap.text && gap.ids.every(id => p.sourceIds.includes(id)));
       if (!line) continue;

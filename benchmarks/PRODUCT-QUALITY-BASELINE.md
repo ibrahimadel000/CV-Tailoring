@@ -24,3 +24,11 @@ These are authored probes, not real provider outputs or population estimates. Th
 ## Next investigation
 
 Develop a broader reviewed set including faithful and unsupported paraphrases, cross-entry attribution, skills versus demonstrated work, qualifications and Arabic. Trace candidate safeguards through the actual authoring and compiler pipeline, measure unnecessary restorations as well as missed claims, and preserve originals and locks. Avoid adding keyword-specific rules merely to pass these fixtures. Any live provider experiment requires a separate explicit case, model, request, retry and stop budget approval.
+
+## Appended-wording review increment
+
+A narrow local signal now asks the user to compare a surviving experience/project bullet with its original when the bullet starts with a single cited passage (four or more word/number tokens) and appends a token absent from that passage. It compares literal normalized tokens; it never modifies or rejects the bullet, never judges truth, and excludes multi-source synthesis. The note is recorded only when the line survives later restoration, persists with the copy, and is not exported in the PDF. Users must review and edit the copy; the flagged wording remains in the resume and will appear in the PDF unless changed.
+
+Re-running the same 24 fictional cases after this change: all six copies and six intended faithful rewrites still remained without notes; all six obvious-risk cases were restored with notes; and the five subtle-detail examples previously retained without notes now remain with a review note. The sixth subtle case was already restored. This is a small development set, not an estimate of general effectiveness. A separate small set probes other English, French and Arabic literal examples; it is not an independently reviewed validation set.
+
+Limitations: the signal misses inserted details, paraphrased prefixes, short source passages, multi-citation lines, many phrases in unspaced scripts and other unsupported changes. Conversely, harmless appended wording can receive a note, and a missing note does not imply correctness. No model, data contract, retry policy or factual blocking rule changed. Prioritize a broader, independently reviewed evaluation and more actionable claim-by-claim comparison before making stronger safety claims.
