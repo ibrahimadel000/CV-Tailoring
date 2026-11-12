@@ -87,7 +87,7 @@ test('mid-sentence capitalized action verbs are not exempted by sentence-start v
   }
 });
 
-test('active-voice fictional bullets tightened via outcome and clause front-loading compile cleanly while unsafe claims are rejected', () => {
+test('fictional edits preserving action-object relationships compile while selected unsafe claims are rejected', () => {
   const p = setup();
   p.resumeHeader.data.desiredJobPosition = 'Archive Coordinator';
   p.headline.data = 'Archive Coordinator';
@@ -117,7 +117,7 @@ test('active-voice fictional bullets tightened via outcome and clause front-load
   const authored = {
     summarySegments: [
       {
-        text: 'Archive Coordinator experienced in cataloging rare manuscripts and archival records while coordinating laboratory equipment maintenance and clinic schedules.',
+        text: 'Archive Coordinator experienced in cataloging rare manuscripts and archival records and aligning clinic schedules with laboratory equipment maintenance.',
         sourceIds: ['headline', 'work_1_b1', 'work_1_b2'],
       },
     ],
@@ -127,11 +127,11 @@ test('active-voice fictional bullets tightened via outcome and clause front-load
         overview: { text: '', sourceIds: [] },
         bullets: [
           {
-            text: 'Cataloged rare manuscripts and archival records to coordinate conservation workflows with daily reading-room requests.',
+            text: 'Cataloged rare manuscripts and archival records, ensuring coordination between conservation workflows and daily reading-room requests.',
             sourceIds: ['work_1_b1'],
           },
           {
-            text: 'Coordinated laboratory equipment maintenance and cross-team planning to align clinic schedules.',
+            text: 'Aligned clinic schedules with laboratory equipment maintenance through planning and cross-team coordination.',
             sourceIds: ['work_1_b2'],
           },
           {

@@ -138,6 +138,8 @@ function checkWire(sc1Harness) {
   expect(body.generationConfig).toEqual({ responseMimeType: 'application/json', responseSchema: expect.any(Object), maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } });
   expect(body.systemInstruction.parts[0].text).toContain('one focused, readable resume');
   expect(body.systemInstruction.parts[0].text).toContain('A listed skill does not prove');
+  expect(body.systemInstruction.parts[0].text).toContain('do not imply the candidate performed work on the thing being coordinated with');
+  expect(body.systemInstruction.parts[0].text).not.toContain('Coordinated laboratory maintenance and cross-team planning to align clinic schedules.');
   expect(body.systemInstruction.parts[0].text).toContain('not independent proof');
   const packet = JSON.parse(body.contents[0].parts[0].text);
   expect(packet.job).toBe(JOB);
