@@ -47,7 +47,7 @@ function rig(p, provider) {
     get saves() { return saves; }, get calls() { return calls; }, get copy() { return copy; }, setActive(value) { active = value; } };
 }
 const signal = () => new AbortController().signal;
-const options = { exactSourceWording: true };
+const options = { exactSourceWording: true, allowSourceReorder: true };
 
 test('preserves native text, metadata and entries while using only unambiguous surviving references', async () => {
   const p = fixture(), before = JSON.stringify(p);
@@ -79,7 +79,7 @@ test('preserves native text, metadata and entries while using only unambiguous s
   a(cvProfileSchema.safeParse(copy).success); a.deepEqual(validateDraft(out.source, out.draft).issues, []);
   a.equal(out.draft.experience[0].omitted.length, 0); a.equal(out.draft.projects[0].omitted.length, 0);
   a(!out.omittedSourceIds.some(id => id.startsWith('work_') || id.startsWith('project_')));
-  a.equal(copy.compositionChanges.summary, 'unchanged'); a.equal(copy.compositionChanges.experience, 'reordered');
+  a.equal(copy.compositionChanges.mode, 'source-wording'); a.equal(copy.compositionChanges.summary, 'unchanged'); a.equal(copy.compositionChanges.experience, 'reordered');
   a.equal(copy.compositionChanges.projects, 'reordered'); a(!('proposal' in copy.compositionChanges));
   a.equal(out.summarySegments[0].text, p.summary.data.trim()); a.deepEqual(out.summaryRemovals, []);
   a(out.warnings.some(w => w.path === 'sourceWording' && /not factually verified/.test(w.message)));
@@ -200,9 +200,22 @@ for (const initial of [true, false]) test(`mode is captured before the provider 
   const r=rig(p, packet => new Promise(resolve => { release=()=>{
     const doc=response(packet);doc.entries[0].bullets.reverse();doc.entries[1].bullets[0].text='Maintained records.';resolve(doc);
   }; }));
-  const mutable={exactSourceWording:initial};const task=r.runner.run(job,signal(),mutable);
-  mutable.exactSourceWording=!initial;release();const out=await task;
+  const mutable={exactSourceWording:initial,allowSourceReorder:true};const task=r.runner.run(job,signal(),mutable);
+  mutable.exactSourceWording=!initial;mutable.allowSourceReorder=false;release();const out=await task;
   a.equal(out.status,'created');
   a.equal(out.candidate.experience.data[1].bullets[0].text,initial ? 'Kept records.' : 'Maintained records.');
   a.equal('proposal' in out.candidate.compositionChanges,!initial);
+  a.equal(out.candidate.compositionChanges.mode,initial?'source-wording':'rewrite');
+});
+
+for(const dependent of ['This work was supervised and never deployed.', 'However, this was a classroom exercise.', 'هذه المهمة كانت تحت إشراف المدير.'])test('source mode keeps dependent bullet context in original order: '+dependent,async()=>{
+ const p=fixture();p.experience.data=p.experience.data.slice(0,1);p.experience.data[0].bullets=[bullet('Built a prototype.'),bullet(dependent),bullet('Organized invoices.')];
+ const r=rig(p,packet=>{const d=response(packet);d.entries[0].bullets.reverse();d.skillSelections=[];return d;});
+ const out=await r.runner.run(job,signal(),options);a.deepEqual(out.candidate.experience.data[0].bullets,p.experience.data[0].bullets);a(out.warnings.some(w=>/original bullet order.*depend/i.test(w.message)));a.deepEqual(validateDraft(out.source,out.draft).issues,[]);
+});
+
+test('source mode keeps original order by default, including noun-referenced limitations',async()=>{
+ const p=fixture();p.experience.data=p.experience.data.slice(0,1);p.experience.data[0].bullets=[bullet('Built a prototype.'),bullet('The prototype was never deployed.'),bullet('Organized invoices.')];
+ const r=rig(p,packet=>{const d=response(packet);d.entries[0].bullets.reverse();d.skillSelections=[];return d;});
+ const out=await r.runner.run(job,signal(),{exactSourceWording:true});a.deepEqual(out.candidate.experience.data,p.experience.data);a.equal(out.candidate.compositionChanges.sourceReordering,false);
 });

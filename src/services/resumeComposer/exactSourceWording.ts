@@ -24,7 +24,7 @@ export function assertExactSourceFits(source: Source): void {
   if (validateDraft(source, draft).issues.length) throw new CompositionError('input', 'Source wording cannot fit the existing composition limits. Nothing was sent.');
 }
 
-export function exactSourceWording(profile: CVProfile, compiled: Compiled, parsed: NaturalDocument): Compiled {
+export function exactSourceWording(profile: CVProfile, compiled: Compiled, parsed: NaturalDocument, allowReorder = false): Compiled {
   const source = compiled.source;
   // Follow the same alternative selection as compilation. Work from parsed,
   // schema-validated suggestions, but use a suggestion only when the exact
@@ -34,6 +34,7 @@ export function exactSourceWording(profile: CVProfile, compiled: Compiled, parse
   candidate.skills = clone(compiled.candidate.skills);
   const draft = clone(compiled.draft);
   const facts = new Map(source.evidence.map(f => [f.id, f]));
+  const orderingWarnings: { path: string; message: string }[] = [];
   const original = (id: string) => id ? { text: facts.get(id)!.text, sourceIds: [id] } : { text: '', sourceIds: [] as string[] };
   draft.summary = original(source.summaryId);
 
@@ -43,7 +44,7 @@ export function exactSourceWording(profile: CVProfile, compiled: Compiled, parse
       const old = profile[section].data[index];
       const compiledEntry = draft[section].find(item => item.id === entry.id)!;
       const matches = chosen.filter(item => item.id === entry.id);
-      const suggested = !source.locks[section] && matches.length === 1 ? matches[0].bullets : [];
+      const suggested = allowReorder && !source.locks[section] && matches.length === 1 ? matches[0].bullets : [];
       // Count all appearances, even in unusable multi-reference lines: an ID
       // mentioned twice is ambiguous and never receives suggested priority.
       const counts = new Map<string, number>();
@@ -58,7 +59,14 @@ export function exactSourceWording(profile: CVProfile, compiled: Compiled, parse
         prioritized.push(nativeIndex);
       }
       const selected = new Set(prioritized);
-      const order = [...prioritized, ...old.bullets.map((_, i) => i).filter(i => !selected.has(i))];
+      let order = [...prioritized, ...old.bullets.map((_, i) => i).filter(i => !selected.has(i))];
+      // A few explicit reference words signal potential dependence on a prior
+      // bullet. Never claim this catches all dependencies or verifies context.
+      const dependent = old.bullets.some(b => /^(?:this|these|that|those|it|they|their|its|however|but)\b|^(?:هذا|هذه|ذلك|تلك|لكن)(?=\s|[،,.]|$)/iu.test(b.text.trim()));
+      if (dependent && order.some((value, i) => value !== i)) {
+        order = old.bullets.map((_, i) => i);
+        orderingWarnings.push({ path: `entries.${entry.id}`, message: 'Kept the original bullet order because a line may depend on another. Review the entry; this limited check cannot detect every dependency.' });
+      }
       native.bullets = order.map(i => clone(old.bullets[i]));
       // Draft is the validated, trimmed source projection; the native candidate
       // above retains original whitespace, empty bullets and all bullet metadata.
@@ -80,7 +88,8 @@ export function exactSourceWording(profile: CVProfile, compiled: Compiled, parse
     // Generated prose was discarded; its warnings no longer describe the copy.
     warnings: [
       ...compiled.warnings.filter(w => w.path === 'skillSelections'),
-      { path: 'sourceWording', message: 'Original wording and AI-suggested ordering are not factually verified. Review the content and its ordering.' },
+      ...orderingWarnings,
+      { path: 'sourceWording', message: allowReorder ? 'Original wording and AI-suggested ordering are not factually verified. Reordering can separate a statement from its context. Review every entry against the source.' : 'Original wording and order were kept; neither the source nor selected skills are factually verified. Review before export.' },
     ],
     guardNotes: compiled.guardNotes.filter(n => n.path === 'skillSelections'),
   };

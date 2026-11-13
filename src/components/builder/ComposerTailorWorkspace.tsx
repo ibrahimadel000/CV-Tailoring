@@ -20,8 +20,19 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
   const hasCurrentSource = !!currentSource;
+  const missingSourceSkills = currentSource && active ? currentSource.skills.data.filter(skill => !active.skills.data.some(current => current.id === skill.id)) : [];
+  const restoreSourceSkill = (skillId: string) => {
+    useAppStore.setState(state => {
+      const target = state.profiles.find(p => p.profileId === activeId);
+      const source = target?.baseProfileId ? state.profiles.find(p => p.profileId === target.baseProfileId) : undefined;
+      const skill = source?.skills.data.find(item => item.id === skillId);
+      if (state.activeProfileId !== activeId || !target || target.skills.isLocked || !skill || target.skills.data.some(item => item.id === skillId)) return {};
+      return { profiles: state.profiles.map(p => p.profileId === target.profileId ? { ...p, skills: { ...p.skills, data: [...p.skills.data, { ...skill }] } } : p) };
+    });
+  };
   const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [keepSourceWording, setKeepSourceWording] = useState(false);
+  const [allowSourceReorder, setAllowSourceReorder] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
   const [usage, setUsage] = useState<TailorUsageRecord | null>(null);
@@ -72,7 +83,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     const previousUsageId = readLatestTailorUsage()?.id;
     setBusy(true); setMessage(''); setNotes([]); setUsage(null);
     try {
-      const result = await runner.current!.run(job, task.signal, { exactSourceWording: keepSourceWording });
+      const result = await runner.current!.run(job, task.signal, { exactSourceWording: keepSourceWording, allowSourceReorder });
       if (!alive.current) return;
       const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
       const reviewNotes = [...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)];
@@ -93,6 +104,8 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       {active?.compositionChanges && <details className="tailor-review" open ref={changeDetails} onToggle={syncComparison}>
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
+        <p>Mode used for this copy: {active.compositionChanges.mode === 'source-wording' ? 'Keep source wording (summary and work/project text were not rewritten)' : active.compositionChanges.mode === 'rewrite' ? 'AI rewriting allowed (changes were not guaranteed)' : 'Not recorded for this older copy'}.</p>
+        {active.compositionChanges.mode === 'source-wording' && active.compositionChanges.sourceReordering !== undefined && <p>AI bullet reordering was {active.compositionChanges.sourceReordering ? 'allowed; review context carefully' : 'off; original order was kept'}.</p>}
         <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
         {currentSource && <details ref={summaryDetails} onToggle={syncComparison}>
           <summary ref={summaryHeading}>Compare current summaries</summary>
@@ -113,6 +126,12 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>
         {active.compositionChanges.skills.reordered && <p>Selected skills were reordered.</p>}
         {active.compositionChanges.skills.regrouped && <p>Some selected skills were moved to different groups.</p>}
+        {!!missingSourceSkills.length && <details>
+          <summary>Review skills in the current source</summary>
+          <p>These source skills are not in this copy. The source may have changed since tailoring. Add only skills relevant to the job; name, qualification and category are copied from the current source. The historical counts above do not change.</p>
+          <ul>{missingSourceSkills.map(skill => <li key={skill.id}><span dir="auto">{skill.name}{skill.level ? ` — ${skill.level}` : ''} ({skill.category})</span> {active.skills.data.some(item => item.name.trim().toLocaleLowerCase() === skill.name.trim().toLocaleLowerCase()) && <span>A skill with this name is already in the copy; compare its qualification and category before adding. </span>}<button type="button" className="text-button" disabled={busy || active.skills.isLocked} onClick={() => restoreSourceSkill(skill.id)}>Add to this copy</button></li>)}</ul>
+          {active.skills.isLocked && <p>Unlock Skills in the editor to add a skill.</p>}
+        </details>}
         {active.compositionChanges.skills.excluded.length > 0 && <details>
           <summary>Skills not selected for this copy</summary>
           <ul>{active.compositionChanges.skills.excluded.map((skill, i) => <li key={i}>{skill.name}{skill.level ? ` — ${skill.level}` : ''}</li>)}</ul>
@@ -126,7 +145,9 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         <p>If you want to add a personal interest or career direction that is missing from the imported CV, explicitly write it in the source editor first. The job description and skill list do not establish your interests.</p>
         {active?.importedFrom && <button className="text-button" disabled={busy} onClick={() => onReviewImport(active.importedFrom!)}>Review imported content</button>}
       </div>
-      <div className="tailor-job"><label><input type="checkbox" checked={keepSourceWording} disabled={busy} onChange={e => setKeepSourceWording(e.target.checked)} /> Keep source wording</label><p>Keeps the current source summary, all work and project text and entries exactly as written. AI may reorder original bullets and select or regroup skills; some skills may be left out of the copy. This offers less rewriting and does not verify your source or the suggested emphasis. Review before export.</p></div>
+      <div className="tailor-job"><label><input type="checkbox" checked={keepSourceWording} disabled={busy} onChange={e => setKeepSourceWording(e.target.checked)} /> Keep source wording</label><p>Keeps the current source summary and all work/project text exactly as written, in the original order by default. AI may select or regroup skills, and some skills may be left out of the copy. Uncheck to allow rewriting; locked sections stay unchanged. Neither mode verifies facts.</p>
+        {keepSourceWording && <><label><input type="checkbox" checked={allowSourceReorder} disabled={busy} onChange={e => setAllowSourceReorder(e.target.checked)} /> Allow AI to reorder original bullets</label><p>Reordering can separate a statement from its context or limits. Compare the copy with your source. The app cannot detect every dependency.</p></>}
+      </div>
       <div className="tailor-job"><label htmlFor="composer-model">AI model</label><select id="composer-model" disabled={busy} value={model} onChange={e => setModel(e.target.value as CompositionModel)}>{COMPOSITION_MODELS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select><p>Experimental selection. Availability, cost and writing quality vary by model. The selected model is tried first. On HTTP {TRANSIENT_HTTP_STATUSES.join(', ')} or an output-limit (MAX_TOKENS) response, the same content may automatically be sent to other models, in this order: {liveModels.join(" → ")}. Up to {liveModels.length} requests may be made and provider charges may apply to each, even if a request timed out.</p></div>
       <div className="tailor-job"><label htmlFor="composer-job">Job description</label><textarea id="composer-job" dir="auto" value={job} disabled={busy} maxLength={32000} placeholder="Paste the full job description…" onChange={e => setJob(e.target.value)} /><p>{job.length.toLocaleString()} / 32,000 characters. Minimum 40.</p></div>
       {usage && <details className="tailor-review"><summary>Latest model request</summary><p>Provider request status: {usage.status}. Selected model: {usage.model}. {usage.lastModel ? `Last requested model: ${usage.lastModel}. ` : ''}{usage.attempts} {usage.attempts === 1 ? 'request' : 'requests'} attempted.</p><p>Latest response reported {usage.total ?? 'an unreported number of'} total tokens. When multiple requests occur, this is not their combined usage or a cost estimate; failed requests may also incur charges. Provider success does not establish output quality or that a copy was saved.</p></details>}

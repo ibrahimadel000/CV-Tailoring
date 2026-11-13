@@ -1,9 +1,8 @@
 /** Conservative literal job-token coverage for existing skills only.
  * This is not a relevance, proficiency, or factuality classifier. The optional
- * safeguard retains an existing uniquely identified native skill when a clear
- * acronym/mixed-case technology token, a narrowly matched two-word phrase,
- * an exact Python/Java label in explicit programming context, or an exact native
- * label in a narrowly formatted required-skills list appears without negation.
+ * safeguard can retain a uniquely identified native skill only when its whole
+ * label appears, in addition to the conservative token, phrase, context and
+ * negation checks below. Partial matches are review suggestions, not selections.
  * Mixed-script mentions suppress retention because negation is not multilingual.
  * It never creates a skill or changes its native name, level, or qualification.
  */
@@ -13,6 +12,7 @@ import { equivalentSkillKey } from './documentEditorial';
 
 type Selection = { id: string; category: 'Technical' | 'Tools' | 'Soft' | 'Languages' };
 type Addition = { id: string; name: string; token: string; category: Selection['category'] };
+type PartialSuggestion = { id: string; name: string; level?: string };
 const TOKEN = /[A-Za-z][A-Za-z0-9+#]*/g;
 // Treat only these exact native labels as distinctive. Do not infer that a
 // match for C++ justifies selecting a longer combined skill label.
@@ -22,7 +22,7 @@ const SYMBOL_LANGUAGES = new Set(['c++', 'c#', 'f#']);
 const CONTEXT_LANGUAGES = new Set(['python', 'java']);
 // Broad organizational/legal words are not technology-specific signals.
 const EXCLUDE = new Set(['AND','THE','FOR','WITH','FROM','YOU','YOUR','ALL','ANY','NOT','YES','OUR','JOB','CV','USA','USD','UK','EU','EEO','CEO','CTO','HR']);
-const AMBIGUOUS_LINE = /\b(?:no|not|never|without|avoid|exclude|excluded|unnecessary|irrelevant|optional|neither|nor|rather than|not required|no longer|isn['’]t|aren['’]t|don['’]t|doesn['’]t|can['’]t|shouldn['’]t|unrelated|nonessential|non-essential|lack|lacks|lacking)\b/i;
+const AMBIGUOUS_LINE = /\b(?:no|not|never|without|avoid(?:s|ed|ing)?|exclude(?:s|d|ing)?|unnecessary|irrelevant|optional|neither|nor|rather than|not required|no longer|isn['’]t|aren['’]t|don['’]t|doesn['’]t|can['’]t|shouldn['’]t|unrelated|nonessential|non-essential|lack|lacks|lacking)\b/i;
 const lower = (s: string) => s.toLowerCase();
 // Exact adjacent words only; avoid matching generic qualifications or filler.
 // This is deliberately not a skill taxonomy or a semantic similarity check.
@@ -104,8 +104,8 @@ function conflictingRequiredLabels(jobLines: readonly string[], labels: Iterable
  }
  return blocked;
 }
-export function explicitSkillCoverage(profile: CVProfile, source: Source, job: string, selected: readonly Selection[]): Addition[] {
- if (source.locks.skills || !job.trim()) return [];
+export function analyzeSkillCoverage(profile: CVProfile, source: Source, job: string, selected: readonly Selection[]): { additions: Addition[]; partials: PartialSuggestion[] } {
+ if (source.locks.skills || !job.trim()) return { additions: [], partials: [] };
  const already = new Set(selected.map(s => s.id));
  const alreadyEquiv = new Set(selected.filter(s => source.skillIds.includes(s.id)).map(s => equivalentSkillKey(source, s.id)));
  const skills = source.skillIds.flatMap(id => {
@@ -122,7 +122,7 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
  }
  // Delimiters keep a negative requirement from influencing neighboring lines.
  // A negative/ambiguous mention anywhere suppresses that token entirely.
- const lines = job.split(/[\n;!?]+/u).map(s => s.trim()).filter(Boolean);
+ const lines = job.split(/[\n;!?]+|(?<=\.)\s+(?=[A-Z])/u).map(s => s.trim()).filter(Boolean);
  const positive = new Set<string>(), negative = new Set<string>();
  const requiredItems = requiredSkillItems(job);
  const blockedRequired = conflictingRequiredLabels(lines, skills.flatMap(s => s.exact && requiredItems.has(s.exact) ? [s.exact] : []));
@@ -133,8 +133,8 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
   // Suppress all of its matches, including a separate positive mention of the
   // same skill; this can decline valid bilingual mentions rather than infer fit.
   const nonEnglishScript = nonEnglishLetters(line);
-  const isAmbiguous = AMBIGUOUS_LINE.test(line) || nonEnglishScript;
-  const languageAmbiguous = isAmbiguous || extraAmbiguity.test(line);
+  const isAmbiguous = AMBIGUOUS_LINE.test(line) || extraAmbiguity.test(line) || /\bnon[-–—]/i.test(line) || nonEnglishScript;
+  const languageAmbiguous = isAmbiguous;
   const terms = isAmbiguous ? negative : positive;
   for (const match of line.matchAll(TOKEN)) {
    const token = lower(match[0]);
@@ -150,7 +150,14 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
    for (const language of CONTEXT_LANGUAGES) if (programmingContext(line, language)) positive.add(`l:${language}`);
  }
  const matched = (key: string) => owners.get(key)?.size === 1 && positive.has(key) && !negative.has(key);
- const added: Addition[] = [];
+ const added: Addition[] = [], partials: PartialSuggestion[] = [];
+ const fullLabelPresent = (name: string) => {
+  const label = name.normalize('NFKC').trim().replace(/\s+/gu, ' ');
+  if (!label || nonEnglishLetters(label)) return false;
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+  const whole = new RegExp(`(?<![\\p{L}\\p{M}\\p{N}_+.#-])${escaped}(?![\\p{L}\\p{M}\\p{N}_+#-]|\\.[\\p{L}\\p{N}])`, 'iu');
+  return lines.some(line => !AMBIGUOUS_LINE.test(line) && !extraAmbiguity.test(line) && !/\bnon[-–—]/i.test(line) && !nonEnglishLetters(line) && whole.test(line.normalize('NFKC')));
+ };
  for (const skill of skills) {
   if (already.has(skill.id) || alreadyEquiv.has(skill.equivKey)) continue;
   // An all-caps native label may also match the older acronym rule. Do not
@@ -163,8 +170,18 @@ export function explicitSkillCoverage(profile: CVProfile, source: Source, job: s
   const required = skill.exact && matched(`e:${skill.exact}`) ? skill.exact : undefined;
   const match = token || phrase || language || required;
   if (!match) continue;
+  // A partial token is not proof that the full native label fits the job.
+  // Keep the model's omission and offer only a local, bounded review notice.
+  if (!fullLabelPresent(skill.native.name)) {
+   alreadyEquiv.add(skill.equivKey);
+   partials.push({ id: skill.id, name: skill.native.name, ...(skill.native.level ? { level: skill.native.level } : {}) });
+   continue;
+  }
   alreadyEquiv.add(skill.equivKey);
   added.push({ id: skill.id, name: skill.native.name, token: match, category: skill.native.category });
  }
- return added;
+ return { additions: added, partials };
+}
+export function explicitSkillCoverage(profile: CVProfile, source: Source, job: string, selected: readonly Selection[]): Addition[] {
+ return analyzeSkillCoverage(profile, source, job, selected).additions;
 }

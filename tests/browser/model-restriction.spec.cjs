@@ -136,7 +136,7 @@ test('multi-citation review is visible without changing the source', async ({pag
  await tailor(page);
  await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
  await page.getByText(/Content review notes/).click();
- await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/this line repeats one cited passage while also citing others/)).toBeVisible();
+ await expect(page.getByRole('region',{name:'CV tailoring inputs'}).getByText(/an AI passage combines multiple source passages/)).toBeVisible();
  await expect.poll(async()=>(await stored(page)).profiles.length).toBe(2);
  const state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
  expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);

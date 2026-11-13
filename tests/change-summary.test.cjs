@@ -35,8 +35,8 @@ test('runner stores a historical comparison only locally and preserves the sourc
  const before=JSON.stringify(p);let active=p,copy,packet;
  const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,next){assert.equal(snapshot,before);copy=next;active=next;return true;}},async sent=>{packet=sent;return response(p);});
  const result=await runner.run(job,new AbortController().signal);assert.equal(result.status,'created');assert.equal(JSON.stringify(p),before);
- assert.deepEqual({...copy.compositionChanges,proposal:undefined},{...summarizeChanges(p,copy),proposal:undefined});
- assert(copy.compositionChanges.proposal);assert(cvProfileSchema.safeParse(JSON.parse(JSON.stringify(copy))).success);
+ assert.deepEqual({...copy.compositionChanges,mode:undefined,proposal:undefined},{...summarizeChanges(p,copy),mode:undefined,proposal:undefined});
+ assert(copy.compositionChanges.proposal);assert.equal(copy.compositionChanges.mode,'rewrite');assert(cvProfileSchema.safeParse(JSON.parse(JSON.stringify(copy))).success);
  assert(!JSON.stringify(packet).includes('HISTORICAL_PRIVATE_SENTINEL'));assert(!JSON.stringify(resumeBlocks(copy)).includes('HISTORICAL_PRIVATE_SENTINEL'));
  assert(!JSON.stringify(resumeBlocks(copy)).includes('compositionChanges'));
 });

@@ -355,6 +355,9 @@ export type CompositionReview = z.infer<typeof compositionReviewSchema>;
 // Historical comparison with the source at the time of generation.
 // This is local presentation metadata, never resume content or a quality score.
 export const compositionChangesSchema = z.object({
+  // Captured at generation, never inferred for older copies.
+  mode: z.enum(['rewrite', 'source-wording']).optional(),
+  sourceReordering: z.boolean().optional(),
   summary: z.enum(['changed', 'unchanged']),
   experience: z.enum(['empty', 'unchanged', 'reordered', 'edited']),
   projects: z.enum(['empty', 'unchanged', 'reordered', 'edited']),

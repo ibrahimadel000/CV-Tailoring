@@ -6,7 +6,7 @@ import type { CVProfile, SkillTag } from '@/types/schema';
 import type { Source } from '../contentEngine/engine';
 import { projectSource } from '../contentEngine/engine';
 import { compositionSchema, prepareComposition, prepareSourceComposition, compileComposition, CompositionError } from './core';
-import { boundCompositionContract, referencePolicy, withEntryMetadata, buildSummaryEvidenceBrief } from './references';
+import { boundCompositionContract, referencePolicy, withEntryMetadata, buildSummaryEvidenceBrief, isEntryMetadata } from './references';
 import { buildDocumentBrief, equivalentSkillKey } from './documentEditorial';
 import { buildAuthoringView } from './authoringView';
 import { chooseAlternativeEntries } from './alternativeEntry';
@@ -15,7 +15,7 @@ import type { SkillNormalization } from './skillSelection';
 import { applySummaryBoundary, summaryRemovalMessage } from './summaryBoundary';
 import { renderSummaryCapabilities, SUMMARY_CAPABILITY_MAX } from './summaryCapabilities';
 import { guardNaturalDocument } from './claimGuard';
-import { explicitSkillCoverage } from './explicitSkillCoverage';
+import { analyzeSkillCoverage } from './explicitSkillCoverage';
 import { shortenedSourceEcho, reorderedSourceEcho, editorialOverlap, editorialNovelWords } from './terms';
 
 export const NATURAL_REVISION = 'document-compose-single-source-1-preview';
@@ -136,11 +136,13 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
   }) }));
   // Preserve narrowly matched native skills that a model omitted. A literal
   // job-token match is a review signal, not evidence of work or proficiency.
-  const coverage = explicitSkillCoverage(profile, source, job, doc.skillSelections);
-  for (const item of coverage) {
+  const coverage = analyzeSkillCoverage(profile, source, job, doc.skillSelections);
+  for (const item of coverage.additions) {
     doc.skillSelections.push({ id: item.id, category: item.category });
     guarded.notes.push({ path: 'skillSelections', kind: 'review', message: `Kept your existing skill “${item.name}” because the job mentions “${item.token}”. This is a literal match, not a verified relevance or experience claim; review it.` });
   }
+  for (const item of coverage.partials.slice(0, 5)) guarded.notes.push({ path: 'skillSelections', kind: 'review', message: `Possible partial job match for an unselected existing skill: “${item.name}”${item.level ? ` — ${item.level}` : ''}. It was not added automatically; review its relevance and qualification.` });
+  if (coverage.partials.length > 5) guarded.notes.push({ path: 'skillSelections', kind: 'review', message: `${coverage.partials.length - 5} additional unselected skills had possible partial matches. Review the source skill list; partial matches do not establish relevance.` });
   // Defense in depth: the guard already filtered and deduplicated selections.
   const warningsForCategory: { path: string; message: string }[] = [];
   const normalized = selectSkills(source, doc.skillSelections);
@@ -184,6 +186,9 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
     // A tailored introduction must rest on real experience or qualifications when they exist.
     else if (text && text !== originalSummary && authoring.primaryFacts.length && !sourceIds.some(id => primaryIds.has(id)))
       keepOriginal('Kept your original summary because the remaining AI summary did not cite required experience or qualification evidence.');
+  }
+  if (!source.locks.summary && !usedFallback && boundary.retained.some(segment => segment.sourceIds.filter(id => { const fact = facts.get(id); return fact && fact.kind !== 'skill' && fact.kind !== 'headline' && !isEntryMetadata(id); }).length > 1)) {
+    warnings.push({ path: 'summary', message: 'An AI summary sentence cites multiple source passages. Compare it with your original for missing details or changed meaning; citations do not verify coverage or accuracy.' });
   }
   // Native composition path: same-entry references, locks, completeness and chronology.
   const result = compileComposition(profile, { summary: source.locks.summary ? { text: '', sourceIds: [] } : { text, sourceIds }, entries: doc.entries,

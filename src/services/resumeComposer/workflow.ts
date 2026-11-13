@@ -24,8 +24,9 @@ export function createCompositionRunner(repository: Repository, provider: Compos
   return {
     cancel() { current?.abort(); current = undefined; },
     // Opt-in keeps native wording; it does not validate the source or ordering.
-    async run(job: string, signal: AbortSignal, options: { exactSourceWording?: boolean } = {}) {
+    async run(job: string, signal: AbortSignal, options: { exactSourceWording?: boolean; allowSourceReorder?: boolean } = {}) {
       const keepSourceWording = options.exactSourceWording === true;
+      const allowSourceReorder = keepSourceWording && options.allowSourceReorder === true;
       if (current) throw new CompositionError('input', 'A composition is already running.');
       const original = repository.readActive();
       if (!original) throw new CompositionError('input', 'No active resume.');
@@ -46,7 +47,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         const compiled = compileNaturalComposition(profile, response, packet.job);
         // Compilation must succeed before the optional source-only projection.
         const parsed = naturalDocumentSchema.parse(response);
-        const result = keepSourceWording ? exactSourceWording(profile, compiled, parsed) : compiled;
+        const result = keepSourceWording ? exactSourceWording(profile, compiled, parsed, allowSourceReorder) : compiled;
         // These are explicitly pre-check proposal counts, not copy changes.
         const proposalComparison = summarizeProposal(packet.source, parsed);
         if (professionalContent(result.candidate) === professionalContent(profile)) {
@@ -56,7 +57,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         const copy = result.candidate;
         // Compare before copy metadata is changed. Kept locally, not sent to
         // the provider or embedded in the exported resume.
-        copy.compositionChanges = summarizeChanges(profile, copy);
+        copy.compositionChanges = { ...summarizeChanges(profile, copy), mode: keepSourceWording ? 'source-wording' : 'rewrite', ...(keepSourceWording ? { sourceReordering: allowSourceReorder } : {}) };
         if (!keepSourceWording) copy.compositionChanges.proposal = proposalComparison;
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;
         copy.profileName = `${profile.profileName} — Tailored`;

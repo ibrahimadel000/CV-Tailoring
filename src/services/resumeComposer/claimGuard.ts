@@ -125,7 +125,7 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     if (!w) { notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept your original wording because the AI response skipped this entry.` }); return originalEntry; }
     const own = new Set([u.overviewId, ...u.bulletIds].filter(Boolean));
     let ambiguousLine = false;
-    const possibleCoverageGaps: { path: string; text: string; ids: string[] }[] = [];
+    const multiSourceLines: { path: string; text: string; ids: string[] }[] = [];
     const possibleAppendedWording: { path: string; text: string; ids: string[] }[] = [];
     const check = (p: Paragraph, where: string, allowMetadata = false): Paragraph[] | null => {
       const allIds = unique(p.sourceIds);
@@ -162,11 +162,9 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         notes.push({ path: where, kind: 'restored', message: `${label}: kept your original wording because ${risks.join('; ')}. This is a limited local check, not factual verification.` });
         return ids.map(original);
       }
-      // Multiple citations do not establish that their distinct contributions
-      // survived. Flag this narrow exact-copy pattern for human review without
-      // changing the proposed passage or claiming a semantic omission.
-      if (ids.length > 1 && ids.some(id => p.text.trim() === facts.get(id)?.text.trim()))
-        possibleCoverageGaps.push({ path: where, text: p.text.trim(), ids });
+      // Multiple citations do not establish that each distinct contribution
+      // survived. Review every surviving multi-source passage, not just copies.
+      if (ids.length > 1) multiSourceLines.push({ path: where, text: p.text.trim(), ids });
       if (signals.splitPhrases.length) notes.push({ path: where, kind: 'review', message: `${label}: review ${list(signals.splitPhrases)}. The cited source uses a different word order; this literal match does not verify the claim or its scope.` });
       return null; // accepted as written; no semantic verification
     };
@@ -256,13 +254,8 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       if (visible.some(p => p.text === item.text && item.ids.length === p.sourceIds.length && item.ids.every(id => p.sourceIds.includes(id))))
         notes.push({ path: item.path, kind: 'review', message: `${label}: compare the added wording in this bullet with your original. It repeats a cited passage and adds words; those words may be accurate or may change the facts. This literal check does not verify meaning.` });
     }
-    for (const gap of possibleCoverageGaps) {
-      const line = visible.find(p => p.text === gap.text && gap.ids.every(id => p.sourceIds.includes(id)));
-      if (!line) continue;
-      const otherIds = gap.ids.filter(id => facts.get(id)?.text.trim() !== gap.text);
-      if (otherIds.some(id => !visible.some(p => p !== line && p.sourceIds.includes(id))))
-        notes.push({ path: gap.path, kind: 'review', message: `${label}: this line repeats one cited passage while also citing others. Compare the original passages for possible omissions; citations do not verify meaning.` });
-    }
+    const multiSource = multiSourceLines.find(item => visible.some(p => p.text === item.text && item.ids.length === p.sourceIds.filter(id => !isEntryMetadata(id)).length && item.ids.every(id => p.sourceIds.includes(id))));
+    if (multiSource) notes.push({ path: `entries.${u.id}`, kind: 'review', message: `${label}: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy.` });
     return { id: u.id, overview, bullets };
   });
 

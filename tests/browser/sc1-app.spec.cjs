@@ -439,7 +439,7 @@ test('copied introduction passage is removed, with note and separate copy preser
   });
   const original = await seed(page, source); await tailor(page);
   await expect(page.getByText('Some content needs your review; open the notes for details.', { exact: false })).toBeVisible();
-  await page.getByText(/Review 2 content notes/).click();
+  await page.getByText(/Review 3 content notes/).click();
   await expect(page.getByText(/Only one generated summary sentence remains/).first()).toBeVisible();
   await expect(page.getByText(/Removed a summary sentence that repeats one experience\/project passage/).first()).toBeVisible();
   await saved(page); let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
@@ -449,7 +449,7 @@ test('copied introduction passage is removed, with note and separate copy preser
   await page.reload(); await saved(page);
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.summary.data).toBe(synthesized);
-  await page.getByText(/Review 2 content notes/).click();
+  await page.getByText(/Review 3 content notes/).click();
   await expect(page.getByText(/Removed a summary sentence that repeats one experience\/project passage/).first()).toBeVisible();
   const pdf = await exportedText(page, testInfo);
   expect(pdf).toContain(synthesized); expect(pdf).toContain(copied); // The original experience remains.
@@ -483,7 +483,7 @@ test('two-contribution summary with a short overlapping source survives save and
   checkWire(sc1Harness);
 });
 
-test('job-named omitted source skill survives in the new copy with qualification and review note', async ({ page, sc1Harness }, testInfo) => {
+test('partial skill match is reviewed and manually restored with its qualification', async ({ page, sc1Harness }, testInfo) => {
   const source = sourceProfile(false); source.skills.isLocked = false;
   source.skills.data.push({ id: crypto.randomUUID(), name: 'Full-Stack SaaS Architecture', category: 'Technical', level: 'Coursework only' });
   const job = 'Backend engineer: build data dashboards, document work and collaborate. Preferred experience with SaaS applications.';
@@ -496,10 +496,13 @@ test('job-named omitted source skill survives in the new copy with qualification
   await expect.poll(async () => { const s = await stored(page); return s.activeId !== original.profileId; }).toBe(true);
   await saved(page);
   let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
-  expect(copy.skills.data.find(s => s.name === 'Full-Stack SaaS Architecture')).toEqual(original.skills.data.find(s => s.name === 'Full-Stack SaaS Architecture'));
+  expect(copy.skills.data.find(s => s.name === 'Full-Stack SaaS Architecture')).toBeUndefined();
   expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
-  await page.getByText(/Review 1 content note/).click();
-  await expect(page.getByText(/Kept your existing skill.*Full-Stack SaaS Architecture/).first()).toBeVisible();
+  await page.getByText(/Review \d+ content note/).click();
+  await expect(page.getByText(/Possible partial job match.*Full-Stack SaaS Architecture/).first()).toBeVisible();
+  const review = page.getByText('Review skills in the current source').locator('..');
+  await review.locator('summary').click(); await review.getByRole('button',{name:'Add to this copy'}).click();
+  await expect.poll(async () => { const state = await stored(page); return state.profiles.find(p => p.profileId === state.activeId).skills.data.some(s => s.name === 'Full-Stack SaaS Architecture'); }).toBe(true);
   await page.reload(); await saved(page);
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.skills.data.find(s => s.name === 'Full-Stack SaaS Architecture').level).toBe('Coursework only');
@@ -525,7 +528,7 @@ test('alternative summary survives real app save, reopen and PDF after two copie
   await saved(page); let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
   checkPreserved(original, copy);
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review \d+ content notes?/).click();
   await expect(page.getByText(/Used the alternative AI summary because the first did not pass local checks/).first()).toBeVisible();
   await page.reload(); await saved(page);
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
@@ -553,7 +556,7 @@ test('shortened copied summary prefers a checked two-fact alternative when avail
   await saved(page); let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
   checkPreserved(original, copy);
-  await page.getByText(/Review 1 content note/).click();
+  await page.getByText(/Review \d+ content notes?/).click();
   await expect(page.getByText(/first closely echoed one experience passage/).first()).toBeVisible();
   await page.reload(); await saved(page);
   state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
@@ -562,7 +565,7 @@ test('shortened copied summary prefers a checked two-fact alternative when avail
   checkWire(sc1Harness);
 });
 
-test('job phrase retains an omitted existing skill without changing its qualification or experience', async ({ page, sc1Harness }, testInfo) => {
+test('partial phrase match can be restored without changing qualification or experience', async ({ page, sc1Harness }, testInfo) => {
   const source = sourceProfile(false); source.skills.isLocked = false;
   source.skills.data.push({ id: crypto.randomUUID(), name: 'Problem Solving & Algorithm Design', category: 'Technical', level: 'Coursework only' });
   const job = 'Software engineer: build data dashboards, document work, and use strong problem-solving skills.';
@@ -571,8 +574,11 @@ test('job phrase retains an omitted existing skill without changing its qualific
   await expect.poll(async () => (await stored(page)).activeId !== original.profileId).toBe(true); await saved(page);
   let state = await stored(page), copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(state.profiles.find(p => p.profileId === original.profileId)).toEqual(original);
-  expect(copy.skills.data.find(s => s.name === 'Problem Solving & Algorithm Design')).toEqual(original.skills.data[1]);
+  expect(copy.skills.data.find(s => s.name === 'Problem Solving & Algorithm Design')).toBeUndefined();
   expect(copy.experience).toEqual(original.experience);
+  const review = page.getByText('Review skills in the current source').locator('..');
+  await review.locator('summary').click(); await review.getByRole('button',{name:'Add to this copy'}).click();
+  await expect.poll(async () => { const state = await stored(page); return state.profiles.find(p => p.profileId === state.activeId).skills.data.length; }).toBe(2);
   await page.reload(); await saved(page); state = await stored(page); copy = state.profiles.find(p => p.profileId === state.activeId);
   expect(copy.skills.data.find(s => s.name === 'Problem Solving & Algorithm Design').level).toBe('Coursework only');
   const pdf = await exportedText(page, testInfo); expect(pdf).toContain('Problem Solving & Algorithm Design'); expect(pdf).toContain('Coursework only');
@@ -1149,6 +1155,7 @@ test('optional source-wording mode preserves wording and missing bullets after s
  sc1Harness.respond(packet=>{const d=authoredDocument(packet);d.entries[0].bullets=[d.entries[0].bullets[1]];return {body:completed(d)};});
  const original=await seed(page,p);
  await page.getByLabel('Keep source wording').check();
+ await page.getByLabel('Allow AI to reorder original bullets').check();
  await expect(page.getByText(/some skills may be left out of the copy/)).toBeVisible();
  await page.getByLabel('Job description',{exact:true}).fill(JOB);
  await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
@@ -1158,9 +1165,11 @@ test('optional source-wording mode preserves wording and missing bullets after s
  expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
  expect(copy.summary).toEqual(original.summary);
  expect(copy.experience.data[0].bullets).toEqual([original.experience.data[0].bullets[1],original.experience.data[0].bullets[0]]);
- expect(copy.compositionChanges.summary).toBe('unchanged');expect(copy.compositionChanges.experience).toBe('reordered');
+ expect(copy.compositionChanges.mode).toBe('source-wording');expect(copy.compositionChanges.summary).toBe('unchanged');expect(copy.compositionChanges.experience).toBe('reordered');
+ await expect(page.getByText(/Mode used for this copy: Keep source wording/)).toBeVisible();
  await page.reload();await saved(page);state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
  expect(copy.summary).toEqual(original.summary);expect(copy.experience.data[0].bullets).toEqual([original.experience.data[0].bullets[1],original.experience.data[0].bullets[0]]);
+ await expect(page.getByText(/Mode used for this copy: Keep source wording/)).toBeVisible();
  expect(sc1Harness.calls).toHaveLength(1);
 });
 
@@ -1217,4 +1226,36 @@ test('mobile open comparison keeps stop message visible after cancellation', asy
  await page.getByRole('button',{name:'Cancel tailoring'}).click();
  const status=page.getByText(/Composition cancelled; nothing was saved/);await expect(status).toBeVisible();await expect(status).toBeInViewport();
  await expect(page.locator('.tailor-pane .tailor-footer')).toBeVisible();expect(await stored(page)).toEqual(before);expect(sc1Harness.calls).toHaveLength(1);
+});
+
+test('restore a current source skill with its qualification in source-wording mode', async ({page,sc1Harness}) => {
+ const p=sourceProfile();p.experience.isLocked=false;p.skills.isLocked=false;
+ p.experience.data[0].bullets.push({id:crypto.randomUUID(),text:'Organized weekly team meetings.',isVerified:true});
+ p.skills.data=[{id:crypto.randomUUID(),name:'محاسبة',category:'Technical',level:'دورة تمهيدية'}];
+ sc1Harness.respond(packet=>{const d=authoredDocument(packet);d.entries[0].bullets.reverse();d.skillSelections=[];return {body:completed(d)};});
+ const original=await seed(page,p);await page.getByLabel('Keep source wording').check();
+ await expect(page.getByLabel('Allow AI to reorder original bullets')).not.toBeChecked();await tailor(page);
+ await expect.poll(async()=>{const s=await stored(page);return s.profiles.length}).toBe(2);
+ let state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);expect(copy.skills.data).toEqual([]);
+ expect(copy.experience.data[0].bullets).toEqual(original.experience.data[0].bullets);expect(copy.compositionChanges.sourceReordering).toBe(false);
+ const review=page.getByText('Review skills in the current source',{exact:true}).locator('..');
+ await review.locator('summary').click();
+ await expect(review.getByText('محاسبة — دورة تمهيدية (Technical)',{exact:true})).toBeVisible();
+ await review.getByRole('button',{name:'Add to this copy',exact:true}).click();
+ await expect.poll(async()=>{const s=await stored(page);return s.profiles.find(x=>x.profileId===s.activeId).skills.data.length}).toBe(1);
+ await page.reload();await saved(page);state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(copy.skills.data).toEqual(original.skills.data);expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.compositionChanges.skills.excluded).toHaveLength(1);expect(sc1Harness.calls).toHaveLength(1);
+});
+
+test('same-named current source skill warns before explicit addition', async ({page,sc1Harness}) => {
+ const p=sourceProfile();p.skills.isLocked=false;
+ p.skills.data=[{id:crypto.randomUUID(),name:'Python',category:'Technical',level:'Coursework only'},{id:crypto.randomUUID(),name:'Python',category:'Languages',level:'Personal projects'}];
+ sc1Harness.respond(packet=>{const d=authoredDocument(packet);d.skillSelections=[{id:'skill_1',category:'Technical'}];return {body:completed(d)};});
+ await seed(page,p);await tailor(page);await expect.poll(async()=> (await stored(page)).profiles.length).toBe(2);
+ const review=page.getByText('Review skills in the current source',{exact:true}).locator('..');await review.locator('summary').click();
+ await expect(review.getByText('Python — Personal projects (Languages)',{exact:true})).toBeVisible();
+ await expect(review.getByText(/A skill with this name is already in the copy/)).toBeVisible();
+ await review.getByRole('button',{name:'Add to this copy'}).click();
+ await expect.poll(async()=>{const s=await stored(page);return s.profiles.find(x=>x.profileId===s.activeId).skills.data.length}).toBe(2);
 });
