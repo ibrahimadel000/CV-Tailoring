@@ -274,3 +274,24 @@ test('an open summary comparison never hides cancellation during a request', asy
   await expect(message).toBeVisible(); await expect(message).toBeInViewport();
   expect(await stored(page)).toEqual(beforeCancel);
 });
+
+test('empty AI summary warns on an unchanged result without making a copy', async ({page,harness}) => {
+ const original=await seed(page);
+ harness.respond(packet=>{const d=response(packet,{summaryUnchanged:true});d.summarySegments=[];return d;});
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByText(/The content was unchanged. No duplicate copy was created/)).toBeVisible();
+ await page.getByText(/Content review notes/).click();
+ await expect(page.getByText(/The primary AI draft had no summary/).first()).toBeVisible();
+ const state=await stored(page);expect(state.activeId).toBe(original.profileId);expect(state.profiles).toEqual([original]);expect(harness.calls).toHaveLength(1);
+});
+test('empty AI summary warning persists with an edited copy after reload', async ({page,harness},testInfo) => {
+ const original=await seed(page);
+ harness.respond(packet=>{const d=response(packet,{entryChanged:true});d.summarySegments=[];return d;});
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect.poll(async()=> (await stored(page)).activeId).not.toBe(original.profileId);await saved(page);
+ let state=await stored(page),copy=state.profiles.find(p=>p.profileId===state.activeId);
+ expect(copy.summary.data).toBe(original.summary.data);expect(state.profiles.find(p=>p.profileId===original.profileId)).toEqual(original);
+ expect(copy.compositionReview.notes.some(n=>n.includes('primary AI draft had no summary'))).toBe(true);
+ await page.reload();await saved(page);await page.getByText(/Review \d+ content notes?/).click();
+ await expect(page.getByText(/The primary AI draft had no summary/).first()).toBeVisible();
+});

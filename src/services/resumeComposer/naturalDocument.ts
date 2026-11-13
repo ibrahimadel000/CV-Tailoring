@@ -265,7 +265,9 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown, job 
       alternative.warnings.unshift(...alternativeNotes);
       alternative.warnings.unshift({ path: 'summary', message: weakEcho
         ? 'Used the alternative AI summary because the first closely echoed one experience passage. Review all claims; local checks do not verify facts.'
-        : 'Used the alternative AI summary because the first did not pass local checks. Review all claims; these checks do not verify facts.' });
+        : parsed.data.summarySegments.length === 0
+          ? 'Used the alternative AI summary because the primary draft had no summary. Review all claims; these checks do not verify facts.'
+          : 'Used the alternative AI summary because the first did not pass local checks. Review all claims; these checks do not verify facts.' });
       const { usedFallback: _unused, ...result } = alternative;
       return result;
     }
@@ -281,6 +283,13 @@ export function compileNaturalComposition(profile: CVProfile, raw: unknown, job 
   const removedSome = first.guardNotes.some(note => note.kind === 'removed' && note.path.startsWith('summarySegments.')) || first.summaryRemovals.length > 0;
   if (!profile.summary.isLocked && !first.usedFallback && removedSome && first.summarySegments.length === 1 && parsed.data.summarySegments.length > 1)
     first.warnings.push({ path: 'summary', message: 'Only one generated summary sentence remains after other sentences were removed. Check that it still introduces your background and fits the job; local checks do not verify meaning.' });
+  // A deliberately empty primary draft can fall back silently. Report this only
+  // after alternative selection, and do not imply a request or save succeeded.
+  if (!source.locks.summary && parsed.data.summarySegments.length === 0 && first.usedFallback
+      && !!profile.summary.data.trim() && !!source.summaryId
+      && first.candidate.summary.data === profile.summary.data.trim()) {
+    first.warnings.push({ path: 'summary', message: 'The primary AI draft had no summary. The source summary wording remains in the result; review it before export.' });
+  }
   const { usedFallback: _unused, ...result } = first;
   return result;
 }
