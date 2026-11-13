@@ -233,30 +233,38 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
   if (recoveredHeadingSpacing) warnings.push('Decorative spacing in recognized section headings was normalized. The extraction snapshot keeps the source wording.');
   const h = p.resumeHeader.data;
   const headerBlocks = blocks.filter(b => b.section === 'header');
-  const leftoverGroups: string[][] = [];
+  const leftoverGroups: string[][] = []; let possibleHeadlineInDetails = false;
   const fieldLabels = ['email','phone','mobile','tel','github','linkedin','location','address','name','fullname','العنوان','الموقع','الاسم','البريدالالكتروني','الهاتف'];
   for (const block of headerBlocks) {
-    const leftovers: string[] = []; let pendingLabel = '';
-    for (const original of block.lines.filter(Boolean)) {
-      let line = original;
+    const leftovers: string[] = []; let pendingLabel = ''; let educationContinuation = 0;
+    for (const original of block.lines) {
+      if (!original.trim()) { educationContinuation = 0; leftovers.push(''); continue; }
+      let line = original; let removedContact = false;
       const label = compactKey(line.replace(/:$/, ''));
-      if (fieldLabels.includes(label)) { pendingLabel = label; continue; }
-      if (['location','address','العنوان','الموقع'].includes(pendingLabel) && !h.location) { h.location = line; pendingLabel = ''; continue; }
+      if (fieldLabels.includes(label)) { educationContinuation = 0; pendingLabel = label; leftovers.push(''); continue; }
+      if (['location','address','العنوان','الموقع'].includes(pendingLabel) && !h.location) { h.location = line; pendingLabel = ''; leftovers.push(''); continue; }
       pendingLabel = '';
       const email = line.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-      if (email && !h.email) { h.email = email; line = line.replace(email, ''); }
+      if (email && !h.email) { h.email = email; line = line.replace(email, ''); removedContact = true; }
       const phone = line.match(/(?:\+?\d[\d ()-]{7,}\d)/)?.[0];
-      if (phone && (phone.match(/\d/g) || []).length >= 8 && !h.phone) { h.phone = phone.trim(); line = line.replace(phone, ''); }
+      if (phone && (phone.match(/\d/g) || []).length >= 8 && !h.phone) { h.phone = phone.trim(); line = line.replace(phone, ''); removedContact = true; }
       for (const match of [...line.matchAll(/(?:https?:\/\/)?(?:www\.)?(?:linkedin\.com\/in\/|github\.com\/)[^\s|·,]+/gi)]) {
         const value = match[0]; if (/linkedin/i.test(value) && !h.linkedin) h.linkedin = value; else if (/github/i.test(value) && !h.github) h.github = value; else continue;
-        line = line.replace(value, '');
+        line = line.replace(value, ''); removedContact = true;
       }
       line = line.replace(/\b(?:email|phone|mobile|linkedin|github|tel)\s*:/gi, '').replace(/^[\s|·,;]+|[\s|·,;]+$/g, '').trim();
-      if (!line || /^(?:cv|resume|curriculum vitae|السيرة الذاتية)$/i.test(line)) continue;
-      if (!h.name && /^[\p{L}][\p{L}\p{M} .’'-]{2,85}$/u.test(line) && line.split(/\s+/).length >= 2 && line.split(/\s+/).length <= 7 && !/engineer|developer|manager|designer|analyst|مهندس|مطور|مدير/i.test(line)) h.name = line;
-      else if (h.name && !p.headline.data && /engineer|developer|manager|designer|analyst|specialist|consultant|student|مهندس|مطور|مدير|طالب|محلل|مصمم/i.test(line) && line.length <= 130) { p.headline.data = line; h.desiredJobPosition = line; }
-      else if (/^(?:location|address|العنوان|الموقع)\s*:/i.test(line) && !h.location) h.location = line.replace(/^[^:]+:\s*/, '');
+      if (!line || /^(?:cv|resume|curriculum vitae|السيرة الذاتية)$/i.test(line)) { educationContinuation = 0; leftovers.push(''); continue; }
+      if (removedContact) { educationContinuation = 0; leftovers.push(''); }
+      const degreeStart = /^(?:(?:b\.?\s*sc\.?|m\.?\s*sc\.?|b\.?s\.?|m\.?s\.?|b\.?a\.?|ph\.?d\.?|mba)(?:\s|$)|(?:bachelor|master|doctor|associate)(?:['’]s)?\s+(?:of|in|degree)(?:\s|$)|diploma\s+(?:in|of)(?:\s|$))/i.test(line);
+      const educationHeader = degreeStart || educationContinuation > 0;
+      if (!degreeStart && educationContinuation > 0 && h.name && !p.headline.data && /engineer|developer|manager|designer|analyst|specialist|consultant|student|مهندس|مطور|مدير|طالب|محلل|مصمم/i.test(line)) possibleHeadlineInDetails = true;
+      if (degreeStart) educationContinuation = /\s+[–—|·-]\s+\S/.test(line) ? 0 : 2;
+      else if (educationContinuation) educationContinuation = /\s+[–—|·-]\s+\S/.test(line) ? 0 : educationContinuation - 1;
+      if (!educationHeader && !h.name && /^[\p{L}][\p{L}\p{M} .’'-]{2,85}$/u.test(line) && line.split(/\s+/).length >= 2 && line.split(/\s+/).length <= 7 && !/engineer|developer|manager|designer|analyst|مهندس|مطور|مدير/i.test(line)) { h.name = line; leftovers.push(''); }
+      else if (!educationHeader && h.name && !p.headline.data && /engineer|developer|manager|designer|analyst|specialist|consultant|student|مهندس|مطور|مدير|طالب|محلل|مصمم/i.test(line) && line.length <= 130) { p.headline.data = line; h.desiredJobPosition = line; leftovers.push(''); }
+      else if (/^(?:location|address|العنوان|الموقع)\s*:/i.test(line) && !h.location) { h.location = line.replace(/^[^:]+:\s*/, ''); leftovers.push(''); }
       else leftovers.push(line);
+      if (removedContact) leftovers.push('');
     }
     leftoverGroups.push(leftovers);
   }
@@ -303,7 +311,9 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
         const pair = splitPair(rest[0] || ''); let degree = pair[0] || ''; let institution = pair[1] || rest[1] || '';
         const degreePattern = /\b(?:bachelor|master|ph\.?d|doctor|diploma|associate|b\.?sc|m\.?sc|mba|b\.?s\.?|m\.?s\.?|b\.?a\.?)\b|بكالوريوس|ماجستير|دكتوراه|دبلوم|ثانوية/i;
         if (!degreePattern.test(degree) && degreePattern.test(institution)) [degree, institution] = [institution, degree];
-        if (!degree || !institution || !degreePattern.test(degree)) { preserve(title, group); continue; }
+        // A wrapped, unclosed qualifier cannot safely be treated as an
+        // institution line. Keep the whole group editable for manual review.
+        if (!degree || !institution || !degreePattern.test(degree) || /(?:\([^)]*$|\[[^\]]*$|\{[^}]*$|\b(?:in|of|and)\s*$)/i.test(degree) || /^[\[(]?\s*(?:in progress|ongoing|current|currently enrolled|part[ -]time|full[ -]time)\s*[\])]?$/i.test(institution)) { preserve(title, group); continue; }
         p.education.data.push({ id: uuid(), degree, institution, startDate: date?.start || '', endDate: date?.end || graduationDate, graduationDate: graduationDate || undefined, gpa: gpa || undefined, description: rest.slice(pair.length > 1 ? 1 : 2).join('\n') });
       }
     } else if (section === 'projects') {
@@ -323,12 +333,14 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
   }
   // Resolve header repetitions only after all education sections are parsed.
   // No source text is rewritten: the full extraction remains in importedFrom.
-  const unresolved: string[] = []; let matchedHeaderEducation = 0;
+  const unresolved: string[] = []; let matchedHeaderEducation = 0, statusReviewNeeded = false;
   for (const group of leftoverGroups) {
     const result = reconcileHeaderEducation(group, p.education.data);
-    unresolved.push(...result.remaining); matchedHeaderEducation += result.matches.length;
+    unresolved.push(...result.remaining); matchedHeaderEducation += result.matches.length; statusReviewNeeded ||= result.statusReviewNeeded;
   }
   if (unresolved.length) custom('Imported details', unresolved);
+  if (statusReviewNeeded) warnings.push('An education status may need review. Compare Education and Imported details before removing any text.');
+  if (possibleHeadlineInDetails) warnings.push('A line near a degree may be a job headline. Review Imported details and Headline.');
   if (matchedHeaderEducation) warnings.push(`${matchedHeaderEducation} repeated header education statement(s) matched a unique Education entry and were not added again to Imported details. Original text is retained in the import snapshot.`);
   if (/[\u0600-\u06ff\u4e00-\u9fff]/.test(text)) warnings.push('Non-Latin text is kept for editing. This release still needs dedicated fonts/shaping for non-Latin PDF export.');
   warnings.push('Check names, dates and section placement. Local extraction does not verify facts; images and the original page design are not imported.');

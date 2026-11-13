@@ -103,3 +103,18 @@ test('a two-cell continuation table is not mistaken for a sidebar',async({page,c
  expect(p.importedFrom.warnings).toContain('Table cells were read in document order. Check section placement for multi-column layouts.');
  expect(p.experience.data[0].bullets.map(b=>b.text)).toEqual(['Recorded manual tests.','Documented class exercises.']);
 });
+test('header-only education status stays editable and gets a specific import review',async({page,context},testInfo)=>{
+ await start(page,context);await openImport(page);
+ await page.getByLabel('Choose CV file').setInputFiles({name:'status-only.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:fixtures.statusOnlyDocx()});
+ await expect(page.getByRole('dialog',{name:'Import your resume'})).not.toBeVisible();
+ await expect.poll(async()=>(await stored(page)).profiles.some(p=>p.importedFrom?.fileName==='status-only.docx')).toBe(true);
+ let state=await stored(page),p=state.profiles.find(x=>x.profileId===state.active);
+ expect(p.education.data[0].degree).toBe('Bachelor of Environmental Science');
+ expect(p.customSections.some(s=>s.title==='Imported details'&&s.paragraphs.join(' ').includes('in progress'))).toBe(true);
+ expect(p.importedFrom.warnings.some(w=>/education status.*review/i.test(w))).toBe(true);
+ await page.getByRole('button',{name:'Review imported content'}).first().click();
+ const dialog=page.getByRole('dialog',{name:'Import details'});await expect(dialog.getByText(/education status may need review/i)).toBeVisible();
+ await dialog.getByRole('button',{name:'Continue editing'}).click();await page.reload();await expect(page.getByText('Saved in this browser',{exact:true})).toBeVisible();
+ state=await stored(page);p=state.profiles.find(x=>x.profileId===state.active);expect(p.importedFrom.warnings.some(w=>/education status.*review/i.test(w))).toBe(true);
+ const output=await exportedText(page,testInfo);expect(output).toContain('Bachelor of Environmental Science');expect(output).toContain('in progress');expect(output).toContain('West Campus');
+});
