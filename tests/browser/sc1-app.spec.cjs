@@ -1175,3 +1175,46 @@ test('source-wording mode cannot change mid-request and remains accessible on sm
  await expect(page.getByText(ERROR_503,{exact:true})).toBeVisible();await expect(mode).toBeEnabled();await expect(mode).toBeChecked();
  expect(sc1Harness.calls).toHaveLength(1);
 });
+
+for (const stop of ['timeout', 'cancel']) for (const viewport of ['desktop', 'mobile']) test(`uncooperative provider ${stop} releases the ${viewport} app and ignores late success`, async ({page,sc1Harness}) => {
+ const original=await seed(page,sourceProfile());
+ if(viewport==='mobile') { await page.setViewportSize({width:320,height:568}); await page.getByRole('button',{name:'CV Tailor',exact:true}).click(); }
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);
+ // Simulate a transport that ignores AbortSignal; no provider request leaves the page.
+ await page.evaluate(() => {
+   const originalFetch=window.fetch.bind(window);window.__stalledCalls=0;
+   window.fetch=(input,init)=>{
+     if(String(input).startsWith('https://generativelanguage.googleapis.com/')) {
+       window.__stalledCalls++;return new Promise(resolve=>{window.__releaseStalled=()=>resolve(new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]}}]}),{status:200}));});
+     }
+     return originalFetch(input,init);
+   };
+ });
+ if(stop==='timeout') await page.clock.install();
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Cancel tailoring'})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>window.__stalledCalls)).toBe(1);
+ if(stop==='timeout') await page.clock.fastForward(300001);
+ else await page.getByRole('button',{name:'Cancel tailoring'}).click();
+ const status=page.getByText(stop==='timeout'?/Request timed out\./:/Composition cancelled; nothing was saved\.|Cancelled\. No copy was created/);
+ await expect(status).toBeVisible();await expect(status).toBeInViewport();
+ await expect(page.getByRole('button',{name:'Tailor CV',exact:true})).toBeEnabled();
+ await page.evaluate(()=>window.__releaseStalled());
+ await expect.poll(()=>page.evaluate(()=>window.__stalledCalls)).toBe(1);
+ expect(await stored(page)).toEqual({profiles:[original],activeId:original.profileId});
+ expect(sc1Harness.calls).toHaveLength(0);
+});
+
+test('mobile open comparison keeps stop message visible after cancellation', async ({page,sc1Harness}) => {
+ const p=sourceProfile(true);p.experience.data[0].bullets[0].text='Documented API behavior for the developer team.';
+ sc1Harness.respond(packet=>{const doc=authoredDocument(packet);doc.entries[0].bullets[0].text='Documented API behavior for the developer team and deployed the APIs.';return {body:completed(doc)};});
+ const original=await seed(page,p);await tailor(page);await expect.poll(async()=>(await stored(page)).activeId).not.toBe(original.profileId);await saved(page);
+ await page.setViewportSize({width:320,height:568});await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+ const before=await stored(page);
+ await page.evaluate(()=>{const old=window.fetch.bind(window);window.fetch=(input,init)=>String(input).startsWith('https://generativelanguage.googleapis.com/')?new Promise(()=>{}):old(input,init);});
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await page.getByText(/Review 1 content note/).click();await page.getByRole('button',{name:'Compare experience and projects'}).click();
+ await page.getByRole('button',{name:'Cancel tailoring'}).click();
+ const status=page.getByText(/Composition cancelled; nothing was saved/);await expect(status).toBeVisible();await expect(status).toBeInViewport();
+ await expect(page.locator('.tailor-pane .tailor-footer')).toBeVisible();expect(await stored(page)).toEqual(before);expect(sc1Harness.calls).toHaveLength(1);
+});

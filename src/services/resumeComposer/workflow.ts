@@ -16,7 +16,7 @@ export type Repository = {
 export function createCompositionRunner(repository: Repository, provider: ComposeProvider) {
   let current: AbortController | undefined;
   const cancellable = (task: Promise<unknown>, signal: AbortSignal) => new Promise<unknown>((resolve, reject) => {
-    const cancelled = () => { signal.removeEventListener('abort', cancelled); reject(new CompositionError('cancelled', 'Composition cancelled; nothing was saved.')); };
+    const cancelled = () => { signal.removeEventListener('abort', cancelled); reject(new CompositionError('cancelled', 'Composition cancelled; nothing was saved. The provider may still have processed or charged the request.')); };
     // Always observe late provider rejection even if cancellation already won.
     task.then(value => { signal.removeEventListener('abort', cancelled); resolve(value); }, error => { signal.removeEventListener('abort', cancelled); reject(error); });
     if (signal.aborted) cancelled(); else signal.addEventListener('abort', cancelled, { once: true });
@@ -36,7 +36,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
       const abort = () => token.abort();
       signal.addEventListener('abort', abort, { once: true });
       const ensureCurrent = () => {
-        if (signal.aborted || token.signal.aborted || current !== token) throw new CompositionError('cancelled', 'Composition cancelled; nothing was saved.');
+        if (signal.aborted || token.signal.aborted || current !== token) throw new CompositionError('cancelled', 'Composition cancelled; nothing was saved. The provider may still have processed or charged the request.');
         if (JSON.stringify(repository.readActive()) !== snapshot) throw new CompositionError('stale', 'The active resume changed; nothing was saved.');
       };
       try {

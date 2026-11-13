@@ -11,26 +11,38 @@ function seconds(value: unknown): number | undefined {
   const n = Number(value.replace(/s$/, ''));
   return Number.isFinite(n) && n >= 0 && n <= 86400 ? n : undefined;
 }
-async function boundedError(response: Response): Promise<unknown> {
+async function boundedError(response: Response, signal?: AbortSignal): Promise<unknown> {
   const declared = response.headers?.get('content-length');
   if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_ERROR_BYTES) {
-    await response.body?.cancel().catch(() => {}); return;
+    void response.body?.cancel().catch(() => {}); return;
   }
   const reader = response.body?.getReader();
   if (!reader) return;
+  let timer: ReturnType<typeof setTimeout> | undefined, abort: (() => void) | undefined, finished = false;
+  const stopped = new Promise<never>((_, reject) => {
+    abort = () => reject(new DOMException('Aborted', 'AbortError'));
+    signal?.addEventListener('abort', abort, { once: true });
+    timer = setTimeout(() => reject(new Error('diagnostic read timed out')), 1500);
+    if (signal?.aborted) abort();
+  });
   try {
     const chunks: Uint8Array[] = []; let size = 0;
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const { done, value } = await Promise.race([reader.read(), stopped]);
+      if (done) { finished = true; break; }
       size += value.byteLength;
-      if (size > MAX_ERROR_BYTES) { await reader.cancel(); return; }
+      if (size > MAX_ERROR_BYTES) return;
       chunks.push(value);
     }
     const bytes = new Uint8Array(size); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     return JSON.parse(new TextDecoder().decode(bytes));
-  } finally { reader.releaseLock(); }
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    if (abort) signal?.removeEventListener('abort', abort);
+    if (!finished) void reader.cancel().catch(() => {});
+    try { reader.releaseLock(); } catch { /* A pending read settles after cancellation. */ }
+  }
 }
 function quotaLabel(value: Record<string, unknown>): string | undefined {
   const metrics: Record<string, string> = {
@@ -48,7 +60,7 @@ function quotaLabel(value: Record<string, unknown>): string | undefined {
   if (typeof value.quotaValue === 'string' && /^\d{1,10}$/.test(value.quotaValue) && Number(value.quotaValue) <= 1000000000) limit = `; reported limit: ${Number(value.quotaValue)}`;
   return metric + period + limit;
 }
-export async function providerFailureMessage(response: Response, attempts = 1): Promise<string> {
+export async function providerFailureMessage(response: Response, attempts = 1, signal?: AbortSignal): Promise<string> {
   if (response.status === 505) {
     void response.body?.cancel().catch(() => {});
     const retryNote = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
@@ -57,7 +69,7 @@ export async function providerFailureMessage(response: Response, attempts = 1): 
   const fields: string[] = []; let retry: number | undefined;
   try {
     retry = seconds(response.headers?.get('retry-after'));
-    const error = object(object(await boundedError(response))?.error);
+    const error = object(object(await boundedError(response, signal))?.error);
     if (error && (error.code === undefined || error.code === response.status)) {
       if (typeof error.status === 'string' && statuses.has(error.status)) fields.push(error.status);
       if (Array.isArray(error.details)) for (const raw of error.details.slice(0, 16)) {

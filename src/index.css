@@ -835,7 +835,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .tailor-workspace .tailor-job textarea { height: 260px; }
   /* Reviewing is not a send action. Restore the complete footer and its
      disclosures when the comparison closes; never hide Cancel while busy. */
-  .tailor-workspace .tailor-pane.is-comparing .tailor-footer { display: none; }
+  .tailor-workspace .tailor-pane.is-comparing:not(.has-stop-message) .tailor-footer { display: none; }
   .clean-builder .tailor-workspace.preview-focused > .preview-pane { display: flex; grid-column: 1; grid-row: 1; }
   .tailor-workspace.preview-focused > :is(.editor-pane, .tailor-pane) { display: none; }
 }

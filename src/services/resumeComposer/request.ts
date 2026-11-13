@@ -26,21 +26,47 @@ const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flas
 export function liveCompositionCandidates(model: CompositionModel): CompositionModel[] {
   return [model, ...LIVE_FALLBACKS.filter(m => m !== model)];
 }
+// A signal asks fetch/streams to stop, but a stalled adapter or body may ignore
+// it. Settle our own wait on abort and observe any late resolution/rejection.
+// The underlying provider may still process or charge an aborted request.
+function awaitAbortable<T>(task: Promise<T>, signal: AbortSignal, onLateValue?: (value: T) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true; signal.removeEventListener('abort', onAbort); fn();
+    };
+    const onAbort = () => finish(() => reject(new DOMException('Aborted', 'AbortError')));
+    task.then(value => {
+      if (settled) { try { onLateValue?.(value); } catch { /* Best-effort late cleanup. */ } }
+      else finish(() => resolve(value));
+    }, error => finish(() => reject(error)));
+    if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
   if (!getTailorConnection().ready) throw new TailorError('configuration', 'AI is not connected. Public deployment requires a secure server adapter.');
   const { responseSchema: schema, wire } = prepareSingleDraftRequest(packet);
   if (wire.length > 180000) throw new TailorError('input', 'Source exceeds the request budget. Nothing was sent.');
-  const controller = new AbortController(), started = performance.now();
+  const controller = new AbortController(), started = performance.now(), startedWall = Date.now();
   let timedOut = false, status: 'success' | 'failed' | 'cancelled' = 'failed', reason = '', usage: TokenUsage = {}, attempts = 0, lastModel: CompositionModel | undefined;
   const abort = () => controller.abort(); signal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, COMPOSITION_TIMEOUT_MS);
+  // Browsers may suspend/throttle timers. Reject a late response on resume even
+  // if the scheduled deadline callback has not run yet.
+  const checkDeadline = () => {
+    if (!signal.aborted && Date.now() - startedWall >= COMPOSITION_TIMEOUT_MS) { timedOut = true; controller.abort(); }
+    if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+  };
   const isSynthetic = /^synthetic-/i.test(key);
   const candidates: CompositionModel[] = isSynthetic ? [model] : liveCompositionCandidates(model);
   try {
     let response: Response | undefined, body: any;
     for (let i = 0; i < candidates.length; i++) {
+      checkDeadline();
       const targetModel = candidates[i];
       const generationConfig = isSynthetic
         ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } }
@@ -48,37 +74,40 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
           ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'medium' } }
           : { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 24576, thinkingConfig: { thinkingLevel: 'low' } };
       attempts++; lastModel = targetModel; usage = {};
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
+      response = await awaitAbortable(fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
         method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
         body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
-      });
+      }), controller.signal, late => { void late.body?.cancel().catch(() => {}); });
+      try { checkDeadline(); } catch (error) { void response.body?.cancel().catch(() => {}); throw error; }
       if (!response.ok) {
         if (!isSynthetic && TRANSIENT_HTTP_STATUSES.some(status => status === response!.status)) {
           // Respect both exposed HTTP and bounded Google RetryInfo hints.
           // Unknown/oversized/stalled JSON stops rather than guessing an early retry.
-          const inspection = await inspectRetryAdvice(response, controller.signal);
-          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+          const inspection = await awaitAbortable(inspectRetryAdvice(response, controller.signal), controller.signal);
+          checkDeadline();
           if (!inspection.ok) {
             const retryNote = attempts > 1 ? ` ${attempts} model requests were attempted. No further automatic retry.` : ' No automatic retry.';
             throw new TailorError('provider', `The AI service returned HTTP ${response.status}, but retry timing could not be safely checked.${retryNote} Your resumes are unchanged.`);
           }
           const delay = fallbackDelayMs(response.headers.get('retry-after'), i, undefined, undefined, inspection.retryMs);
           if (delay !== null && i < candidates.length - 1) {
-            await waitForFallback(delay, controller.signal);
+            await awaitAbortable(waitForFallback(delay, controller.signal), controller.signal);
+            checkDeadline();
             continue;
           }
           // Reconstruct only the bounded error body for the existing allowlisted diagnostic.
           response = new Response(inspection.body, { status: response.status, headers: response.headers });
         }
-        const message = await providerFailureMessage(response, attempts);
-        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const message = await awaitAbortable(providerFailureMessage(response, attempts, controller.signal), controller.signal);
+        checkDeadline();
         throw new TailorError('provider', message);
       }
-      body = await response.json();
+      body = await awaitAbortable(response.json(), controller.signal);
+      checkDeadline();
       const u = body?.usageMetadata ?? {};
       const count = (k: string) => Number.isSafeInteger(u[k]) && u[k] >= 0 ? u[k] as number : undefined;
       usage = { input: count('promptTokenCount'), output: count('candidatesTokenCount'), thoughts: count('thoughtsTokenCount'), total: count('totalTokenCount') };
-      if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      checkDeadline();
       // A prompt/candidate restriction must never be bypassed by trying another
       // model. Never reflect provider text or partial output in diagnostics.
       const restrictedReasons = new Set(['SAFETY', 'RECITATION', 'LANGUAGE', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION']);
@@ -102,6 +131,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
     const text = parts.filter(p => !p.thought).map(p => p.text).join('');
     if (!text || text.length > 100000) throw new TailorError('invalid', 'Empty or oversized response. Your resumes are unchanged.');
     let raw: unknown; try { raw = JSON.parse(text); } catch { throw new TailorError('invalid', 'Invalid response JSON. Your resumes are unchanged.'); }
+    checkDeadline();
     status = 'success'; return raw;
   } catch (e) {
     if (signal.aborted) { status = 'cancelled'; reason = 'cancelled'; throw new TailorError(reason, 'Cancelled. No copy was created; provider processing may already have started.'); }

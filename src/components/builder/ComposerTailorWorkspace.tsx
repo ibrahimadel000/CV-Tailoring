@@ -64,6 +64,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   }, [summaryComparisonRequest]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); runner.current?.cancel(); }; }, []);
   const connection = getTailorConnection();
+  const stopMessage = /^(Request timed out\.|Cancelled\.|Composition cancelled;)/.test(message);
   async function tailor() {
     if (controller.current || !active) return;
     selectedModel.current = model;
@@ -84,11 +85,11 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       if (alive.current) setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. Check your original before trying again.');
     } finally { if (controller.current === task) { controller.current = undefined; if (alive.current) { const latest = readLatestTailorUsage(); setUsage(latest && latest.id !== previousUsageId ? latest : null); setBusy(false); } } }
   }
-  return <aside className={`tailor-pane ${comparing && !busy ? 'is-comparing' : ''}`} aria-labelledby="tailor-heading" aria-busy={busy}>
+  return <aside className={`tailor-pane ${comparing && !busy ? 'is-comparing' : ''} ${stopMessage ? 'has-stop-message' : ''}`} aria-labelledby="tailor-heading" aria-busy={busy}>
     <header className="tailor-heading"><span className="tailor-mark"><Sparkles size={20} /></span><div><h2 id="tailor-heading">CV Tailor</h2><p>A focused resume from your real content.</p></div></header>
     <div className="tailor-scroll" role="region" aria-label="CV tailoring inputs" tabIndex={0}>
       <div className="tailor-feedback" role="note"><strong>{previewLabel}</strong><p>Experimental tailoring preview. Review every claim; factual safety, writing quality and latency are not certified. Use fictional data while evaluating free-tier access.</p></div>
-      {message && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
+      {message && !stopMessage && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
       {active?.compositionChanges && <details className="tailor-review" open ref={changeDetails} onToggle={syncComparison}>
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
@@ -131,7 +132,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       {usage && <details className="tailor-review"><summary>Latest model request</summary><p>Provider request status: {usage.status}. Selected model: {usage.model}. {usage.lastModel ? `Last requested model: ${usage.lastModel}. ` : ''}{usage.attempts} {usage.attempts === 1 ? 'request' : 'requests'} attempted.</p><p>Latest response reported {usage.total ?? 'an unreported number of'} total tokens. When multiple requests occur, this is not their combined usage or a cost estimate; failed requests may also incur charges. Provider success does not establish output quality or that a copy was saved.</p></details>}
       {!!notes.length && <details className="tailor-review"><summary>Content review notes · {notes.length}</summary><p>Limited local checks, not factual verification. Review the wording in the editor.</p>{notes.map((n, i) => <p key={i}>{n}</p>)}</details>}
     </div>
-    <footer className="tailor-footer"><div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? 'Writing your tailored copy…' : connection.ready ? previewLabel : 'AI server/setup required'}</div>
+    <footer className="tailor-footer">{stopMessage && <div className="tailor-feedback" role="status"><p>{message}</p></div>}<div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? 'Writing your tailored copy…' : connection.ready ? previewLabel : 'AI server/setup required'}</div>
       {busy ? <button className="secondary-button" onClick={() => { controller.current?.abort(); runner.current?.cancel(); }}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
       {busy && <p><Loader2 size={14} className="spin" />Tailoring in progress. Automatic model fallback may occur after a temporary server error or output-limit response.</p>}
       <p>Tailor CV sends professional resume content and this job to Google; automatic fallback may send the same content again. Contact fields, photos and private-note sections are excluded, but personal information typed into professional content or the job can be sent. Check both before tailoring. Free-tier quota may apply. No interview or extra AI review is required. New text is not factually certified. Edit and review before export.</p>
