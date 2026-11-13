@@ -266,7 +266,11 @@ test('an open summary comparison never hides cancellation during a request', asy
   await expect(summaryHeading(page)).toBeFocused();
   await expect(page.locator('.tailor-pane .tailor-footer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel tailoring' })).toBeVisible();
+  const beforeCancel = await stored(page);
   await page.getByRole('button', { name: 'Cancel tailoring' }).click(); release();
   await expect(page.getByRole('button', { name: 'Cancel tailoring' })).toHaveCount(0);
-  await expect(page.locator('.tailor-pane .tailor-footer')).toBeHidden();
+  await expect(page.locator('.tailor-pane .tailor-footer')).toBeVisible();
+  const message = page.getByText(/Composition cancelled; nothing was saved/);
+  await expect(message).toBeVisible(); await expect(message).toBeInViewport();
+  expect(await stored(page)).toEqual(beforeCancel);
 });
