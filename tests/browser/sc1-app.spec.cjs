@@ -624,6 +624,7 @@ test('change report distinguishes reordered work and omitted skills across reloa
   let state = await stored(page); const copy = state.profiles.find(profile => profile.profileId === state.activeId);
   expect(state.profiles.find(profile => profile.profileId === original.profileId)).toEqual(original);
   expect(copy.compositionChanges.experience).toBe('reordered');
+  await expect(page.locator('.composition-review-prompt')).toHaveCount(0); // Reordering alone is not a wording edit.
   await page.reload(); await saved(page);
   await expect(page.getByText('Experience: Wording unchanged; order changed.', { exact: true })).toBeVisible();
   await page.getByText('Skills not selected for this copy', { exact: true }).click();
@@ -1102,4 +1103,40 @@ test('safe shorter pagination matches the preview and downloaded PDF', async ({ 
   for (let i = 1; i <= 15; i++) expect(pdf).toContain(`Item ${i}:`);
   expect((await stored(page)).profiles.find(x => x.profileId === original.profileId)).toEqual(original);
   expect(sc1Harness.calls).toHaveLength(0);
+});
+
+for (const [label, proposed] of [
+  ['risky relationship rewrite', 'Coordinated laboratory maintenance and cross-team planning to align clinic schedules.'],
+  ['faithful relationship rewrite', 'Aligned clinic schedules with laboratory maintenance through planning and cross-team coordination.'],
+]) test(`changed entries have one neutral review prompt: ${label}`, async ({page,sc1Harness},testInfo) => {
+  const p=sourceProfile(true),source='Aligned clinic schedules with laboratory maintenance through proactive planning and cross-team coordination.';
+  p.experience.data[0].roleTitle='Clinic scheduler';p.experience.data[0].companyName='Fictional clinic';p.experience.data[0].bullets[0].text=source;
+  sc1Harness.respond(packet=>{const doc=authoredDocument(packet);doc.entries[0].bullets[0].text=proposed;return {body:completed(doc)};});
+  const original=await seed(page,p);await tailor(page);await saved(page);
+  await expect.poll(async()=>{const s=await stored(page);return s.activeId!==original.profileId;}).toBe(true);
+  let state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+  expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+  expect(copy.experience.data[0].bullets[0].text).toBe(proposed);
+  expect(copy.compositionReview).toBeUndefined(); // This prompt is not a claimed detected error.
+  expect(copy.compositionChanges.experience).toBe('edited');
+  const prompt=page.locator('.composition-review-prompt');
+  await expect(prompt).toHaveCount(1);await expect(prompt).toContainText('automatic checks cannot verify meaning');
+  await page.reload();await saved(page);await page.setViewportSize({width:390,height:844});
+  await expect(prompt).toBeVisible();await prompt.getByRole('button',{name:'Compare experience and projects'}).click();
+  await expect(page.getByRole('button',{name:'CV Tailor',exact:true})).toHaveAttribute('aria-pressed','true');
+  const pair=page.getByRole('article',{name:'Experience comparison 1'});
+  await expect(pair.getByRole('region',{name:'Current source'}).getByText(source,{exact:true})).toBeVisible();
+  await expect(pair.getByRole('region',{name:'Current tailored copy'}).getByText(proposed,{exact:true})).toBeVisible();
+  await page.setViewportSize({width:320,height:568});
+  await expect.poll(()=>page.getByRole('region',{name:'CV tailoring inputs'}).evaluate(el=>el.clientHeight)).toBeGreaterThan(150);
+  await prompt.getByRole('button',{name:'Hide until reload'}).click();await expect(prompt).toHaveCount(0);
+  await page.reload();await saved(page);await expect(prompt).toBeVisible();
+  if(label==='risky relationship rewrite'){
+    const pdf=await exportedText(page,testInfo);expect(pdf).toContain(proposed);expect(pdf).not.toContain('automatic checks cannot verify meaning');
+    state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+    await page.evaluate(async ({profile,profileKey})=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put([profile],profileKey);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();},{profile:copy,profileKey:PROFILE_KEY});
+    await page.reload();await saved(page);await expect(prompt).toContainText('source resume is unavailable');
+    await expect(prompt.getByRole('button',{name:'Compare experience and projects'})).toHaveCount(0);
+  }
+  checkWire(sc1Harness);
 });

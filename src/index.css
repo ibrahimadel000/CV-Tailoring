@@ -260,6 +260,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .builder-toast > svg { flex-shrink: 0; color: #bad0f2; }
 .builder-toast .icon-button { color: #cad7eb; }
 .storage-warning { display: flex; gap: 8px; padding: 10px 28px; background: #fff4e7; color: #80541e; font-size: 13px; line-height: 1.5; }
+.composition-review-prompt { display: flex; gap: 8px; padding: 10px 28px; background: #eef4fb; color: #274560; font-size: 13px; line-height: 1.5; }
+.composition-review-prompt > svg { flex: none; margin-top: 2px; }
+.composition-review-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+@media (max-width: 600px) { .composition-review-prompt { padding: 6px 12px; } }
+
 .no-resumes, .builder-loading { display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 16px; padding: 24px; text-align: center; background: #f8faff; }
 .no-resumes h1 { margin: 0; font-size: 32px; letter-spacing: -1px; }
 .no-resumes p, .builder-loading p { color: #64748b; font-size: 14px; line-height: 1.7; }
