@@ -10,7 +10,6 @@ export const COMPOSITION_MODEL = 'gemini-3.8-flash';
 export const COMPOSITION_MODELS = [
   { id: COMPOSITION_MODEL, label: 'Gemini 3.8 Flash' },
   { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
   { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
   { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
 ] as const;
@@ -21,7 +20,8 @@ export const TRANSIENT_HTTP_STATUSES = [500, 502, 503, 504] as const;
 export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.8 Flash · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
-const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+// Gemini 3.5 Flash is an alias routed to 3.6 Flash by Google, not an independent fallback.
 // Shared with the UI so its disclosure cannot drift from the transport order.
 export function liveCompositionCandidates(model: CompositionModel): CompositionModel[] {
   return [model, ...LIVE_FALLBACKS.filter(m => m !== model)];

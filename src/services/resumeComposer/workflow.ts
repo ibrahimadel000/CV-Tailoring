@@ -4,6 +4,7 @@ import { professionalContent, CompositionError } from './core';
 import { compileNaturalComposition, naturalDocumentSchema, prepareNaturalComposition, type NaturalPacket } from './naturalDocument';
 import { summaryBoundaryNotice } from './summaryBoundary';
 import { summarizeChanges, summarizeProposal } from './changeSummary';
+import { assertExactSourceFits, exactSourceWording } from './exactSourceWording';
 
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
 export type ComposeProvider = (packet: NaturalPacket, signal: AbortSignal) => Promise<unknown>;
@@ -22,12 +23,16 @@ export function createCompositionRunner(repository: Repository, provider: Compos
   });
   return {
     cancel() { current?.abort(); current = undefined; },
-    async run(job: string, signal: AbortSignal) {
+    // Opt-in keeps native wording; it does not validate the source or ordering.
+    async run(job: string, signal: AbortSignal, options: { exactSourceWording?: boolean } = {}) {
+      const keepSourceWording = options.exactSourceWording === true;
       if (current) throw new CompositionError('input', 'A composition is already running.');
       const original = repository.readActive();
       if (!original) throw new CompositionError('input', 'No active resume.');
       const snapshot = JSON.stringify(original), profile: CVProfile = JSON.parse(snapshot);
-      const packet = prepareNaturalComposition(profile, job), token = new AbortController(); current = token;
+      const packet = prepareNaturalComposition(profile, job);
+      if (keepSourceWording) assertExactSourceFits(packet.source);
+      const token = new AbortController(); current = token;
       const abort = () => token.abort();
       signal.addEventListener('abort', abort, { once: true });
       const ensureCurrent = () => {
@@ -38,10 +43,12 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         ensureCurrent();
         const response = await cancellable(provider(packet, token.signal), token.signal); // Exactly one invocation.
         ensureCurrent();
-        const result = compileNaturalComposition(profile, response, packet.job);
-        // Compilation already validates the response. Retain counts only, not
-        // raw provider content, to distinguish AI wording from later checks.
-        const proposalComparison = summarizeProposal(packet.source, naturalDocumentSchema.parse(response));
+        const compiled = compileNaturalComposition(profile, response, packet.job);
+        // Compilation must succeed before the optional source-only projection.
+        const parsed = naturalDocumentSchema.parse(response);
+        const result = keepSourceWording ? exactSourceWording(profile, compiled, parsed) : compiled;
+        // These are explicitly pre-check proposal counts, not copy changes.
+        const proposalComparison = summarizeProposal(packet.source, parsed);
         if (professionalContent(result.candidate) === professionalContent(profile)) {
           // Keeping already-good wording is a valid outcome, not an AI failure.
           return { ...result, proposalComparison, candidate: profile, status: 'unchanged' as const, profileId: profile.profileId };
@@ -50,7 +57,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         // Compare before copy metadata is changed. Kept locally, not sent to
         // the provider or embedded in the exported resume.
         copy.compositionChanges = summarizeChanges(profile, copy);
-        copy.compositionChanges.proposal = proposalComparison;
+        if (!keepSourceWording) copy.compositionChanges.proposal = proposalComparison;
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;
         copy.profileName = `${profile.profileName} — Tailored`;
         copy.targetJob = packet.job; copy.version = profile.version + 1; copy.lastConfirmed = '';

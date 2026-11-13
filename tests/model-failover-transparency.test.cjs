@@ -17,10 +17,10 @@ async function mock(responses,model='gemini-3.5-flash-lite'){
  finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
 }
 test('live fallback order is bounded, starts with selection and avoids duplicates',()=>{
- assert.deepEqual(liveCompositionCandidates('gemini-3.5-flash-lite'),['gemini-3.5-flash-lite','gemini-3.6-flash','gemini-3.5-flash']);
- assert.deepEqual(liveCompositionCandidates('gemini-3-flash-preview'),['gemini-3-flash-preview','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite']);
+ assert.deepEqual(liveCompositionCandidates('gemini-3.5-flash-lite'),['gemini-3.5-flash-lite','gemini-3.6-flash']);
+ assert.deepEqual(liveCompositionCandidates('gemini-3-flash-preview'),['gemini-3-flash-preview','gemini-3.6-flash','gemini-3.5-flash-lite']);
 });
-test('503 fallback records selected and actual model without private content',async()=>{
+test('503 fallback records selected and last requested model without private content',async()=>{
  const x=await mock([new Response('',{status:503}),complete(12)]);assert.equal(x.error,undefined);assert.deepEqual(x.result,{});assert.equal(x.calls.length,2);
  assert.equal(x.usage.model,'gemini-3.5-flash-lite');assert.equal(x.usage.lastModel,'gemini-3.6-flash');assert.equal(x.usage.attempts,2);assert.equal(x.usage.total,12);assert(!x.raw.includes(job));assert(!x.raw.includes('offline-fake-key'));
  assert.deepEqual(x.bodies[0].contents,x.bodies[1].contents);assert.deepEqual(x.bodies[0].systemInstruction,x.bodies[1].systemInstruction);
@@ -39,8 +39,8 @@ test('one-request failure retains existing diagnostic wording',async()=>{
 test('last request without usage never mislabels earlier token counts as latest',async()=>{
  const x=await mock([incomplete(100),new Response('',{status:429})]);assert.equal(x.calls.length,2);assert.equal(x.usage.total,undefined);assert.equal(x.usage.lastModel,'gemini-3.6-flash');
 });
-test('fallback exhaustion stops at the disclosed four attempts',async()=>{
- const x=await mock(Array.from({length:4},()=>new Response('',{status:503})),'gemini-3-flash-preview');assert.equal(x.calls.length,4);assert.match(x.error.message,/4 model requests/);assert.equal(x.usage.attempts,4);assert.equal(x.usage.lastModel,'gemini-3.5-flash-lite');
+test('fallback exhaustion stops at the disclosed three attempts',async()=>{
+ const x=await mock(Array.from({length:3},()=>new Response('',{status:503})),'gemini-3-flash-preview');assert.equal(x.calls.length,3);assert.match(x.error.message,/3 model requests/);assert.equal(x.usage.attempts,3);assert.equal(x.usage.lastModel,'gemini-3.5-flash-lite');
 });
 
 test('network failure stops immediately rather than silently falling back',async()=>{
@@ -85,7 +85,7 @@ test('nonblocked safety ratings do not prevent an ordinary successful response',
 
 
 test('default 3.8 keeps its existing low-thinking configuration and bounded fallbacks',async()=>{
- const x=await mock([complete(12)],null);assert.equal(x.error,undefined);assert.equal(x.calls.length,1);assert.match(x.calls[0],/gemini-3\.8-flash:generateContent$/);assert.equal(x.bodies[0].generationConfig.maxOutputTokens,24576);assert.equal(x.bodies[0].generationConfig.thinkingConfig.thinkingLevel,'low');assert.deepEqual(liveCompositionCandidates('gemini-3.8-flash'),['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite']);
+ const x=await mock([complete(12)],null);assert.equal(x.error,undefined);assert.equal(x.calls.length,1);assert.match(x.calls[0],/gemini-3\.8-flash:generateContent$/);assert.equal(x.bodies[0].generationConfig.maxOutputTokens,24576);assert.equal(x.bodies[0].generationConfig.thinkingConfig.thinkingLevel,'low');assert.deepEqual(liveCompositionCandidates('gemini-3.8-flash'),['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite']);
 });
 
 
@@ -109,4 +109,15 @@ test('a recovered fictional 500 creates a separate copy without mutating the ori
  const facts=new Map(source.evidence.map(f=>[f.id,f.text]));const raw={summarySegments:[],skillSelections:[],entries:source.experience.map(e=>({id:e.id,overview:{text:'',sourceIds:[]},bullets:e.bulletIds.toReversed().map(id=>({text:facts.get(id),sourceIds:[id]}))}))};
  let active=p,calls=0;const oldFetch=global.fetch;global.fetch=async()=>{calls++;if(calls===1)return new Response('',{status:500});if(calls===2)return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(raw)}]}}]}),{status:200});throw Error('unexpected extra request')};
  try{const runner=createCompositionRunner({readActive:()=>active,appendIfCurrent(snapshot,copy){assert.equal(snapshot,before);active=copy;return true}},requestComposition);const result=await runner.run(fictionalJob,new AbortController().signal);assert.equal(result.status,'created');assert.equal(calls,2);assert.equal(JSON.stringify(p),before);assert.notEqual(active.profileId,p.profileId);assert.deepEqual(active.experience.data[0].bullets.map(b=>b.text),p.experience.data[0].bullets.map(b=>b.text).toReversed());}finally{global.fetch=oldFetch;}
+});
+
+test('primary fallback skips deprecated alias and can reach Flash-Lite after two 503s',async()=>{
+ const x=await mock([new Response('',{status:503}),new Response('',{status:503}),complete(12)],null);
+ assert.equal(x.error,undefined);assert.deepEqual(x.calls.map(url=>url.match(/models\/([^:]+)/)[1]),['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite']);
+ assert.equal(x.usage.attempts,3);assert.equal(x.usage.lastModel,'gemini-3.5-flash-lite');
+ assert.equal(x.bodies[2].generationConfig.maxOutputTokens,16384);assert.equal(x.bodies[2].generationConfig.thinkingConfig.thinkingLevel,'medium');
+});
+
+test('deprecated alias cannot be selected as a separate model',async()=>{
+ const x=await mock([],'gemini-3.5-flash');assert.equal(x.calls.length,0);assert.equal(x.error.code,'configuration');
 });

@@ -624,7 +624,9 @@ test('change report distinguishes reordered work and omitted skills across reloa
   let state = await stored(page); const copy = state.profiles.find(profile => profile.profileId === state.activeId);
   expect(state.profiles.find(profile => profile.profileId === original.profileId)).toEqual(original);
   expect(copy.compositionChanges.experience).toBe('reordered');
-  await expect(page.locator('.composition-review-prompt')).toHaveCount(0); // Reordering alone is not a wording edit.
+  const cue = page.locator('.composition-review-prompt');
+  await expect(cue).toContainText('Summary changed during tailoring');
+  await expect(cue.getByRole('button', { name: 'Compare experience and projects' })).toHaveCount(0); // Reordering alone is not a wording edit.
   await page.reload(); await saved(page);
   await expect(page.getByText('Experience: Wording unchanged; order changed.', { exact: true })).toBeVisible();
   await page.getByText('Skills not selected for this copy', { exact: true }).click();
@@ -900,17 +902,17 @@ test('model choice is locked while the selected request is in progress', async (
 test('model selection discloses fallback order and budget without a request', async ({page,sc1Harness}) => {
  await seed(page,sourceProfile());
  await expect(page.getByLabel('AI model')).toHaveValue('gemini-3.8-flash');
- await expect(page.getByText(/Gemini 3.8 Flash → Gemini 3.6 Flash → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite/)).toBeVisible();
- await expect(page.getByText(/Up to 4 requests may be made/)).toBeVisible();
- await page.getByLabel('AI model').selectOption('gemini-3.5-flash-lite');
+ await expect(page.getByText(/Gemini 3.8 Flash → Gemini 3.6 Flash → Gemini 3.5 Flash-Lite/)).toBeVisible();
  await expect(page.getByText(/Up to 3 requests may be made/)).toBeVisible();
+ await page.getByLabel('AI model').selectOption('gemini-3.5-flash-lite');
+ await expect(page.getByText(/Up to 2 requests may be made/)).toBeVisible();
  await page.getByLabel('AI model').selectOption('gemini-3-flash-preview');
- await expect(page.getByText(/Gemini 3 Flash Preview → Gemini 3.6 Flash → Gemini 3.5 Flash → Gemini 3.5 Flash-Lite/)).toBeVisible();
- await expect(page.getByText(/Up to 4 requests may be made/)).toBeVisible();
+ await expect(page.getByText(/Gemini 3 Flash Preview → Gemini 3.6 Flash → Gemini 3.5 Flash-Lite/)).toBeVisible();
+ await expect(page.getByText(/Up to 3 requests may be made/)).toBeVisible();
  expect(sc1Harness.calls).toHaveLength(0);
 });
 
-test('completed synthetic request displays selected and actual model', async ({page,sc1Harness}) => {
+test('completed synthetic request displays selected and last requested model', async ({page,sc1Harness}) => {
  sc1Harness.respond(packet=>({body:completed(authoredDocument(packet))}));
  await seed(page,sourceProfile());
  await page.getByLabel('AI model').selectOption('gemini-3-flash-preview');
@@ -919,7 +921,7 @@ test('completed synthetic request displays selected and actual model', async ({p
  await expect(page.getByText('A new editable copy is open.',{exact:false})).toBeVisible();
  await page.getByText('Latest model request',{exact:true}).click();
  await expect(page.getByText(/Selected model: gemini-3-flash-preview/)).toBeVisible();
- await expect(page.getByText(/Model producing the response: gemini-3-flash-preview/)).toBeVisible();
+ await expect(page.getByText(/Last requested model: gemini-3-flash-preview/)).toBeVisible();
  await expect(page.getByText(/1 request attempted/)).toBeVisible();
  expect(sc1Harness.calls).toHaveLength(1);
 });
@@ -1139,4 +1141,37 @@ for (const [label, proposed] of [
     await expect(prompt.getByRole('button',{name:'Compare experience and projects'})).toHaveCount(0);
   }
   checkWire(sc1Harness);
+});
+
+test('optional source-wording mode preserves wording and missing bullets after save and reload', async ({page,sc1Harness}) => {
+ const p=sourceProfile();p.experience.isLocked=false;
+ p.experience.data[0].bullets.push({id:crypto.randomUUID(),text:'Organized weekly team meetings.',isVerified:true});
+ sc1Harness.respond(packet=>{const d=authoredDocument(packet);d.entries[0].bullets=[d.entries[0].bullets[1]];return {body:completed(d)};});
+ const original=await seed(page,p);
+ await page.getByLabel('Keep source wording').check();
+ await expect(page.getByText(/some skills may be left out of the copy/)).toBeVisible();
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);
+ await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(page.getByText(/A new editable copy is open with your original summary/)).toBeVisible();
+ await expect.poll(async()=>{const s=await stored(page);return s.profiles.length}).toBe(2);
+ let state=await stored(page),copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+ expect(copy.summary).toEqual(original.summary);
+ expect(copy.experience.data[0].bullets).toEqual([original.experience.data[0].bullets[1],original.experience.data[0].bullets[0]]);
+ expect(copy.compositionChanges.summary).toBe('unchanged');expect(copy.compositionChanges.experience).toBe('reordered');
+ await page.reload();await saved(page);state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+ expect(copy.summary).toEqual(original.summary);expect(copy.experience.data[0].bullets).toEqual([original.experience.data[0].bullets[1],original.experience.data[0].bullets[0]]);
+ expect(sc1Harness.calls).toHaveLength(1);
+});
+
+test('source-wording mode cannot change mid-request and remains accessible on small screens', async ({page,sc1Harness}) => {
+ let release;sc1Harness.respond(()=>new Promise(resolve=>{release=resolve}));
+ await seed(page,sourceProfile());await page.setViewportSize({width:320,height:568});
+ await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+ const mode=page.getByLabel('Keep source wording');await mode.check();
+ await page.getByLabel('Job description',{exact:true}).fill(JOB);await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+ await expect(mode).toBeDisabled();await expect.poll(()=>typeof release).toBe('function');
+ release({status:503,body:{error:{code:503,status:'UNAVAILABLE'}}});
+ await expect(page.getByText(ERROR_503,{exact:true})).toBeVisible();await expect(mode).toBeEnabled();await expect(mode).toBeChecked();
+ expect(sc1Harness.calls).toHaveLength(1);
 });

@@ -15,12 +15,13 @@ const entryChangeText = {
   reordered: 'Wording unchanged; order changed',
   edited: 'Wording or content changed',
 } as const;
-export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport, reviewComparisonRequest }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void; reviewComparisonRequest: number }) {
+export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport, reviewComparisonRequest, summaryComparisonRequest }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void; reviewComparisonRequest: number; summaryComparisonRequest: number }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
   const hasCurrentSource = !!currentSource;
   const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  const [keepSourceWording, setKeepSourceWording] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
   const [usage, setUsage] = useState<TailorUsageRecord | null>(null);
@@ -34,11 +35,13 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const controller = useRef<AbortController>(), alive = useRef(true);
   const changeDetails = useRef<HTMLDetailsElement>(null), comparisonDetails = useRef<HTMLDetailsElement>(null);
   const comparisonSummary = useRef<HTMLElement>(null);
-  const syncComparison = () => setComparing(!!(changeDetails.current?.open && comparisonDetails.current?.open));
-  useEffect(() => { setComparing(!!(changeDetails.current?.open && comparisonDetails.current?.open)); }, [activeId, hasCurrentSource]);
+  const summaryDetails = useRef<HTMLDetailsElement>(null), summaryHeading = useRef<HTMLElement>(null);
+  const syncComparison = () => setComparing(!!(changeDetails.current?.open && (comparisonDetails.current?.open || summaryDetails.current?.open)));
+  useEffect(() => { syncComparison(); }, [activeId, hasCurrentSource]);
   useEffect(() => {
     if (!reviewComparisonRequest || !changeDetails.current || !comparisonDetails.current) return;
     changeDetails.current.open = true;
+    if (summaryDetails.current) summaryDetails.current.open = false;
     comparisonDetails.current.open = true;
     setComparing(true);
     const frame = requestAnimationFrame(() => {
@@ -47,6 +50,18 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     });
     return () => cancelAnimationFrame(frame);
   }, [reviewComparisonRequest]);
+  useEffect(() => {
+    if (!summaryComparisonRequest || !changeDetails.current || !summaryDetails.current) return;
+    changeDetails.current.open = true;
+    if (comparisonDetails.current) comparisonDetails.current.open = false;
+    summaryDetails.current.open = true;
+    setComparing(true);
+    const frame = requestAnimationFrame(() => {
+      summaryHeading.current?.scrollIntoView({ block: 'start' });
+      summaryHeading.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [summaryComparisonRequest]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); runner.current?.cancel(); }; }, []);
   const connection = getTailorConnection();
   async function tailor() {
@@ -56,14 +71,14 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     const previousUsageId = readLatestTailorUsage()?.id;
     setBusy(true); setMessage(''); setNotes([]); setUsage(null);
     try {
-      const result = await runner.current!.run(job, task.signal);
+      const result = await runner.current!.run(job, task.signal, { exactSourceWording: keepSourceWording });
       if (!alive.current) return;
       const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
       const reviewNotes = [...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)];
       setNotes(reviewNotes);
       const draft = result.proposalComparison;
       const unchangedDetail = ` The AI proposed ${draft.proposed} work/project bullet lines; ${draft.different} did not exactly match a source passage in the same entry before local checks. This is not a quality or accuracy assessment.`;
-      setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : `The content was unchanged. No duplicate copy was created.${unchangedDetail}`) + (notice ? ` ${notice}` : ''));
+      setMessage((result.status === 'created' ? (keepSourceWording ? 'A new editable copy is open with your original summary and work/project wording. Review the order and selected skills; your original is unchanged. Browser save status is shown above.' : 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.') : keepSourceWording ? 'The source wording, order and skills were unchanged. No duplicate copy was created.' : `The content was unchanged. No duplicate copy was created.${unchangedDetail}`) + (notice ? ` ${notice}` : ''));
       if (result.status === 'created') onCreated(result.profileId, notice, reviewNotes);
     } catch (e) {
       if (alive.current) setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. Check your original before trying again.');
@@ -78,11 +93,12 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
         <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
-        {currentSource && <details>
-          <summary>Compare current summaries</summary>
-          <p>This compares the current source and copy; either may have changed since tailoring. Edit the copy in the editor after reviewing.</p>
-          <p><strong>Current source summary</strong></p><p style={{ whiteSpace: 'pre-wrap' }}>{currentSource.summary.data || '(Empty)'}</p>
-          <p><strong>Current tailored summary</strong></p><p style={{ whiteSpace: 'pre-wrap' }}>{active.summary.data || '(Empty)'}</p>
+        {currentSource && <details ref={summaryDetails} onToggle={syncComparison}>
+          <summary ref={summaryHeading}>Compare current summaries</summary>
+          <p>This compares the current source and copy, not a generation-time snapshot; either may have changed since tailoring. It does not verify meaning or factual accuracy. Edit the copy in the editor after reviewing.</p>
+          <p><strong>Current source summary</strong></p><p dir="auto" style={{ whiteSpace: 'pre-wrap' }}>{currentSource.summary.data || '(Empty)'}</p>
+          <p><strong>Current tailored summary</strong></p><p dir="auto" style={{ whiteSpace: 'pre-wrap' }}>{active.summary.data || '(Empty)'}</p>
+          <button type="button" className="text-button" onClick={() => { if (summaryDetails.current) summaryDetails.current.open = false; syncComparison(); summaryHeading.current?.focus({ preventScroll: true }); summaryHeading.current?.scrollIntoView({ block: 'start' }); }}>Close summary comparison</button>
         </details>}
         <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
         <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
@@ -109,9 +125,10 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         <p>If you want to add a personal interest or career direction that is missing from the imported CV, explicitly write it in the source editor first. The job description and skill list do not establish your interests.</p>
         {active?.importedFrom && <button className="text-button" disabled={busy} onClick={() => onReviewImport(active.importedFrom!)}>Review imported content</button>}
       </div>
+      <div className="tailor-job"><label><input type="checkbox" checked={keepSourceWording} disabled={busy} onChange={e => setKeepSourceWording(e.target.checked)} /> Keep source wording</label><p>Keeps the current source summary, all work and project text and entries exactly as written. AI may reorder original bullets and select or regroup skills; some skills may be left out of the copy. This offers less rewriting and does not verify your source or the suggested emphasis. Review before export.</p></div>
       <div className="tailor-job"><label htmlFor="composer-model">AI model</label><select id="composer-model" disabled={busy} value={model} onChange={e => setModel(e.target.value as CompositionModel)}>{COMPOSITION_MODELS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select><p>Experimental selection. Availability, cost and writing quality vary by model. The selected model is tried first. On HTTP {TRANSIENT_HTTP_STATUSES.join(', ')} or an output-limit (MAX_TOKENS) response, the same content may automatically be sent to other models, in this order: {liveModels.join(" → ")}. Up to {liveModels.length} requests may be made and provider charges may apply to each, even if a request timed out.</p></div>
       <div className="tailor-job"><label htmlFor="composer-job">Job description</label><textarea id="composer-job" dir="auto" value={job} disabled={busy} maxLength={32000} placeholder="Paste the full job description…" onChange={e => setJob(e.target.value)} /><p>{job.length.toLocaleString()} / 32,000 characters. Minimum 40.</p></div>
-      {usage && <details className="tailor-review"><summary>Latest model request</summary><p>Provider request status: {usage.status}. Selected model: {usage.model}. {usage.lastModel ? `${usage.status === 'success' ? 'Model producing the response' : 'Last model attempted'}: ${usage.lastModel}. ` : ''}{usage.attempts} {usage.attempts === 1 ? 'request' : 'requests'} attempted.</p><p>Latest response reported {usage.total ?? 'an unreported number of'} total tokens. When multiple requests occur, this is not their combined usage or a cost estimate; failed requests may also incur charges. Provider success does not establish output quality or that a copy was saved.</p></details>}
+      {usage && <details className="tailor-review"><summary>Latest model request</summary><p>Provider request status: {usage.status}. Selected model: {usage.model}. {usage.lastModel ? `Last requested model: ${usage.lastModel}. ` : ''}{usage.attempts} {usage.attempts === 1 ? 'request' : 'requests'} attempted.</p><p>Latest response reported {usage.total ?? 'an unreported number of'} total tokens. When multiple requests occur, this is not their combined usage or a cost estimate; failed requests may also incur charges. Provider success does not establish output quality or that a copy was saved.</p></details>}
       {!!notes.length && <details className="tailor-review"><summary>Content review notes · {notes.length}</summary><p>Limited local checks, not factual verification. Review the wording in the editor.</p>{notes.map((n, i) => <p key={i}>{n}</p>)}</details>}
     </div>
     <footer className="tailor-footer"><div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? 'Writing your tailored copy…' : connection.ready ? previewLabel : 'AI server/setup required'}</div>
