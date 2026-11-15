@@ -1,0 +1,89 @@
+--- a/tests/browser/sc1-app.spec.cjs
++++ b/tests/browser/sc1-app.spec.cjs
+@@ -151,6 +151,26 @@
+   expect(body.generationConfig.responseSchema.properties.alternativeEntries).toBeUndefined();
+   expect(JSON.stringify(body)).not.toContain('SC5_PRIVATE_CONTACT');
+ }
++async function expectMissingSourceHistoricalComparison(page, trigger, source, generated, laterEdit) {
++  await expect(trigger).toBeVisible();
++  await trigger.click();
++  const heading = page.locator('summary').filter({ hasText: 'Compare at generation (summary, experience and projects)' });
++  await expect(heading).toBeFocused();
++  const comparison = heading.locator('..');
++  await expect(comparison).toContainText('not their current versions. Later edits are not reflected');
++  await expect(comparison).toContainText('No individual passage attribution or semantic or factual verification is implied');
++  const sourceSide = comparison.getByRole('region', { name: 'Source at generation', exact: true });
++  const generatedSide = comparison.getByRole('region', { name: 'Generated copy at generation', exact: true });
++  await expect(sourceSide.getByText(source, { exact: true })).toBeVisible();
++  await expect(generatedSide.getByText(generated, { exact: true })).toBeVisible();
++  await expect(sourceSide.getByText(generated, { exact: true })).toHaveCount(0);
++  await expect(generatedSide.getByText(source, { exact: true })).toHaveCount(0);
++  await expect(comparison).not.toContainText(laterEdit);
++  await expect(page.getByText('The source resume is not available, so a current comparison cannot be displayed. The change summary describes when the copy was made.', { exact: true })).toBeVisible();
++  await expect(page.locator('summary').filter({ hasText: 'Compare current experience and projects' })).toHaveCount(0);
++  await expect(page.locator('summary').filter({ hasText: 'Compare current summaries' })).toHaveCount(0);
++  await expect(page.locator('[aria-label="Current source"], [aria-label="Current tailored copy"]')).toHaveCount(0);
++}
+ function checkPreserved(original, copy) {
+   for (const key of ['resumeHeader', 'headline', 'education', 'certifications', 'projects', 'skills', 'documentTheme', 'customSections', 'pageLayout']) expect(copy[key], key).toEqual(original[key]);
+   for (const key of ['summary', 'experience', 'projects', 'skills']) if (original[key].isLocked) expect(copy[key], `locked ${key}`).toEqual(original[key]);
+@@ -999,8 +1019,13 @@
+   const pdf = await exportedText(page, testInfo);
+   expect(pdf).toContain(proposed); // Advisory only; the user must review/edit.
+   expect(pdf).not.toContain('compare the added wording');
+-  // A later-deleted source cannot be guessed or compared. Notes remain visible.
++  // With the source removed, only the recorded generation-time comparison is available.
+   state = await stored(page); copy = state.profiles.find(x => x.profileId === state.activeId);
++  const snapshot = copy.compositionSnapshot;
++  expect(snapshot.source.experience[0].bullets).toEqual([source]);
++  expect(snapshot.generated.experience[0].bullets).toEqual([proposed]);
++  const laterEdit = 'Later edit in the current tailored copy.';
++  copy.experience.data[0].bullets[0].text = laterEdit;
+   await page.evaluate(async ({ profile, profileKey }) => {
+     const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+     await new Promise((resolve, reject) => { const tx = db.transaction('keyval', 'readwrite'); tx.objectStore('keyval').put([profile], profileKey); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+@@ -1009,8 +1034,16 @@
+   await page.reload(); await saved(page);
+   await page.getByText(/Review 1 content note/).click();
+   await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
+-  await expect(page.getByRole('button', { name: 'Compare experience and projects' })).toHaveCount(0);
+-  await expect(page.getByText(/The source resume is not available, so a current comparison cannot be displayed/)).toBeVisible();
++  await expectMissingSourceHistoricalComparison(page, page.getByRole('button', { name: 'Compare experience and projects' }), source, proposed, laterEdit);
++  await page.reload(); await saved(page);
++  state = await stored(page);
++  expect(state.profiles.map(x => x.profileId)).toEqual([copy.profileId]);
++  expect(state.profiles[0].baseProfileId).toBe(original.profileId);
++  expect(state.profiles[0].experience.data[0].bullets[0].text).toBe(laterEdit);
++  expect(state.profiles[0].compositionSnapshot).toEqual(snapshot);
++  await page.getByText(/Review 1 content note/).click();
++  await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
++  await expectMissingSourceHistoricalComparison(page, page.getByRole('button', { name: 'Compare experience and projects' }), source, proposed, laterEdit);
+   checkWire(sc1Harness);
+ });
+ 
+@@ -1142,9 +1175,23 @@
+   if(label==='risky relationship rewrite'){
+     const pdf=await exportedText(page,testInfo);expect(pdf).toContain(proposed);expect(pdf).not.toContain('automatic checks cannot verify meaning');
+     state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
++    const snapshot=copy.compositionSnapshot;
++    expect(snapshot.source.experience[0].bullets).toEqual([source]);
++    expect(snapshot.generated.experience[0].bullets).toEqual([proposed]);
++    const laterEdit='Later edit in the current tailored copy.';
++    copy.experience.data[0].bullets[0].text=laterEdit;
+     await page.evaluate(async ({profile,profileKey})=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put([profile],profileKey);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();},{profile:copy,profileKey:PROFILE_KEY});
+-    await page.reload();await saved(page);await expect(prompt).toContainText('source resume is unavailable');
+-    await expect(prompt.getByRole('button',{name:'Compare experience and projects'})).toHaveCount(0);
++    await page.reload();await saved(page);
++    await expect(prompt).toContainText('automatic checks cannot verify meaning');
++    await expectMissingSourceHistoricalComparison(page,prompt.getByRole('button',{name:'Compare experience and projects'}),source,proposed,laterEdit);
++    await page.reload();await saved(page);
++    state=await stored(page);
++    expect(state.profiles.map(x=>x.profileId)).toEqual([copy.profileId]);
++    expect(state.profiles[0].baseProfileId).toBe(original.profileId);
++    expect(state.profiles[0].experience.data[0].bullets[0].text).toBe(laterEdit);
++    expect(state.profiles[0].compositionSnapshot).toEqual(snapshot);
++    await expect(prompt).toContainText('automatic checks cannot verify meaning');
++    await expectMissingSourceHistoricalComparison(page,prompt.getByRole('button',{name:'Compare experience and projects'}),source,proposed,laterEdit);
+   }
+   checkWire(sc1Harness);
+ });
