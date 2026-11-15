@@ -1,6 +1,7 @@
 import './currentEntryComparison.css';
 import type { CVProfile } from '@/types/schema';
 import { hasExactBullet, pairCurrentEntries } from '@/services/resumeComposer/currentEntryComparison';
+import { plainText } from './resumeModel';
 
 type ReviewEntry = { id: string; fields: { label: string; value?: string }[]; bullets: { id: string; text: string }[] };
 function reviewEntries(profile: CVProfile, section: 'experience' | 'projects'): ReviewEntry[] {
@@ -8,13 +9,13 @@ function reviewEntries(profile: CVProfile, section: 'experience' | 'projects'): 
     id: entry.id, fields: [
       { label: 'Job title', value: entry.roleTitle }, { label: 'Organization', value: entry.companyName },
       { label: 'Location', value: entry.city }, { label: 'Start date', value: entry.startDate },
-      { label: 'End date', value: entry.endDate }, { label: 'Overview', value: entry.description },
-    ], bullets: entry.bullets,
+      { label: 'End date', value: entry.endDate }, { label: 'Overview', value: plainText(entry.description) },
+    ], bullets: entry.bullets.map(bullet => ({ ...bullet, text: plainText(bullet.text) })),
   })) : profile.projects.data.map(entry => ({
     id: entry.id, fields: [
       { label: 'Project name', value: entry.name }, { label: 'Project role', value: entry.role },
       { label: 'Project link', value: entry.url },
-    ], bullets: entry.bullets,
+    ], bullets: entry.bullets.map(bullet => ({ ...bullet, text: plainText(bullet.text) })),
   }));
 }
 function EntryContent({ entry, compareWith, unmatchedLabel }: { entry: ReviewEntry; compareWith?: ReviewEntry; unmatchedLabel: string }) {
@@ -31,7 +32,7 @@ function EntryContent({ entry, compareWith, unmatchedLabel }: { entry: ReviewEnt
 export function CurrentEntryComparison({ source, copy }: { source: CVProfile; copy: CVProfile }) {
   return <>
     <p>These are the current versions, not a saved before-and-after snapshot. Entries are paired by ID. Either resume may have changed since tailoring.</p>
-    <p>Entry fields are shown as currently saved; missing values are marked Not provided. Labels on bullets compare exact text within the same entry only. They do not pair individual bullets. A reworded bullet may preserve the same meaning; a match does not verify a claim. Review actions, outcomes, qualifications and attribution.</p>
+    <p>Entry fields are shown as currently saved; missing values are marked Not provided. Overview and bullet text use the resume preview’s text projection; formatting is not shown. Labels on bullets compare exact displayed text within the same entry only. They do not pair individual bullets. A reworded bullet may preserve the same meaning; a match does not verify a claim. Review actions, outcomes, qualifications and attribution.</p>
     {(['experience', 'projects'] as const).map(section => {
       const label = section === 'experience' ? 'Experience' : 'Projects';
       const pairs = pairCurrentEntries(reviewEntries(source, section), reviewEntries(copy, section));
