@@ -1,0 +1,980 @@
+{
+  "description": "Fictional author-labeled development probes; not provider output, independent review, or production error rates.",
+  "limitation": "Results are per case, without mixed-type aggregate scores. Exact retention is observable, not a semantic verdict. Review notes do not remove text.",
+  "provenance": {
+    "sourceAndHarnessManifestSha256": "88da2faf948e6b7218c01ee943ab0c802840c9ac6576d05a2234b5f654356f2e",
+    "manifestFileCount": 153,
+    "nodeVersion": "v24.22.1",
+    "typescriptVersion": "5.7.3",
+    "commit": "unverified; no Git metadata in this copy",
+    "scope": "src tree, lockfile, benchmark script, benchmark test, and two fixture/loader files; not installed dependencies or full environment"
+  },
+  "termOnlyCounterfactual": [
+    {
+      "id": "sql-verb",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Produced reports with SQL for weekly sales reviews."
+      ],
+      "proposed": "Prepared SQL reports for weekly sales reviews.",
+      "currentUnsupported": [
+        "Prepared SQL"
+      ],
+      "withPreparedException": []
+    },
+    {
+      "id": "sql-product",
+      "variant": "contrast",
+      "classification": "ambiguous",
+      "source": [
+        "SQL supports weekly sales reports."
+      ],
+      "proposed": "Prepared SQL supports weekly sales reports.",
+      "currentUnsupported": [
+        "Prepared SQL"
+      ],
+      "withPreparedException": []
+    },
+    {
+      "id": "sql-statements",
+      "variant": "contrast",
+      "classification": "unsupported-technique",
+      "source": [
+        "SQL statements protected customer records."
+      ],
+      "proposed": "Prepared SQL statements protected customer records.",
+      "currentUnsupported": [
+        "Prepared SQL"
+      ],
+      "withPreparedException": []
+    }
+  ],
+  "results": [
+    {
+      "id": "sql-verb",
+      "occupation": "data",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Produced reports with SQL for weekly sales reviews."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Produced reports with SQL for weekly sales reviews."
+        }
+      ],
+      "proposed": "Prepared SQL reports for weekly sales reviews.",
+      "retained": [
+        "Produced reports with SQL for weekly sales reviews."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, which this part of your CV does not mention."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, which this part of your CV does not mention."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "The organization is not in the source."
+    },
+    {
+      "id": "sql-verb",
+      "occupation": "data",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Produced reports with SQL for weekly sales reviews."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Produced reports with SQL for weekly sales reviews."
+        }
+      ],
+      "proposed": "Prepared SQL reports for weekly sales reviews at Cedarvale Labs.",
+      "retained": [
+        "Produced reports with SQL for weekly sales reviews."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, “Cedarvale Labs”, which this part of your CV does not mention."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, “Cedarvale Labs”, which this part of your CV does not mention."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "The organization is not in the source."
+    },
+    {
+      "id": "sql-product",
+      "occupation": "data",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "SQL supports weekly sales reports."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "SQL supports weekly sales reports."
+        }
+      ],
+      "proposed": "Weekly sales reports are supported by SQL.",
+      "retained": [
+        "Weekly sales reports are supported by SQL."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Prepared SQL can be read as the name of an unstated product; capitalization alone cannot reliably distinguish a product name from a verb."
+    },
+    {
+      "id": "sql-product",
+      "occupation": "data",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "ambiguous",
+      "source": [
+        "SQL supports weekly sales reports."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "SQL supports weekly sales reports."
+        }
+      ],
+      "proposed": "Prepared SQL supports weekly sales reports.",
+      "retained": [
+        "SQL supports weekly sales reports."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, which this part of your CV does not mention."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, which this part of your CV does not mention."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Prepared SQL can be read as the name of an unstated product; capitalization alone cannot reliably distinguish a product name from a verb."
+    },
+    {
+      "id": "sql-statements",
+      "occupation": "data",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "SQL statements protected customer records."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "SQL statements protected customer records."
+        }
+      ],
+      "proposed": "Customer records were protected by SQL statements.",
+      "retained": [
+        "Customer records were protected by SQL statements."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Prepared statements can denote a specific technique; the source does not establish that technique."
+    },
+    {
+      "id": "sql-statements",
+      "occupation": "data",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-technique",
+      "source": [
+        "SQL statements protected customer records."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "SQL statements protected customer records."
+        }
+      ],
+      "proposed": "Prepared SQL statements protected customer records.",
+      "retained": [
+        "SQL statements protected customer records."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, which this part of your CV does not mention."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Reporting assistant · Fictional organization: kept your original wording because the rewrite added “Prepared SQL”, which this part of your CV does not mention."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Prepared statements can denote a specific technique; the source does not establish that technique."
+    },
+    {
+      "id": "proper-name",
+      "occupation": "heritage",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Catalogued exhibits at Cedarvale Museum."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Catalogued exhibits at Cedarvale Museum."
+        }
+      ],
+      "proposed": "At Cedarvale Museum, catalogued exhibits.",
+      "retained": [
+        "At Cedarvale Museum, catalogued exhibits."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The library is not stated."
+    },
+    {
+      "id": "proper-name",
+      "occupation": "heritage",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Catalogued exhibits at Cedarvale Museum."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Catalogued exhibits at Cedarvale Museum."
+        }
+      ],
+      "proposed": "Catalogued exhibits at Cedarvale Museum and Mapleford Library.",
+      "retained": [
+        "Catalogued exhibits at Cedarvale Museum."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Archive assistant · Fictional organization: kept your original wording because the rewrite added “Mapleford Library”, which this part of your CV does not mention."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Archive assistant · Fictional organization: kept your original wording because the rewrite added “Mapleford Library”, which this part of your CV does not mention."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "The library is not stated."
+    },
+    {
+      "id": "technical-name",
+      "occupation": "software",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Documented REST API behavior for the team."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Documented REST API behavior for the team."
+        }
+      ],
+      "proposed": "Documented behavior of the REST API for the team.",
+      "retained": [
+        "Documented behavior of the REST API for the team."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The additional technology is not stated."
+    },
+    {
+      "id": "technical-name",
+      "occupation": "software",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Documented REST API behavior for the team."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Documented REST API behavior for the team."
+        }
+      ],
+      "proposed": "Documented REST API behavior for the team using Kubernetes.",
+      "retained": [
+        "Documented REST API behavior for the team."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Developer · Fictional organization: kept your original wording because the rewrite added “Kubernetes”, which this part of your CV does not mention."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Developer · Fictional organization: kept your original wording because the rewrite added “Kubernetes”, which this part of your CV does not mention."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "The additional technology is not stated."
+    },
+    {
+      "id": "actor",
+      "occupation": "education",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Prepared activities for lessons led by the teacher."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Prepared activities for lessons led by the teacher."
+        }
+      ],
+      "proposed": "Prepared activities for teacher-led lessons.",
+      "retained": [
+        "Prepared activities for teacher-led lessons."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The person leading lessons changes."
+    },
+    {
+      "id": "actor",
+      "occupation": "education",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Prepared activities for lessons led by the teacher."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Prepared activities for lessons led by the teacher."
+        }
+      ],
+      "proposed": "Led lessons and prepared activities for the teacher.",
+      "retained": [
+        "Led lessons and prepared activities for the teacher."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The person leading lessons changes."
+    },
+    {
+      "id": "approval",
+      "occupation": "finance",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Reviewed invoices for a supervisor to approve."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reviewed invoices for a supervisor to approve."
+        }
+      ],
+      "proposed": "Reviewed invoices for approval by a supervisor.",
+      "retained": [
+        "Reviewed invoices for approval by a supervisor."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Review and approval are attributed to different people."
+    },
+    {
+      "id": "approval",
+      "occupation": "finance",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Reviewed invoices for a supervisor to approve."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reviewed invoices for a supervisor to approve."
+        }
+      ],
+      "proposed": "Approved invoices reviewed by a supervisor.",
+      "retained": [
+        "Approved invoices reviewed by a supervisor."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Review and approval are attributed to different people."
+    },
+    {
+      "id": "count-swap",
+      "occupation": "retail",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Processed 30 returns and tracked 20 exchanges."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Processed 30 returns and tracked 20 exchanges."
+        }
+      ],
+      "proposed": "Tracked 20 exchanges and processed 30 returns.",
+      "retained": [
+        "Tracked 20 exchanges and processed 30 returns."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The same values attach to the wrong activities."
+    },
+    {
+      "id": "count-swap",
+      "occupation": "retail",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Processed 30 returns and tracked 20 exchanges."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Processed 30 returns and tracked 20 exchanges."
+        }
+      ],
+      "proposed": "Processed 20 returns and tracked 30 exchanges.",
+      "retained": [
+        "Processed 20 returns and tracked 30 exchanges."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The same values attach to the wrong activities."
+    },
+    {
+      "id": "metric-swap",
+      "occupation": "manufacturing",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Reduced preparation time by 20% and defects by 10%."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reduced preparation time by 20% and defects by 10%."
+        }
+      ],
+      "proposed": "Reduced defects by 10% and preparation time by 20%.",
+      "retained": [
+        "Reduced defects by 10% and preparation time by 20%."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The same percentages attach to different measures."
+    },
+    {
+      "id": "metric-swap",
+      "occupation": "manufacturing",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Reduced preparation time by 20% and defects by 10%."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reduced preparation time by 20% and defects by 10%."
+        }
+      ],
+      "proposed": "Reduced preparation time by 10% and defects by 20%.",
+      "retained": [
+        "Reduced preparation time by 10% and defects by 20%."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The same percentages attach to different measures."
+    },
+    {
+      "id": "range-reversal",
+      "occupation": "operations",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "unchanged-control",
+      "source": [
+        "Reduced processing time from 8 days to 3 days."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reduced processing time from 8 days to 3 days."
+        }
+      ],
+      "proposed": "Reduced processing time from 8 days to 3 days.",
+      "retained": [
+        "Reduced processing time from 8 days to 3 days."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Endpoints are reversed."
+    },
+    {
+      "id": "range-reversal",
+      "occupation": "operations",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Reduced processing time from 8 days to 3 days."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reduced processing time from 8 days to 3 days."
+        }
+      ],
+      "proposed": "Reduced processing time from 3 days to 8 days.",
+      "retained": [
+        "Reduced processing time from 8 days to 3 days."
+      ],
+      "exactProposalRetained": false,
+      "guardNotes": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "kind": "restored",
+          "message": "Operations assistant · Fictional organization: kept your original wording because the direction of a numeric range may have changed. This is a limited local check, not factual verification."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1.bullets.0",
+          "message": "Operations assistant · Fictional organization: kept your original wording because the direction of a numeric range may have changed. This is a limited local check, not factual verification."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Endpoints are reversed."
+    },
+    {
+      "id": "observation",
+      "occupation": "trades",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "Observed an electrician installing lighting fixtures during training."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Observed an electrician installing lighting fixtures during training."
+        }
+      ],
+      "proposed": "Observed an electrician install lighting fixtures during training.",
+      "retained": [
+        "Observed an electrician install lighting fixtures during training."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Observation is promoted to performing installation."
+    },
+    {
+      "id": "observation",
+      "occupation": "trades",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Observed an electrician installing lighting fixtures during training."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Observed an electrician installing lighting fixtures during training."
+        }
+      ],
+      "proposed": "Installed lighting fixtures during training with an electrician.",
+      "retained": [
+        "Installed lighting fixtures during training with an electrician."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "Observation is promoted to performing installation."
+    },
+    {
+      "id": "arabic-actor",
+      "occupation": "administration",
+      "language": "ar",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "أعددت المستندات للاجتماعات التي أدارها المدير."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "أعددت المستندات للاجتماعات التي أدارها المدير."
+        }
+      ],
+      "proposed": "أعددت المستندات لاجتماعات أدارها المدير.",
+      "retained": [
+        "أعددت المستندات لاجتماعات أدارها المدير."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The actor leading meetings changes."
+    },
+    {
+      "id": "arabic-actor",
+      "occupation": "administration",
+      "language": "ar",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "أعددت المستندات للاجتماعات التي أدارها المدير."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "أعددت المستندات للاجتماعات التي أدارها المدير."
+        }
+      ],
+      "proposed": "أدرت الاجتماعات وأعددت المستندات للمدير.",
+      "retained": [
+        "أدرت الاجتماعات وأعددت المستندات للمدير."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The actor leading meetings changes."
+    },
+    {
+      "id": "arabic-counts",
+      "occupation": "logistics",
+      "language": "ar",
+      "variant": "faithful",
+      "classification": "supported-paraphrase",
+      "source": [
+        "راجعت ٣٠ طلباً وجهزت ٢٠ شحنة."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "راجعت ٣٠ طلباً وجهزت ٢٠ شحنة."
+        }
+      ],
+      "proposed": "جهزت ٢٠ شحنة وراجعت ٣٠ طلباً.",
+      "retained": [
+        "جهزت ٢٠ شحنة وراجعت ٣٠ طلباً."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The quantities attach to different activities."
+    },
+    {
+      "id": "arabic-counts",
+      "occupation": "logistics",
+      "language": "ar",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "راجعت ٣٠ طلباً وجهزت ٢٠ شحنة."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "راجعت ٣٠ طلباً وجهزت ٢٠ شحنة."
+        }
+      ],
+      "proposed": "راجعت ٢٠ طلباً وجهزت ٣٠ شحنة.",
+      "retained": [
+        "راجعت ٢٠ طلباً وجهزت ٣٠ شحنة."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [],
+      "warnings": [],
+      "semanticStatus": "unassessed",
+      "concern": "The quantities attach to different activities."
+    },
+    {
+      "id": "multi-omission",
+      "occupation": "healthcare",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "faithful-combination",
+      "source": [
+        "Prepared patient appointment lists.",
+        "Recorded appointment changes for the nursing team."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Prepared patient appointment lists."
+        },
+        {
+          "sourceIndex": 1,
+          "sourceId": "work_1_b2",
+          "sourceText": "Recorded appointment changes for the nursing team."
+        }
+      ],
+      "proposed": "Prepared patient appointment lists; recorded appointment changes for the nursing team.",
+      "retained": [
+        "Prepared patient appointment lists; recorded appointment changes for the nursing team."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [
+        {
+          "path": "entries.work_1",
+          "kind": "review",
+          "message": "Clinic assistant · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1",
+          "message": "Clinic assistant · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Both sources are cited but the second contribution is omitted; completeness is separate from unsupported additions."
+    },
+    {
+      "id": "multi-omission",
+      "occupation": "healthcare",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "omission",
+      "source": [
+        "Prepared patient appointment lists.",
+        "Recorded appointment changes for the nursing team."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Prepared patient appointment lists."
+        },
+        {
+          "sourceIndex": 1,
+          "sourceId": "work_1_b2",
+          "sourceText": "Recorded appointment changes for the nursing team."
+        }
+      ],
+      "proposed": "Prepared patient appointment lists.",
+      "retained": [
+        "Prepared patient appointment lists."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [
+        {
+          "path": "entries.work_1",
+          "kind": "review",
+          "message": "Clinic assistant · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1",
+          "message": "Clinic assistant · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Both sources are cited but the second contribution is omitted; completeness is separate from unsupported additions."
+    },
+    {
+      "id": "multi-actor",
+      "occupation": "hospitality",
+      "language": "en",
+      "variant": "faithful",
+      "classification": "faithful-combination",
+      "source": [
+        "Reported repair issues to the engineer.",
+        "Recorded room availability for the front desk."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reported repair issues to the engineer."
+        },
+        {
+          "sourceIndex": 1,
+          "sourceId": "work_1_b2",
+          "sourceText": "Recorded room availability for the front desk."
+        }
+      ],
+      "proposed": "Reported repair issues to the engineer; recorded room availability for the front desk.",
+      "retained": [
+        "Reported repair issues to the engineer; recorded room availability for the front desk."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [
+        {
+          "path": "entries.work_1",
+          "kind": "review",
+          "message": "Hotel receptionist · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1",
+          "message": "Hotel receptionist · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Reporting repairs is not performing them."
+    },
+    {
+      "id": "multi-actor",
+      "occupation": "hospitality",
+      "language": "en",
+      "variant": "contrast",
+      "classification": "unsupported-claim",
+      "source": [
+        "Reported repair issues to the engineer.",
+        "Recorded room availability for the front desk."
+      ],
+      "citations": [
+        {
+          "sourceIndex": 0,
+          "sourceId": "work_1_b1",
+          "sourceText": "Reported repair issues to the engineer."
+        },
+        {
+          "sourceIndex": 1,
+          "sourceId": "work_1_b2",
+          "sourceText": "Recorded room availability for the front desk."
+        }
+      ],
+      "proposed": "Repaired issues and recorded room availability for the front desk.",
+      "retained": [
+        "Repaired issues and recorded room availability for the front desk."
+      ],
+      "exactProposalRetained": true,
+      "guardNotes": [
+        {
+          "path": "entries.work_1",
+          "kind": "review",
+          "message": "Hotel receptionist · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "warnings": [
+        {
+          "path": "entries.work_1",
+          "message": "Hotel receptionist · Fictional organization: an AI passage combines multiple source passages. Compare the entry with your original for missing details or changed meaning; citations do not verify coverage or accuracy."
+        }
+      ],
+      "semanticStatus": "unassessed",
+      "concern": "Reporting repairs is not performing them."
+    }
+  ]
+}
