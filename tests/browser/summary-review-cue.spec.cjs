@@ -174,7 +174,7 @@ test('notes banner offers summary comparison and retains entry access; no access
   await expect(summaryHeading(page)).toBeFocused();
   await expect(summaryDetails(page).getByText(PROPOSED_SUMMARY, { exact: true })).toBeVisible();
   await expect.poll(() => page.getByRole('region', { name: 'CV tailoring inputs' }).evaluate(el => el.clientHeight)).toBeGreaterThan(150);
-  const state = await stored(page); await saveProfiles(page, [state.profiles.find(p => p.profileId === copy.profileId)], copy.profileId);
+  const state = await stored(page); const olderCopy = state.profiles.find(p => p.profileId === copy.profileId); delete olderCopy.compositionSnapshot; await saveProfiles(page, [olderCopy], copy.profileId);
   await page.reload(); await saved(page); await notes.locator('summary').click();
   await expect(notes.getByRole('button', { name: 'Compare summaries' })).toHaveCount(0);
   await expect(notes.getByRole('button', { name: 'Compare experience and projects' })).toHaveCount(0);
@@ -202,7 +202,7 @@ test('a changed summary with reordered entries exposes only the summary cue', as
 
 test('missing source leaves a manual-review cue without comparison shortcut', async ({ page, harness }) => {
   const original = await seed(page), copy = await tailor(page, original, harness);
-  await saveProfiles(page, [copy], copy.profileId); await page.reload(); await saved(page);
+  delete copy.compositionSnapshot; await saveProfiles(page, [copy], copy.profileId); await page.reload(); await saved(page);
   await expect(prompt(page)).toContainText('source resume is unavailable');
   await expect(prompt(page).getByRole('button', { name: 'Compare summaries' })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -237,6 +237,7 @@ test('the neutral summary cue is not included in the exported fictional PDF', as
     finally { await doc.destroy(); }
   }, Array.from(bytes));
   expect(text).toContain(PROPOSED_SUMMARY);
+  expect(text).not.toContain(ORIGINAL_SUMMARY);
   expect(text).not.toContain('automatic checks cannot verify meaning');
   expect(text).not.toContain('Compare summaries');
   expect(harness.calls).toHaveLength(1);
@@ -294,4 +295,116 @@ test('empty AI summary warning persists with an edited copy after reload', async
  expect(copy.compositionReview.notes.some(n=>n.includes('primary AI draft had no summary'))).toBe(true);
  await page.reload();await saved(page);await page.getByText(/Review \d+ content notes?/).click();
  await expect(page.getByText(/The primary AI draft had no summary/).first()).toBeVisible();
+});
+
+
+test('generation comparison survives source changes and deletion at mobile width', async ({page,harness}) => {
+  let original=await seed(page);
+  original.experience.data[0].description='**Original overview including a limitation.**';
+  original.projects.isLocked=false;
+  original.projects.data=[{id:crypto.randomUUID(),name:'Fictional project',role:'Contributor',url:'https://private.example/project',bullets:[{id:crypto.randomUUID(),text:'Kept a project record.',isVerified:true},{id:crypto.randomUUID(),text:'Omitted project context.',isVerified:true}]}];
+  original.resumeHeader.data.email='snapshot-secret@example.test';
+  await saveProfiles(page,[original],original.profileId);await page.reload();await saved(page);
+  original=(await stored(page)).profiles[0];let packet;
+  harness.respond(p=>{packet=p;const d=response(p,{entryChanged:true});d.entries[0].bullets=d.entries[0].bullets.slice(0,1);
+    const project=p.source.projects[0],facts=new Map(p.source.evidence.map(f=>[f.id,f.text]));
+    d.entries.push({id:project.id,overview:{text:'',sourceIds:[]},bullets:[{text:facts.get(project.bulletIds[0]),sourceIds:[project.bulletIds[0]]}]});return d;});
+  await expect(page.getByText(/It duplicates professional text, stays after source deletion/)).toBeVisible();
+  await page.getByLabel('Job description',{exact:true}).fill(JOB);await page.getByRole('button',{name:'Tailor CV',exact:true}).click();
+  await expect.poll(async()=> (await stored(page)).activeId).not.toBe(original.profileId);await saved(page);
+  const state=await stored(page),copy=state.profiles.find(p=>p.profileId===state.activeId),snapshot=copy.compositionSnapshot;
+  expect(snapshot.source.experience[0].bullets).toContain('Maintained the dispensing log.');
+  expect(snapshot.source.experience[0].fields.find(f=>f.label==='Overview').value).toBe('**Original overview including a limitation.**');
+  expect(snapshot.source.projects[0].bullets).toContain('Omitted project context.');
+  expect(snapshot.generated.projects[0].bullets).not.toContain('Omitted project context.');
+  expect(snapshot.generated.summary).toBe(copy.summary.data);
+  expect(JSON.stringify(snapshot)).not.toContain('snapshot-secret@example.test');expect(JSON.stringify(snapshot)).not.toContain('https://private.example/project');
+  expect(JSON.stringify(snapshot)).not.toContain(JOB);expect(JSON.stringify(packet)).not.toContain('compositionSnapshot');
+  const source=state.profiles.find(p=>p.profileId===original.profileId);source.summary.data='**Edited current source summary.**';source.experience.data[0].bullets=[];
+  copy.summary.data='**Edited current tailored summary.**';
+  await saveProfiles(page,state.profiles,copy.profileId);await page.reload();await saved(page);await page.setViewportSize({width:320,height:568});
+  await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+  const heading=page.locator('summary').filter({hasText:'Compare at generation (summary, experience and projects)'});
+  await heading.click();const detail=heading.locator('..');
+  await expect(detail).toContainText('No individual passage attribution or semantic or factual verification');
+  await expect(detail.getByText('Omitted project context.',{exact:true})).toBeVisible();
+  await expect(detail.getByText('Original overview including a limitation.',{exact:true})).toBeVisible();
+  await expect(detail).not.toContainText('Edited current source summary.');
+  await expect(page.locator('.tailor-pane .tailor-footer')).toBeHidden();
+  await detail.getByRole('button',{name:'Close generation comparison'}).click();await expect(heading).toBeFocused();await expect(page.locator('.tailor-pane .tailor-footer')).toBeVisible();
+  const summary=page.locator('summary').filter({hasText:'Compare current summaries'});await summary.click();
+  await expect(summary.locator('..')).toContainText('Edited current source summary.');await expect(summary.locator('..')).toContainText('Edited current tailored summary.');
+  await saveProfiles(page,[copy],copy.profileId);await page.reload();await saved(page);
+  await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+  await heading.click();await expect(heading.locator('..').getByText('Omitted project context.',{exact:true})).toBeVisible();
+  await heading.locator('..').getByRole('button',{name:'Close generation comparison'}).click();
+  await page.locator('summary').filter({hasText:'Remove saved generation text comparison'}).click();
+  // Simulate a synchronous quota failure after the first put was queued. The
+  // transaction must abort and leave the previously saved record intact.
+  await page.evaluate(() => { window.originalSnapshotPut=IDBObjectStore.prototype.put;let calls=0;IDBObjectStore.prototype.put=function(...args){if(++calls===2)throw new DOMException('quota','QuotaExceededError');return window.originalSnapshotPut.apply(this,args);}; });
+  await page.getByRole('button',{name:'Remove comparison from this copy'}).click();
+  await expect(page.getByText('Not saved',{exact:true})).toBeVisible();
+  await expect(page.getByText(/Could not save in this browser/)).toBeVisible();
+  expect((await stored(page)).profiles[0].compositionSnapshot).toEqual(snapshot);
+  await page.evaluate(()=>{IDBObjectStore.prototype.put=window.originalSnapshotPut;});
+  await page.getByRole('button',{name:'Retry',exact:true}).click();await saved(page);
+  const removed=(await stored(page)).profiles[0];expect(removed.compositionSnapshot).toBeUndefined();expect(removed.compositionSnapshotStatus).toBe('removed');
+  expect(removed.compositionChanges).toBeTruthy();expect(removed.summary.data).toBe('**Edited current tailored summary.**');
+  await page.reload();await saved(page);await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+  await expect(page.getByText('The saved generation text comparison was removed from this copy.')).toBeVisible();
+  expect(harness.calls).toHaveLength(1);
+});
+
+test('comparison opt-out is explicit and survives reload',async ({page,harness})=>{
+  const original=await seed(page);
+  const option=page.getByRole('checkbox',{name:'Save a generation text comparison on the new copy'});
+  await expect(option).toBeChecked();await option.uncheck();
+  const copy=await tailor(page,original,harness);
+  expect(copy.compositionSnapshot).toBeUndefined();expect(copy.compositionSnapshotStatus).toBe('not_saved');
+  await page.reload();await saved(page);await page.setViewportSize({width:320,height:568});await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+  await expect(page.getByText('No generation text comparison was saved, as selected.')).toBeVisible();
+  expect(harness.calls).toHaveLength(1);
+});
+
+
+test('unsupported and malformed snapshots do not block or erase stored resumes',async({page})=>{
+ await page.goto('/');await saved(page);const p=fictionalProfile(), other=fictionalProfile();other.profileName='Other resume';
+ p.compositionChanges={summary:'changed',experience:'edited',projects:'empty',skills:{retained:0,excluded:[],added:0,reordered:false,regrouped:false}};
+ for(const snapshot of [{version:'future-v9',source:{marker:'preserve-future-data'}},{version:'professional-comparison-v1',source:null}]){
+   p.compositionSnapshot=snapshot;p.compositionSnapshotStatus={future:'preserved'};await saveProfiles(page,[p,other],p.profileId);await page.reload();await saved(page);
+   await expect(page.getByLabel('Resume document name')).toHaveValue(p.profileName);
+   const after=await stored(page);expect(after.profiles).toHaveLength(2);expect(after.profiles[0].compositionSnapshot).toEqual(snapshot);expect(after.profiles[0].compositionSnapshotStatus).toEqual({future:'preserved'});
+   await page.setViewportSize({width:320,height:568});await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+   await expect(page.getByText(/This saved comparison is unsupported or damaged/)).toBeVisible();
+   await expect(page.locator('summary').filter({hasText:'Remove saved generation text comparison'})).toBeVisible();
+ }
+});
+
+test('library warns before deleting source and discarding comparison on duplication',async({page})=>{
+ await page.goto('/');await saved(page);const source=fictionalProfile(),copy=fictionalProfile();copy.profileName='Historical copy';copy.baseProfileId=source.profileId;
+ copy.compositionSnapshot={version:'professional-comparison-v1',source:{summary:'Historic summary',experience:[],projects:[]},generated:{summary:'Generated summary',experience:[],projects:[]}};
+ copy.compositionChanges={summary:'changed',experience:'empty',projects:'empty',skills:{retained:0,excluded:[],added:0,reordered:false,regrouped:false}};
+ await saveProfiles(page,[source,copy],copy.profileId);await page.reload();await saved(page);
+ await page.getByRole('button',{name:'My resumes',exact:true}).click();const library=page.getByRole('dialog',{name:'My resumes'});
+ await library.getByRole('button',{name:`Delete ${source.profileName}`}).click();
+ await expect(library.getByText(/Other copies may retain its text in saved comparisons/)).toBeVisible();await library.getByRole('button',{name:'Keep resume'}).click();
+ await library.getByRole('button',{name:'Duplicate Historical copy'}).click();await expect(library.getByText(/duplicate will not carry the generation text comparison/)).toBeVisible();
+ await library.getByRole('button',{name:'Duplicate without comparison'}).click();await saved(page);
+ const state=await stored(page),original=state.profiles.find(p=>p.profileId===copy.profileId),duplicate=state.profiles.find(p=>p.profileName==='Historical copy (Copy)');
+ expect(original.compositionSnapshot).toEqual(copy.compositionSnapshot);expect(duplicate.compositionSnapshot).toBeUndefined();expect(duplicate.compositionChanges).toBeUndefined();
+});
+
+
+test('detected embedded links skip comparison and missing-source skills remain historical',async({page,harness})=>{
+ let source=await seed(page);source.experience.data[0].city='private.example.com';
+ await saveProfiles(page,[source],source.profileId);await page.reload();await saved(page);source=(await stored(page)).profiles[0];
+ const copy=await tailor(page,source,harness);expect(copy.compositionSnapshot).toBeUndefined();expect(copy.compositionSnapshotStatus).toBe('sensitive_text');
+ expect(copy.experience.data[0].city).toBe(source.experience.data[0].city);
+ copy.compositionChanges.skills.excluded=[{name:'Historical skill'}];await saveProfiles(page,[copy],copy.profileId);
+ await page.reload();await saved(page);await page.setViewportSize({width:320,height:568});
+ await expect(page.getByText(/No generation text comparison was saved because a link or contact/)).toBeVisible();
+ await page.getByRole('button',{name:'CV Tailor',exact:true}).click();
+ await page.locator('summary').filter({hasText:'Skills not selected for this copy'}).click();
+ await expect(page.getByText('The source resume is unavailable; these historical names do not establish what is in it now.')).toBeVisible();
+ expect(harness.calls).toHaveLength(1);
 });
