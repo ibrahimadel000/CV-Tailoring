@@ -1,0 +1,391 @@
+--- a/tests/browser/import-fixtures.cjs
++++ b/tests/browser/import-fixtures.cjs
+@@ -49,3 +49,57 @@
+ const continuationDocx=()=>docx([['Maya Vale','Junior Software Engineer','WORK EXPERIENCE','Software Engineer Intern | Example Systems','Jan 2024 - Jun 2024','- Recorded manual tests.'],['- Documented class exercises.','EDUCATION','BSc Computer Science (in progress)','Example University','Expected 2027']],true);
+ const statusOnlyDocx=()=>docx(['Jordan River','Consultant','BSc Environmental Science (in progress) - Fictional Institute','West Campus','PROFILE','Supports environmental research.','EDUCATION','Bachelor of Environmental Science','Fictional Institute West Campus','2030']);
+ module.exports={statusOnlyDocx,simplePdf:()=>pdf([simple]),simpleDocx:()=>docx(),scannedPdf:()=>pdf([[]],true),multiPdf:()=>pdf([[...header,...bullets.slice(0,15)],[...bullets.slice(15),...end]]),twoColumn,tableDocx,multirowDocx,continuationDocx};
++
++// Canonical workspace helpers for the offline app tests. Reads never consult the
++// retained legacy keys. Fixture injection is not an application save: it
++// atomically replaces selected values and advances the revision. Callers reload
++// open tabs before interacting with the app. Conflict tests use real app saves.
++async function readCanonical(page) {
++  return page.evaluate(async () => {
++    const db = await new Promise((resolve, reject) => {
++      const r = indexedDB.open('keyval-store');
++      r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
++    });
++    try {
++      return await new Promise((resolve, reject) => {
++        const tx = db.transaction('cv-tailor-canonical-v1', 'readonly');
++        const r = tx.objectStore('cv-tailor-canonical-v1').get('workspace');
++        tx.oncomplete = () => {
++          const record = r.result;
++          if (!record || record.format !== 1 || !record.revision || !Array.isArray(record.values) || record.values.length !== 3)
++            return reject(new Error('Missing or invalid canonical workspace record'));
++          resolve({ profiles: record.values[0], activeId: record.values[1] });
++        };
++        tx.onabort = tx.onerror = () => reject(tx.error || new Error('Canonical read failed'));
++      });
++    } finally { db.close(); }
++  });
++}
++async function writeCanonicalFixture(page, { profiles, activeId, theme }) {
++  await page.evaluate(async ({ profiles, activeId, theme }) => {
++    const db = await new Promise((resolve, reject) => {
++      const r = indexedDB.open('keyval-store');
++      r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
++    });
++    try {
++      await new Promise((resolve, reject) => {
++        const tx = db.transaction('cv-tailor-canonical-v1', 'readwrite');
++        const store = tx.objectStore('cv-tailor-canonical-v1'), r = store.get('workspace');
++        r.onsuccess = () => {
++          const record = r.result;
++          if (!record || record.format !== 1 || !record.revision || !Array.isArray(record.values) || record.values.length !== 3) { tx.abort(); return; }
++          // Legacy puts cloned each key separately; preserve graphs within each
++          // value without inventing cross-key aliases in fixture setup.
++          if (profiles !== undefined) record.values[0] = structuredClone(profiles);
++          if (activeId !== undefined) record.values[1] = structuredClone(activeId);
++          if (theme !== undefined) record.values[2] = structuredClone(theme);
++          record.revision = crypto.randomUUID();
++          store.put(record, 'workspace');
++        };
++        tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error || new Error('Canonical fixture write failed'));
++      });
++    } finally { db.close(); }
++  }, { profiles, activeId, theme });
++}
++module.exports.readCanonical = readCanonical;
++module.exports.writeCanonicalFixture = writeCanonicalFixture;
+--- a/tests/browser/import-smoke.spec.cjs
++++ b/tests/browser/import-smoke.spec.cjs
+@@ -2,7 +2,7 @@
+ const fs=require('node:fs/promises');
+ const fixtures=require('./import-fixtures.cjs');
+ const files={pdf:()=>({name:'fictional.pdf',mimeType:'application/pdf',buffer:fixtures.simplePdf()}),docx:()=>({name:'fictional.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:fixtures.simpleDocx()})};
+-async function stored(page){return page.evaluate(async()=>{const req=indexedDB.open('keyval-store',1);const db=await new Promise((a,b)=>{req.onsuccess=()=>a(req.result);req.onerror=()=>b(req.error)});const store=db.transaction('keyval','readonly').objectStore('keyval');const read=k=>new Promise((a,b)=>{const r=store.get(k);r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error)});const profiles=await read('cv-tailor-profiles-v2'),active=await read('cv-tailor-active-id-v2');db.close();return{profiles,active}})}
++async function stored(page){const {profiles,activeId}=await fixtures.readCanonical(page);return {profiles,active:activeId}}
+ async function start(page,context){await context.route('**/*',r=>new URL(r.request().url()).origin==='http://127.0.0.1:4187'?r.continue():r.abort());await page.goto('/');await expect(page.getByText('Saved in this browser',{exact:true})).toBeVisible()}
+ async function openImport(page){await page.getByRole('button',{name:'Import CV'}).first().click()}
+ async function exportedText(page,testInfo){
+--- a/tests/browser/model-restriction.spec.cjs
++++ b/tests/browser/model-restriction.spec.cjs
+@@ -1,6 +1,7 @@
+ // Offline app-path acceptance, NOT a model response or a writing-quality verdict.
+ const { test: base, expect } = require('@playwright/test');
+ const fs = require('node:fs/promises');
++const { readCanonical: stored, writeCanonicalFixture } = require('./import-fixtures.cjs');
+ const { load } = require('../helpers/editorial-loader.cjs');
+ const { createSampleProfile } = load('mock/profile');
+ 
+@@ -11,8 +12,6 @@
+ const GENERATED_SUMMARY = NARRATIVE_SUMMARY;
+ const EDITED_SUMMARY = 'Built internal data dashboards for a classroom exercise.';
+ const ERROR_503 = 'Google rejected the request (HTTP 503; UNAVAILABLE). Provider-reported details, not a verification of account usage. No automatic retry. Your resumes are unchanged.';
+-const PROFILE_KEY = 'cv-tailor-profiles-v2';
+-const ACTIVE_KEY = 'cv-tailor-active-id-v2';
+ 
+ function sourceProfile(summaryLocked = false) {
+   const p = createSampleProfile('SC5 Offline Synthetic Source');
+@@ -71,36 +70,11 @@
+   },
+ });
+ 
+-async function stored(page) {
+-  return page.evaluate(async ({ profileKey, activeKey }) => {
+-    const db = await new Promise((resolve, reject) => {
+-      const request = indexedDB.open('keyval-store', 1);
+-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+-    });
+-    try {
+-      const transaction = db.transaction('keyval', 'readonly'), store = transaction.objectStore('keyval');
+-      const read = key => new Promise((resolve, reject) => { const r = store.get(key); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-      const [profiles, activeId] = await Promise.all([read(profileKey), read(activeKey)]);
+-      return { profiles, activeId };
+-    } finally { db.close(); }
+-  }, { profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
+-}
+ async function saved(page) { await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible(); }
+ async function seed(page, source) {
+   await page.goto('/');
+   await saved(page);
+-  await page.evaluate(async ({ source, profileKey, activeKey }) => {
+-    const db = await new Promise((resolve, reject) => {
+-      const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+-    });
+-    try {
+-      await new Promise((resolve, reject) => {
+-        const tx = db.transaction('keyval', 'readwrite'), store = tx.objectStore('keyval');
+-        store.put([source], profileKey); store.put(source.profileId, activeKey); store.put(source.documentTheme, 'cv-tailor-builder-theme-v1');
+-        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+-      });
+-    } finally { db.close(); }
+-  }, { source, profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
++  await writeCanonicalFixture(page, { profiles: [source], activeId: source.profileId, theme: source.documentTheme });
+   await page.reload();
+   await expect(page.getByLabel('Resume document name')).toHaveValue(source.profileName);
+   await saved(page);
+@@ -442,18 +416,12 @@
+  state=await stored(page);expect(state.profiles.find(x=>x.profileId===original.profileId)).toEqual(original);
+  // Simulate a later source edit: the live comparison must never imply a frozen snapshot.
+  const changed=state.profiles.map(x=>x.profileId===original.profileId?{...x,experience:{...x.experience,data:x.experience.data.map((e,i)=>i?e:{...e,bullets:e.bullets.map((b,j)=>j?b:{...b,text:'Later source edit for comparison.'})})}}:x);
+- await page.evaluate(async({profiles,key})=>{
+-  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+-  await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put(profiles,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+- },{profiles:changed,key:PROFILE_KEY});
++ await writeCanonicalFixture(page, { profiles: changed });
+  await page.reload();await saved(page);await page.getByText('Compare current experience and projects',{exact:true}).click();
+  await expect(page.getByRole('article',{name:'Experience comparison 1'}).getByText('Later source edit for comparison.')).toBeVisible();
+  // If a source is removed later, the UI must explain that comparison is unavailable.
+  state=await stored(page);copy=state.profiles.find(x=>x.profileId===state.activeId);
+- await page.evaluate(async({profiles,key})=>{
+-  const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+-  await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put(profiles,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+- },{profiles:[copy],key:PROFILE_KEY});
++ await writeCanonicalFixture(page, { profiles: [copy] });
+  await page.reload();await saved(page);
+  await expect(page.getByText(/The source resume is not available, so a current comparison cannot be displayed/)).toBeVisible();
+  await expect(page.getByText('Compare current experience and projects',{exact:true})).toHaveCount(0);
+--- a/tests/browser/persistence-conflict.spec.cjs
++++ b/tests/browser/persistence-conflict.spec.cjs
+@@ -1,9 +1,9 @@
+ // Local-only: route every non-test-server request to an abort.
+ const {test:base,expect}=require('@playwright/test');
+ const fs=require('node:fs/promises');
++const {readCanonical,writeCanonicalFixture}=require('./import-fixtures.cjs');
+ const {load}=require('../helpers/editorial-loader.cjs');
+ const {createSampleProfile}=load('mock/profile');
+-const P='cv-tailor-profiles-v2',A='cv-tailor-active-id-v2';
+ const snapshot={version:'professional-comparison-v1',source:{summary:'private source',experience:[],projects:[]},generated:{summary:'private generated',experience:[],projects:[]}};
+ const changes={summary:'changed',experience:'empty',projects:'empty',skills:{retained:0,excluded:[],added:0,reordered:false,regrouped:false}};
+ const test=base.extend({noNetwork:async({context,baseURL},use)=>{
+@@ -12,15 +12,15 @@
+  await context.routeWebSocket('**/*',s=>{if(new URL(s.url()).host!==new URL(baseURL).host)escaped.push(s.url());s.close();});await use();expect(escaped).toEqual([]);expect(errors).toEqual([]);
+ }});
+ async function saved(p){await expect(p.getByText('Saved in this browser',{exact:true})).toBeVisible();}
+-async function read(p){return p.evaluate(async({P,A})=>{const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});return await new Promise((ok,no)=>{const tx=db.transaction('keyval','readonly'),s=tx.objectStore('keyval'),p=s.get(P),a=s.get(A);tx.oncomplete=()=>{db.close();ok({profiles:p.result,active:a.result})};tx.onabort=()=>no(tx.error)});},{P,A});}
+-async function write(p,profiles,id){await p.evaluate(async({P,A,profiles,id})=>{const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});await new Promise((ok,no)=>{const tx=db.transaction('keyval','readwrite'),s=tx.objectStore('keyval');s.put(profiles,P);s.put(id,A);tx.oncomplete=ok;tx.onabort=()=>no(tx.error)});db.close();},{P,A,profiles,id});}
++async function read(p){const {profiles,activeId}=await readCanonical(p);return {profiles,active:activeId};}
++async function write(p,profiles,id){await writeCanonicalFixture(p,{profiles,activeId:id});}
+ async function seed(p,{withChanges=true,snap=snapshot}={}){
+  await p.goto('/');await saved(p);const x=createSampleProfile('Conflict fixture');x.compositionSnapshot=snap;if(withChanges)x.compositionChanges=changes;
+  await write(p,[x],x.profileId);await p.reload();await saved(p);return x;
+ }
+ async function hold(p){await p.evaluate(()=>{const oldSet=window.setTimeout,oldClear=window.clearTimeout,held=new Map();window.setTimeout=function(fn,ms,...args){if(ms!==450)return oldSet(fn,ms,...args);const id=oldSet(()=>{},60000);held.set(id,()=>fn(...args));return id};window.clearTimeout=function(id){held.delete(id);return oldClear(id)};window.releaseHeldSaves=()=>{window.setTimeout=oldSet;window.clearTimeout=oldClear;for(const [id,fn] of held){oldClear(id);oldSet(fn,0)}held.clear()};});}
+ async function release(p){await p.evaluate(()=>window.releaseHeldSaves());}
+-async function remove(p){await p.locator('summary').filter({hasText:'Remove saved generation text comparison'}).click();await expect(p.getByText(/An older version left open can restore/)).toBeVisible();await p.getByRole('button',{name:'Remove comparison from this copy'}).click();}
++async function remove(p){await p.locator('summary').filter({hasText:'Remove saved generation text comparison'}).click();await expect(p.getByText(/legacy copy remains and may contain this comparison/)).toBeVisible();await p.getByRole('button',{name:'Remove comparison from this copy'}).click();}
+ async function warning(p){await expect(p.getByText('Not saved',{exact:true})).toBeVisible();await expect(p.getByRole('alert')).toContainText('This tab’s edits are not saved and remain here');}
+ async function unloadBlocked(p){return p.evaluate(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented;});}
+ 
+@@ -53,9 +53,11 @@
+  expect((await read(page)).profiles[0].profileName).toBe(aLost?'Tab B value':'Tab A value');expect(await unloadBlocked(loser)).toBe(true);
+ });
+ 
+-test('revisionless external write is detected before any overwrite',async({page,noNetwork})=>{
+- const p=await seed(page);await hold(page);await page.getByLabel('Resume document name').fill('Local unsaved');
+- await write(page,[{...p,profileName:'External update'}],p.profileId);await release(page);await warning(page);
++test('revisioned external write is detected before any overwrite',async({page,noNetwork})=>{
++ await seed(page);await hold(page);await page.getByLabel('Resume document name').fill('Local unsaved');
++ // A second cooperating writer uses the real load/save CAS, not fixture injection.
++ await page.evaluate(async()=>{const {ProfileStorage}=await import('/src/store/profileStorage.ts');const storage=new ProfileStorage();const [profiles,active,theme]=await storage.load();profiles[0].profileName='External update';await storage.save(profiles,active,theme)});
++ await release(page);await warning(page);
+  expect((await read(page)).profiles[0].profileName).toBe('External update');await expect(page.getByLabel('Resume document name')).toHaveValue('Local unsaved');
+ });
+ 
+@@ -71,7 +73,55 @@
+ 
+ test('synchronous put failure is atomic and retry saves the removal',async({page,noNetwork})=>{
+  await seed(page);await page.locator('summary').filter({hasText:'Remove saved generation text comparison'}).click();
+- await page.evaluate(()=>{window.oldPut=IDBObjectStore.prototype.put;let n=0;IDBObjectStore.prototype.put=function(...args){if(++n===2)throw new DOMException('quota','QuotaExceededError');return window.oldPut.apply(this,args)}});
++ await page.evaluate(()=>{window.oldPut=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){if(this.name==='cv-tailor-canonical-v1')throw new DOMException('quota','QuotaExceededError');return window.oldPut.apply(this,args)}});
+  await page.getByRole('button',{name:'Remove comparison from this copy'}).click();await expect(page.getByText(/Could not save in this browser/)).toBeVisible();expect((await read(page)).profiles[0].compositionSnapshot).toEqual(snapshot);expect(await unloadBlocked(page)).toBe(true);
+  await page.evaluate(()=>{IDBObjectStore.prototype.put=window.oldPut});await page.getByRole('button',{name:'Retry',exact:true}).click();await saved(page);expect((await read(page)).profiles[0].compositionSnapshot).toBeUndefined();expect(await unloadBlocked(page)).toBe(false);
+ });
++
++// Unlike the canonical fixture writer above, this seeds the v1 legacy store
++// before the app opens it. Later legacy writes are intentionally independent.
++test('legacy setup migrates once; later legacy edits do not change canonical workspace',async({page,noNetwork})=>{
++ const p=createSampleProfile('Fictional legacy seed');
++ await page.goto('/tests/browser/persistence-blank.html');
++ await page.evaluate(async profile=>{
++  const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store',1);r.onupgradeneeded=()=>r.result.createObjectStore('keyval');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
++  try{await new Promise((ok,no)=>{const tx=db.transaction('keyval','readwrite'),s=tx.objectStore('keyval');s.put([profile],'cv-tailor-profiles-v2');s.put(profile.profileId,'cv-tailor-active-id-v2');s.put(profile.documentTheme,'cv-tailor-builder-theme-v1');s.put('fictional unrelated','other');tx.oncomplete=ok;tx.onabort=tx.onerror=()=>no(tx.error)})}finally{db.close()}
++ },p);
++ await page.goto('/');await saved(page);await expect(page.getByLabel('Resume document name')).toHaveValue(p.profileName);
++ expect((await read(page)).profiles[0].profileName).toBe('Fictional legacy seed');
++ await page.getByLabel('Resume document name').fill('Fictional canonical edit');
++ await expect.poll(async()=>(await read(page)).profiles[0].profileName).toBe('Fictional canonical edit');await saved(page);
++ const legacy=await page.evaluate(async()=>{
++  const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
++  try{return await new Promise((ok,no)=>{const tx=db.transaction('keyval','readwrite'),s=tx.objectStore('keyval'),r=s.get('cv-tailor-profiles-v2'),other=s.get('other');let priorName;r.onsuccess=()=>{priorName=r.result[0].profileName;r.result[0].profileName='Fictional legacy edit';s.put(r.result,'cv-tailor-profiles-v2')};tx.oncomplete=()=>ok({version:db.version,other:other.result,priorName});tx.onabort=tx.onerror=()=>no(tx.error)})}finally{db.close()}
++ });
++ expect(legacy).toEqual({version:2,other:'fictional unrelated',priorName:'Fictional legacy seed'});
++ await page.reload();await saved(page);await expect(page.getByLabel('Resume document name')).toHaveValue('Fictional canonical edit');
++ expect((await read(page)).profiles[0].profileName).toBe('Fictional canonical edit');
++ const oldName=await page.evaluate(async()=>{const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});try{return await new Promise((ok,no)=>{const tx=db.transaction('keyval','readonly'),r=tx.objectStore('keyval').get('cv-tailor-profiles-v2');tx.oncomplete=()=>ok(r.result[0].profileName);tx.onabort=tx.onerror=()=>no(tx.error)})}finally{db.close()}});
++ expect(oldName).toBe('Fictional legacy edit');
++});
++
++test('noncooperating same-revision canonical write can be overwritten',async({page,noNetwork})=>{
++ await seed(page);await hold(page);await page.getByLabel('Resume document name').fill('Fictional local edit');
++ const revision=await page.evaluate(async()=>{
++  const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
++  try{return await new Promise((ok,no)=>{const tx=db.transaction('cv-tailor-canonical-v1','readwrite'),s=tx.objectStore('cv-tailor-canonical-v1'),r=s.get('workspace');let rev;r.onsuccess=()=>{const record=r.result;rev=record.revision;record.values[0][0].profileName='Fictional noncooperating edit';s.put(record,'workspace')};tx.oncomplete=()=>ok(rev);tx.onabort=tx.onerror=()=>no(tx.error)})}finally{db.close()}
++ });
++ expect(revision).toBeTruthy();expect((await read(page)).profiles[0].profileName).toBe('Fictional noncooperating edit');
++ await release(page);await expect.poll(async()=>(await read(page)).profiles[0].profileName).toBe('Fictional local edit');await saved(page);
++ await expect(page.getByText('Not saved',{exact:true})).toHaveCount(0);
++});
++
++test('canonical fixture setup does not invent cross-key theme aliases',async({page,noNetwork})=>{
++ await page.goto('/');await saved(page);
++ const profile=createSampleProfile('Fictional theme fixture');
++ profile.documentTheme={accentColor:'#2557a7',fontFamily:'sans',fontSize:'medium',lineSpacing:'normal',layoutStyle:'modern'};
++ await writeCanonicalFixture(page,{profiles:[profile],activeId:profile.profileId,theme:profile.documentTheme});
++ const check=await page.evaluate(async()=>{
++  const db=await new Promise((ok,no)=>{const r=indexedDB.open('keyval-store');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
++  try{return await new Promise((ok,no)=>{const tx=db.transaction('cv-tailor-canonical-v1','readonly'),r=tx.objectStore('cv-tailor-canonical-v1').get('workspace');tx.oncomplete=()=>ok({same:r.result.values[0][0].documentTheme===r.result.values[2],profileTheme:r.result.values[0][0].documentTheme,theme:r.result.values[2]});tx.onabort=tx.onerror=()=>no(tx.error)})}finally{db.close()}
++ });
++ expect(check.same).toBe(false);expect(check.profileTheme).toEqual(profile.documentTheme);expect(check.theme).toEqual(profile.documentTheme);
++ await page.reload();await saved(page);await expect(page.getByLabel('Resume document name')).toHaveValue(profile.profileName);
++});
+--- a/tests/browser/sc1-app.spec.cjs
++++ b/tests/browser/sc1-app.spec.cjs
+@@ -1,6 +1,7 @@
+ // Offline app-path acceptance, NOT a model response or a writing-quality verdict.
+ const { test: base, expect } = require('@playwright/test');
+ const fs = require('node:fs/promises');
++const { readCanonical: stored, writeCanonicalFixture } = require('./import-fixtures.cjs');
+ const { load } = require('../helpers/editorial-loader.cjs');
+ const { createSampleProfile } = load('mock/profile');
+ 
+@@ -11,8 +12,6 @@
+ const GENERATED_SUMMARY = NARRATIVE_SUMMARY;
+ const EDITED_SUMMARY = 'Built internal data dashboards for a classroom exercise.';
+ const ERROR_503 = 'Google rejected the request (HTTP 503; UNAVAILABLE). Provider-reported details, not a verification of account usage. No automatic retry. Your resumes are unchanged.';
+-const PROFILE_KEY = 'cv-tailor-profiles-v2';
+-const ACTIVE_KEY = 'cv-tailor-active-id-v2';
+ 
+ function sourceProfile(summaryLocked = false) {
+   const p = createSampleProfile('SC5 Offline Synthetic Source');
+@@ -91,36 +90,11 @@
+   },
+ });
+ 
+-async function stored(page) {
+-  return page.evaluate(async ({ profileKey, activeKey }) => {
+-    const db = await new Promise((resolve, reject) => {
+-      const request = indexedDB.open('keyval-store', 1);
+-      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+-    });
+-    try {
+-      const transaction = db.transaction('keyval', 'readonly'), store = transaction.objectStore('keyval');
+-      const read = key => new Promise((resolve, reject) => { const r = store.get(key); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-      const [profiles, activeId] = await Promise.all([read(profileKey), read(activeKey)]);
+-      return { profiles, activeId };
+-    } finally { db.close(); }
+-  }, { profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
+-}
+ async function saved(page) { await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible(); }
+ async function seed(page, source) {
+   await page.goto('/');
+   await saved(page);
+-  await page.evaluate(async ({ source, profileKey, activeKey }) => {
+-    const db = await new Promise((resolve, reject) => {
+-      const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+-    });
+-    try {
+-      await new Promise((resolve, reject) => {
+-        const tx = db.transaction('keyval', 'readwrite'), store = tx.objectStore('keyval');
+-        store.put([source], profileKey); store.put(source.profileId, activeKey); store.put(source.documentTheme, 'cv-tailor-builder-theme-v1');
+-        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+-      });
+-    } finally { db.close(); }
+-  }, { source, profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
++  await writeCanonicalFixture(page, { profiles: [source], activeId: source.profileId, theme: source.documentTheme });
+   await page.reload();
+   await expect(page.getByLabel('Resume document name')).toHaveValue(source.profileName);
+   await saved(page);
+@@ -1026,11 +1000,7 @@
+   expect(snapshot.generated.experience[0].bullets).toEqual([proposed]);
+   const laterEdit = 'Later edit in the current tailored copy.';
+   copy.experience.data[0].bullets[0].text = laterEdit;
+-  await page.evaluate(async ({ profile, profileKey }) => {
+-    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-    await new Promise((resolve, reject) => { const tx = db.transaction('keyval', 'readwrite'); tx.objectStore('keyval').put([profile], profileKey); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+-    db.close();
+-  }, { profile: copy, profileKey: PROFILE_KEY });
++  await writeCanonicalFixture(page, { profiles: [copy] });
+   await page.reload(); await saved(page);
+   await page.getByText(/Review 1 content note/).click();
+   await expect(page.getByText(/compare the added wording in this bullet/).first()).toBeVisible();
+@@ -1087,11 +1057,7 @@
+   const state = await stored(page), copy = state.profiles.find(x => x.profileId === state.activeId);
+   Object.assign(copy.experience.data[0], { city: '', startDate: 'Feb 2024', endDate: '', description: '' });
+   Object.assign(copy.projects.data[0], { role: 'Coordinator', url: '' });
+-  await page.evaluate(async ({ profiles, profileKey }) => {
+-    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-    await new Promise((resolve, reject) => { const tx = db.transaction('keyval', 'readwrite'); tx.objectStore('keyval').put(profiles, profileKey); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+-    db.close();
+-  }, { profiles: state.profiles, profileKey: PROFILE_KEY });
++  await writeCanonicalFixture(page, { profiles: state.profiles });
+   await page.reload(); await saved(page);
+   await page.getByText('Compare current experience and projects', { exact: true }).click();
+   const exp = page.getByRole('article', { name: 'Experience comparison 1' });
+@@ -1180,7 +1146,7 @@
+     expect(snapshot.generated.experience[0].bullets).toEqual([proposed]);
+     const laterEdit='Later edit in the current tailored copy.';
+     copy.experience.data[0].bullets[0].text=laterEdit;
+-    await page.evaluate(async ({profile,profileKey})=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('keyval-store',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});await new Promise((resolve,reject)=>{const tx=db.transaction('keyval','readwrite');tx.objectStore('keyval').put([profile],profileKey);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();},{profile:copy,profileKey:PROFILE_KEY});
++    await writeCanonicalFixture(page, { profiles: [copy] });
+     await page.reload();await saved(page);
+     await expect(prompt).toContainText('automatic checks cannot verify meaning');
+     await expectMissingSourceHistoricalComparison(page,prompt.getByRole('button',{name:'Compare experience and projects'}),source,proposed,laterEdit);
+--- a/tests/browser/summary-review-cue.spec.cjs
++++ b/tests/browser/summary-review-cue.spec.cjs
+@@ -2,10 +2,10 @@
+ // external traffic is blocked. These are not model-quality or factuality tests.
+ const { test: base, expect } = require('@playwright/test');
+ const fs = require('node:fs/promises');
++const { readCanonical: stored, writeCanonicalFixture } = require('./import-fixtures.cjs');
+ const { load } = require('../helpers/editorial-loader.cjs');
+ const { createSampleProfile } = load('mock/profile');
+ const ORIGIN = 'http://127.0.0.1:4187';
+-const PROFILE_KEY = 'cv-tailor-profiles-v2', ACTIVE_KEY = 'cv-tailor-active-id-v2';
+ const JOB = 'Pharmacy assistant: review medication charts, maintain dispensing logs and communicate with colleagues.';
+ const SOURCE_BULLET = 'Reviewed medication charts for a pharmacist to approve.';
+ const ORIGINAL_SUMMARY = 'Fictional pharmacy assistant supporting pharmacy administration.';
+@@ -64,21 +64,8 @@
+     expect(errors, 'Browser/provider mock errors').toEqual([]);
+   },
+ });
+-async function stored(page) {
+-  return page.evaluate(async ({ profileKey, activeKey }) => {
+-    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-    try {
+-      const tx = db.transaction('keyval', 'readonly'), store = tx.objectStore('keyval');
+-      const get = key => new Promise((resolve, reject) => { const r = store.get(key); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-      const [profiles, activeId] = await Promise.all([get(profileKey), get(activeKey)]); return { profiles, activeId };
+-    } finally { db.close(); }
+-  }, { profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
+-}
+ async function saveProfiles(page, profiles, activeId) {
+-  await page.evaluate(async ({ profiles, activeId, profileKey, activeKey }) => {
+-    const db = await new Promise((resolve, reject) => { const r = indexedDB.open('keyval-store', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+-    try { await new Promise((resolve, reject) => { const tx = db.transaction('keyval', 'readwrite'); tx.objectStore('keyval').put(profiles, profileKey); tx.objectStore('keyval').put(activeId, activeKey); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); }); } finally { db.close(); }
+-  }, { profiles, activeId, profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
++  await writeCanonicalFixture(page, { profiles, activeId });
+ }
+ async function saved(page) { await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible(); }
+ async function seed(page) {
+@@ -341,7 +328,7 @@
+   await page.locator('summary').filter({hasText:'Remove saved generation text comparison'}).click();
+   // Simulate a synchronous quota failure after the first put was queued. The
+   // transaction must abort and leave the previously saved record intact.
+-  await page.evaluate(() => { window.originalSnapshotPut=IDBObjectStore.prototype.put;let calls=0;IDBObjectStore.prototype.put=function(...args){if(++calls===2)throw new DOMException('quota','QuotaExceededError');return window.originalSnapshotPut.apply(this,args);}; });
++  await page.evaluate(() => { window.originalSnapshotPut=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){if(this.name==='cv-tailor-canonical-v1')throw new DOMException('quota','QuotaExceededError');return window.originalSnapshotPut.apply(this,args);}; });
+   await page.getByRole('button',{name:'Remove comparison from this copy'}).click();
+   await expect(page.getByText('Not saved',{exact:true})).toBeVisible();
+   await expect(page.getByText(/Could not save in this browser/)).toBeVisible();
