@@ -168,7 +168,7 @@ function createEmptyBullet(): BulletPoint {
 }
 
 // ── Persistence Keys ──
-const profileStorage = new ProfileStorage();
+export const profileStorage = new ProfileStorage();
 
 // ── Store ──
 
@@ -228,8 +228,8 @@ export const useAppStore = create<AppStore>((set, get) => {
       const source = profiles.find(p => p.profileId === sourceId);
       if (!source) throw new Error('Source profile not found');
 
-      // Deep clone using JSON stringify to completely detach references
-      const clonedProfile: CVProfile = JSON.parse(JSON.stringify(source));
+      // Preserve structured-clone metadata when duplicating; JSON loses Map and cycles.
+      const clonedProfile: CVProfile = structuredClone(source);
       
       delete clonedProfile.compositionSnapshot; delete clonedProfile.compositionSnapshotStatus; delete clonedProfile.compositionChanges;
       clonedProfile.documentTheme = { ...(source.documentTheme ?? get().documentTheme) };
