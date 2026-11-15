@@ -127,7 +127,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         {hasStoredSnapshot && <details>
           <summary>Remove saved generation text comparison</summary>
           <p>This removes the saved source and generated text snapshot from this copy, not the resume itself. Other change counts, excluded skill names and review notes remain. Delete the copy to remove its remaining local metadata. Check browser save status after removal.</p>
-          <p><strong>Before removing:</strong> save or copy unsaved edits in other tabs, then close or refresh them. An older version left open can restore this comparison even after removal is saved. Updated tabs block conflicting saves, but may not notice another tab’s changes until they try to save.</p>
+          <p><strong>Before removing:</strong> save or copy unsaved edits in other tabs. Updated tabs block conflicting saves but may not notice a change until saving. Older versions write a separate legacy copy and their changes are not synced here. The legacy copy remains and may contain this comparison. Removing it here is not global secure erasure; other copies and backups may retain it.</p>
           <button type="button" className="text-button" disabled={busy} onClick={() => {
             useAppStore.setState(state => {
               if (state.activeProfileId !== activeId) return state;
