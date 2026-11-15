@@ -373,7 +373,27 @@ export const compositionChangesSchema = z.object({
 });
 export type CompositionChanges = z.infer<typeof compositionChangesSchema>;
 
+// A bounded local record of the text displayed at generation, not attribution.
+// Project links and all non-professional sections are deliberately excluded.
+export const COMPOSITION_SNAPSHOT_MAX_BYTES = 1024 * 1024;
+const snapshotEntry = z.object({
+  fields: z.array(z.object({ label: z.string(), value: z.string() }).strict()),
+  bullets: z.array(z.string()),
+}).strict();
+const snapshotSide = z.object({
+  summary: z.string(), experience: z.array(snapshotEntry), projects: z.array(snapshotEntry),
+}).strict();
+export const compositionSnapshotSchema = z.object({
+  version: z.literal('professional-comparison-v1'),
+  source: snapshotSide, generated: snapshotSide,
+}).strict().refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= COMPOSITION_SNAPSHOT_MAX_BYTES,
+  { message: 'Generation comparison exceeds its local storage limit.' });
+export type CompositionSnapshot = z.infer<typeof compositionSnapshotSchema>;
+
 export interface CVProfile {
+  // Keep unsupported or damaged snapshots intact; validate only when displaying.
+  compositionSnapshot?: unknown;
+  compositionSnapshotStatus?: unknown;
   compositionReview?: CompositionReview;
   compositionChanges?: CompositionChanges;
   supportingEvidence?: SupportingEvidence[];
@@ -401,6 +421,8 @@ export interface CVProfile {
 }
 
 export const cvProfileSchema = z.object({
+  compositionSnapshot: z.unknown().optional(),
+  compositionSnapshotStatus: z.unknown().optional(),
   compositionReview: compositionReviewSchema.optional(),
   compositionChanges: compositionChangesSchema.optional(),
   supportingEvidence: supportingEvidenceSchema.optional(),
