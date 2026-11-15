@@ -9,13 +9,13 @@ The standalone runner replaces `globalThis.fetch` before loading the application
 From the project copy with its existing dependencies:
 
 ```sh
-node scripts/tailoring-contrast-benchmark.cjs > benchmarks/tailoring-contrast-results.json
+node scripts/tailoring-contrast-benchmark.cjs > benchmarks/tailoring-contrast-results.json.tmp && mv benchmarks/tailoring-contrast-results.json.tmp benchmarks/tailoring-contrast-results.json
 node --test tests/tailoring-contrast-benchmark.test.cjs tests/claim-guard.test.cjs tests/relationship-risk-probes.test.cjs tests/multilingual-numeric-grounding.test.cjs tests/numeric-unit-scope.test.cjs tests/multi-citation-coverage-review.test.cjs
 ```
 
 Each case asserts the source profile remains unchanged; the request's job and full source equal the prepared packet; and every entry bullet ID uniquely resolves to its exact fictional source text, kind and parent. The report records each citation ID, index and source text, proposed and retained text, guard notes, compiler warnings and unassessed semantic status. It fingerprints the complete `src` tree, lockfile, benchmark script, benchmark test and two fixture/loader files, and records Node and TypeScript versions. It does **not** fingerprint installed dependency bytes, operating system or all environmental factors. The copy has no Git metadata; the claimed baseline commit is not independently verified.
 
-The snapshot test reruns the benchmark and compares the complete report and fingerprint to the saved JSON. On an implementation, harness or recorded-version change, review the changed observations and deliberately regenerate the snapshot; do not treat the snapshot as a requirement that risky text must keep passing. Exact retention is an observable, not a semantic verdict. A note is non-blocking and the text stays in the output. The authored classifications require independent review. The range's unchanged control and two source-combination controls are not counted as paraphrases, and the ambiguous wording and omission are not classified as unsupported assertions. No mixed-type aggregate score is presented.
+The temporary-file command replaces the saved result only if the benchmark succeeds; inspect the change before committing. The snapshot test reruns the benchmark and compares the complete report and fingerprint to the saved JSON. On an implementation, harness or recorded-version change, review the changed observations and deliberately regenerate the snapshot; do not treat the snapshot as a requirement that risky text must keep passing. Exact retention is an observable, not a semantic verdict. A note is non-blocking and the text stays in the output. The authored classifications require independent review. The range's unchanged control and two source-combination controls are not counted as paraphrases, and the ambiguous wording and omission are not classified as unsupported assertions. No mixed-type aggregate score is presented.
 
 ## Per-case observations on this copy
 
