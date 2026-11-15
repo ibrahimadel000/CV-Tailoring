@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { get as idbGet, setMany as idbSetMany } from 'idb-keyval';
+import { ProfileStorage } from './profileStorage';
 import { v4 as uuidv4 } from 'uuid';
 import { createSampleProfile } from '@/mock/profile';
 import { cvProfileSchema, documentThemeSchema } from '@/types/schema';
@@ -94,7 +94,7 @@ interface AppStore {
   setError: (error: string | null) => void;
 
   // Persistence
-  loadFromStorage: () => Promise<void>;
+  loadFromStorage: () => Promise<boolean>;
   saveToStorage: () => Promise<void>;
 }
 
@@ -168,8 +168,7 @@ function createEmptyBullet(): BulletPoint {
 }
 
 // ── Persistence Keys ──
-const STORAGE_KEY_PROFILES = 'cv-tailor-profiles-v2';
-const STORAGE_KEY_ACTIVE_ID = 'cv-tailor-active-id-v2';
+const profileStorage = new ProfileStorage();
 
 // ── Store ──
 
@@ -232,6 +231,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       // Deep clone using JSON stringify to completely detach references
       const clonedProfile: CVProfile = JSON.parse(JSON.stringify(source));
       
+      delete clonedProfile.compositionSnapshot; delete clonedProfile.compositionSnapshotStatus; delete clonedProfile.compositionChanges;
       clonedProfile.documentTheme = { ...(source.documentTheme ?? get().documentTheme) };
       clonedProfile.profileId = uuidv4(); // Issue new ID
       clonedProfile.profileName = newName || `${source.profileName} (Copy)`;
@@ -564,9 +564,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     // Persistence
     loadFromStorage: async () => {
       // Fail closed on storage errors: never overwrite data that failed to load.
-      const storedProfiles = await idbGet(STORAGE_KEY_PROFILES);
-      const storedActiveId = await idbGet(STORAGE_KEY_ACTIVE_ID);
-      const storedTheme = await idbGet('cv-tailor-builder-theme-v1');
+      const [storedProfiles, storedActiveId, storedTheme] = await profileStorage.load();
       if (storedProfiles !== undefined && !Array.isArray(storedProfiles)) {
         throw new Error('Saved resume data is not a valid list.');
       }
@@ -574,21 +572,18 @@ export const useAppStore = create<AppStore>((set, get) => {
       if (Array.isArray(storedProfiles)) {
         if (!storedProfiles.every(p => cvProfileSchema.safeParse(p).success)) throw new Error('A saved resume could not be validated.');
         const profiles: CVProfile[] = storedProfiles.map(p => ({ ...p, documentTheme: { ...(p.documentTheme ?? fallback) } }));
-        const activeProfileId = profiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (profiles[0]?.profileId || null);
+        const activeProfileId = typeof storedActiveId === 'string' && profiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (profiles[0]?.profileId || null);
         set({ profiles, activeProfileId, documentTheme: { ...(profiles.find(p => p.profileId === activeProfileId)?.documentTheme ?? fallback) } });
+        return storedProfiles.some(p => !p.documentTheme) || activeProfileId !== storedActiveId;
       } else {
         get().createProfile('My first resume');
+        return true;
       }
     },
 
     saveToStorage: async () => {
       const { profiles, activeProfileId, documentTheme } = get();
-      // A single IndexedDB transaction keeps resume, active ID, and design in sync.
-      await idbSetMany([
-        [STORAGE_KEY_PROFILES, profiles],
-        [STORAGE_KEY_ACTIVE_ID, activeProfileId],
-        ['cv-tailor-builder-theme-v1', documentTheme],
-      ]);
+      await profileStorage.save(profiles, activeProfileId, documentTheme);
     },
   };
 });
