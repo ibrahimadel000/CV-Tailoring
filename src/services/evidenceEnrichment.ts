@@ -53,7 +53,7 @@ export function evidenceSourceCopy(source:CVProfile,questions:EvidenceQuestion[]
   return copy;
 }
 export function independentSourceCopy(source:CVProfile,suffix:string):CVProfile{
-  const copy:CVProfile=JSON.parse(JSON.stringify(source));copy.profileId=uuid();copy.baseProfileId=source.profileId;
+  const copy:CVProfile=JSON.parse(JSON.stringify(source));delete copy.compositionSnapshot;delete copy.compositionSnapshotStatus;delete copy.compositionChanges;copy.profileId=uuid();copy.baseProfileId=source.profileId;
   copy.profileName=`${source.profileName.slice(0,Math.max(1,97-suffix.length))} — ${suffix}`;copy.version=source.version+1;copy.lastConfirmed='';
   delete copy.tailoring;delete copy.targetJob;delete copy.matchScore;return copy;
 }

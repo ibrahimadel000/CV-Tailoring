@@ -78,6 +78,7 @@ export function saveContent(id: string, choices: Choices) {
   }
   if (JSON.stringify(next.skills.data) !== JSON.stringify(source.skills.data)) changes.push({ area: 'skills', before: JSON.stringify(source.skills.data), after: JSON.stringify(next.skills.data), origin: 'ai' });
   if (!changes.length) throw new TailorError('unchanged', 'The accepted content is identical to the source. No redundant copy was saved.');
+  delete next.compositionSnapshot; delete next.compositionSnapshotStatus; delete next.compositionChanges;
   next.profileId = uuid(); next.baseProfileId = source.profileId;
   next.profileName = `${source.profileName} — Tailored`.slice(0, 100); next.targetJob = p.job;
   next.version = source.version + 1; next.lastConfirmed = ''; delete next.matchScore;

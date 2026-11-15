@@ -73,6 +73,7 @@ export function confirmTailoredReview(reviewId:string,selection:ReviewSelection)
   if(review.clarificationOnly)throw new TailorError('input','This local review is for supporting accounts only, not a new AI result.');
   const selected=selectTailorChanges(review.source,review.result,selection,review.alternative);
   const next=selected.copy,source=review.source;
+  delete next.compositionSnapshot; delete next.compositionSnapshotStatus; delete next.compositionChanges;
   next.profileId=uuid();next.baseProfileId=source.profileId;
   next.profileName=`${source.profileName} — ${review.result.patch.jobTitle||'Reviewed'}`.slice(0,100);
   next.targetJob=review.job;delete next.matchScore;next.version=source.version+1;next.lastConfirmed='';

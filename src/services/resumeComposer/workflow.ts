@@ -5,6 +5,7 @@ import { compileNaturalComposition, naturalDocumentSchema, prepareNaturalComposi
 import { summaryBoundaryNotice } from './summaryBoundary';
 import { summarizeChanges, summarizeProposal } from './changeSummary';
 import { assertExactSourceFits, exactSourceWording } from './exactSourceWording';
+import { captureCompositionSnapshot } from './compositionSnapshot';
 
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
 export type ComposeProvider = (packet: NaturalPacket, signal: AbortSignal) => Promise<unknown>;
@@ -24,7 +25,8 @@ export function createCompositionRunner(repository: Repository, provider: Compos
   return {
     cancel() { current?.abort(); current = undefined; },
     // Opt-in keeps native wording; it does not validate the source or ordering.
-    async run(job: string, signal: AbortSignal, options: { exactSourceWording?: boolean; allowSourceReorder?: boolean } = {}) {
+    async run(job: string, signal: AbortSignal, options: { exactSourceWording?: boolean; allowSourceReorder?: boolean; saveComparison?: boolean } = {}) {
+      const saveComparison = options.saveComparison !== false;
       const keepSourceWording = options.exactSourceWording === true;
       const allowSourceReorder = keepSourceWording && options.allowSourceReorder === true;
       if (current) throw new CompositionError('input', 'A composition is already running.');
@@ -57,6 +59,12 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         const copy = result.candidate;
         // Compare before copy metadata is changed. Kept locally, not sent to
         // the provider or embedded in the exported resume.
+        const capture = !saveComparison ? { reason: 'not_saved' as const } : captureCompositionSnapshot(profile, copy);
+        const historicalSnapshot = 'snapshot' in capture ? capture.snapshot : undefined;
+        const snapshotStatus = capture.reason;
+        delete copy.compositionSnapshot; delete copy.compositionSnapshotStatus;
+        if (historicalSnapshot) copy.compositionSnapshot = historicalSnapshot;
+        else copy.compositionSnapshotStatus = snapshotStatus;
         copy.compositionChanges = { ...summarizeChanges(profile, copy), mode: keepSourceWording ? 'source-wording' : 'rewrite', ...(keepSourceWording ? { sourceReordering: allowSourceReorder } : {}) };
         if (!keepSourceWording) copy.compositionChanges.proposal = proposalComparison;
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;
@@ -74,7 +82,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         cvProfileSchema.parse(copy);
         ensureCurrent();
         if (!repository.appendIfCurrent(snapshot, copy)) throw new CompositionError('stale', 'Source changed at commit; nothing was saved.');
-        return { ...result, proposalComparison, status: 'created' as const, profileId: copy.profileId };
+        return { ...result, proposalComparison, status: 'created' as const, profileId: copy.profileId, snapshotStatus };
       } finally { signal.removeEventListener('abort', abort); if (current === token) current = undefined; }
     },
   };
