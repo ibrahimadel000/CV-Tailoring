@@ -21,6 +21,9 @@ export function saveTailorUsage(record: TailorUsageRecord) {
     localStorage.setItem(USAGE_KEY, JSON.stringify([...entries.slice(-59), record]));
   } catch { /* Diagnostics must never fail the resume operation. */ }
 }
+export function clearTailorUsage() {
+  try { localStorage.removeItem(USAGE_KEY); } catch { /* Privacy cleanup must not block deletion. */ }
+}
 export function readLatestTailorUsage(): TailorUsageRecord | null {
   try {
     const entries = JSON.parse(localStorage.getItem(USAGE_KEY) ?? '[]');

@@ -3,6 +3,7 @@ import { get as idbGet, setMany as idbSetMany } from 'idb-keyval';
 import { v4 as uuidv4 } from 'uuid';
 import { createSampleProfile } from '@/mock/profile';
 import { cvProfileSchema, documentThemeSchema } from '@/types/schema';
+import { clearTailorUsage } from '@/services/tailorRequest';
 import type { DocumentTheme } from '@/types/schema';
 export type { DocumentTheme } from '@/types/schema';
 import type {
@@ -276,6 +277,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     deleteProfile: (id) => {
+      const wasActive = get().activeProfileId === id;
       set((state) => {
         const remaining = state.profiles.filter(p => p.profileId !== id);
         let activeId = state.activeProfileId;
@@ -283,8 +285,12 @@ export const useAppStore = create<AppStore>((set, get) => {
           activeId = remaining.length > 0 ? remaining[remaining.length - 1].profileId : null;
         }
         return { profiles: remaining, activeProfileId: activeId,
+          jobDescription: wasActive ? '' : state.jobDescription,
           documentTheme: { ...(remaining.find(p => p.profileId === activeId)?.documentTheme ?? state.documentTheme) } };
       });
+      // Usage records are intentionally not linked to a profile. Clear them
+      // on deletion rather than retaining diagnostics that could relate to it.
+      clearTailorUsage();
     },
 
     applyTailoredResponse: (response) => {
