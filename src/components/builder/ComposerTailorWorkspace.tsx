@@ -29,6 +29,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
   const hasCurrentSource = !!currentSource;
+  const hasTailoredResult = !!active?.compositionChanges || !!active?.tailoring?.sourceProfileId;
   const missingSourceSkills = currentSource && active ? currentSource.skills.data.filter(skill => !active.skills.data.some(current => current.id === skill.id)) : [];
   const restoreSourceSkill = (skillId: string) => {
     useAppStore.setState(state => {
@@ -147,9 +148,9 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
           <p>These remain in the source resume.</p>
         </details>}
       </details>}
-      {active?.compositionChanges && <details className="tailor-review professional-review" open>
+      {hasTailoredResult && <details className="tailor-review professional-review" open>
         <summary>Professional review checklist</summary>
-        <p>This checklist supports human review; it is not an AI score, factual certification or guarantee of job fit.</p>
+        <p>This checklist supports human review; it is not an AI score, factual certification or guarantee of job fit. {active?.compositionChanges ? 'Review notes and comparison data are available for this copy.' : 'This older tailored copy may have incomplete historical comparison metadata; inspect the source and output directly.'}</p>
         <ul>{professionalReviewItems.map(([title, text]) => <li key={title}><strong>{title}:</strong> {title === 'Truth and scope' && notes.length ? 'Local review notes exist; inspect them first. ' : ''}{text}</li>)}</ul>
       </details>}
       <div className="tailor-source"><div className="tailor-source-heading"><label htmlFor="composer-source">Source resume</label><button className="text-button" disabled={busy} onClick={onImport}><Upload size={15} />Import CV</button></div>

@@ -59,12 +59,28 @@ test('late fetch response body is cancelled and cannot trigger a fallback', asyn
  finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
 });
 
-test('aborted JSON parsing releases a non-cooperative response body', async()=>{
- const oldFetch=global.fetch,oldStorage=global.localStorage;let release,ready,cancelled=false,calls=0;const storage=new Map();
+test('aborted streaming JSON releases the reader and ignores a late success', async()=>{
+ const oldFetch=global.fetch,oldStorage=global.localStorage;let ready,cancelled=false,calls=0;const storage=new Map();
  const readyPromise=new Promise(r=>ready=r);
  global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
- global.fetch=()=>{calls++;ready();return Promise.resolve({ok:true,body:{cancel(){cancelled=true;return Promise.resolve();}},json:()=>new Promise(r=>release=()=>r({candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]}}]}))});};
- try{const controller=new AbortController(),p=prepareNaturalComposition(createSampleProfile('Fictional'),job),task=requestComposition(p,controller.signal);await readyPromise;await new Promise(r=>setImmediate(r));controller.abort();await within(a.rejects(task,e=>e.code==='cancelled'));a.equal(cancelled,true);release();await new Promise(r=>setImmediate(r));a.equal(calls,1);}
+ global.fetch=()=>{calls++;const stream=new ReadableStream({start(){ready();},cancel(){cancelled=true;}});return Promise.resolve(new Response(stream,{status:200}));};
+ try{const controller=new AbortController(),p=prepareNaturalComposition(createSampleProfile('Fictional'),job),task=requestComposition(p,controller.signal);await readyPromise;await new Promise(r=>setImmediate(r));controller.abort();await within(a.rejects(task,e=>e.code==='cancelled'));a.equal(cancelled,true);a.equal(calls,1);}
+ finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
+});
+
+test('successful response without a readable body is rejected before json() can bypass the bound', async()=>{
+ const oldFetch=global.fetch,oldStorage=global.localStorage;let calls=0,jsonCalled=false;const storage=new Map();
+ global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+ global.fetch=()=>{calls++;return Promise.resolve({ok:true,body:null,json:()=>{jsonCalled=true;return Promise.resolve({candidates:[{finishReason:'STOP'}]});}});};
+ try{const task=requestComposition(prepareNaturalComposition(createSampleProfile('Fictional'),job),new AbortController().signal);await within(a.rejects(task,e=>e.code==='invalid'&&/invalid response body/i.test(e.message)));a.equal(jsonCalled,false);a.equal(calls,1);}
+ finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
+});
+
+for (const payload of [null, {}, 'malformed', { candidates: [] }]) test('malformed successful envelope is classified as invalid', async()=>{
+ const oldFetch=global.fetch,oldStorage=global.localStorage;const storage=new Map();
+ global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+ global.fetch=()=>Promise.resolve(new Response(JSON.stringify(payload),{status:200}));
+ try{const task=requestComposition(prepareNaturalComposition(createSampleProfile('Fictional'),job),new AbortController().signal);await within(a.rejects(task,e=>e.code==='invalid'&&/invalid response format/i.test(e.message)));}
  finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
 });
 

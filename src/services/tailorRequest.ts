@@ -1,6 +1,7 @@
 import { TailorError, prepareTailorInput } from './tailorModel';
 import { buildDraftInput, draftOutputSchema, decodeDraft } from '@/services/composer/draft';
 import { draftSystem as systemInstruction } from '@/services/composer/draftPrompt';
+import { BoundedResponseError, readBoundedJsonResponse } from './boundedResponse';
 
 export const TAILOR_MODEL = 'gemini-2.5-flash';
 export const REQUEST_TIMEOUT_MS = 60000;
@@ -80,10 +81,23 @@ export async function requestTailor(
       if (response.status === 400) throw new TailorError('request', 'Gemini rejected the request settings. Keep this error category for debugging; your resumes are unchanged.');
       throw new TailorError('provider', 'Gemini is temporarily unavailable. Your resumes are unchanged; no automatic retry was made.');
     }
-    const body = await response.json();
+    let body: any;
+    try { body = await readBoundedJsonResponse(response, controller.signal); }
+    catch (error) {
+      if (error instanceof BoundedResponseError) {
+        throw new TailorError('invalid', error.kind === 'oversized'
+          ? 'The AI response exceeded the safe result size. No resume was changed.'
+          : 'Gemini returned an invalid response body. No resume was changed.');
+      }
+      throw error;
+    }
     onUsage(tokenUsage(body?.usageMetadata));
     if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    const candidate = body?.candidates?.[0];
+    if (!body || typeof body !== 'object' || !Array.isArray(body.candidates) || body.candidates.length !== 1
+      || !body.candidates[0] || typeof body.candidates[0] !== 'object') {
+      throw new TailorError('invalid', 'Gemini returned an invalid response envelope. No resume was changed.');
+    }
+    const candidate = body.candidates[0];
     if (candidate?.finishReason === 'MAX_TOKENS') throw new TailorError('truncated', 'The AI response reached its output limit. No partial changes were applied.');
     if (candidate?.finishReason !== 'STOP') throw new TailorError('blocked', 'Gemini did not return a completed result. No resume was changed.');
     const parts = candidate?.content?.parts;

@@ -26,61 +26,7 @@ const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flas
 export function liveCompositionCandidates(model: CompositionModel): CompositionModel[] {
   return [model, ...LIVE_FALLBACKS.filter(m => m !== model)];
 }
-// A signal asks fetch/streams to stop, but a stalled adapter or body may ignore
-// it. Settle our own wait on abort and observe any late resolution/rejection.
-// The underlying provider may still process or charge an aborted request.
-function awaitAbortable<T>(task: Promise<T>, signal: AbortSignal, onLateValue?: (value: T) => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true; signal.removeEventListener('abort', onAbort); fn();
-    };
-    const onAbort = () => finish(() => reject(new DOMException('Aborted', 'AbortError')));
-    task.then(value => {
-      if (settled) { try { onLateValue?.(value); } catch { /* Best-effort late cleanup. */ } }
-      else finish(() => resolve(value));
-    }, error => finish(() => reject(error)));
-    if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
-const MAX_RESPONSE_BYTES = 512 * 1024;
-
-// Read successful envelopes through the stream so an oversized or stalled body
-// cannot be handed to response.json() without a bound. The fallback branch keeps
-// compatibility with the small response doubles used by offline tests.
-async function readJsonResponse(response: Response, signal: AbortSignal): Promise<unknown> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    try {
-      return await awaitAbortable(response.json(), signal, () => { void response.body?.cancel().catch(() => {}); });
-    } catch (error) {
-      if (signal.aborted) void response.body?.cancel().catch(() => {});
-      if (error instanceof SyntaxError) throw new TailorError('invalid', 'Invalid response JSON. Your resumes are unchanged.');
-      throw error;
-    }
-  }
-  const chunks: Uint8Array[] = [];
-  let size = 0, finished = false;
-  try {
-    while (true) {
-      const next = await awaitAbortable(reader.read(), signal, () => { void reader.cancel().catch(() => {}); });
-      if (next.done) { finished = true; break; }
-      size += next.value.byteLength;
-      if (size > MAX_RESPONSE_BYTES) throw new TailorError('invalid', 'Oversized response. Your resumes are unchanged.');
-      chunks.push(next.value);
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    try { return JSON.parse(new TextDecoder().decode(bytes)); }
-    catch { throw new TailorError('invalid', 'Invalid response JSON. Your resumes are unchanged.'); }
-  } finally {
-    if (!finished) void reader.cancel().catch(() => {});
-    try { reader.releaseLock(); } catch { /* A late read settles after cancellation. */ }
-  }
-}
+import { awaitAbortable, BoundedResponseError, readBoundedJsonResponse } from './boundedResponse';
 
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
@@ -139,7 +85,16 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         checkDeadline();
         throw new TailorError('provider', message);
       }
-      body = await readJsonResponse(response, controller.signal);
+      try {
+        body = await readBoundedJsonResponse(response, controller.signal);
+      } catch (error) {
+        if (error instanceof BoundedResponseError) {
+          throw new TailorError('invalid', error.kind === 'oversized'
+            ? 'Oversized response. Your resumes are unchanged.'
+            : 'Invalid response body. Your resumes are unchanged.');
+        }
+        throw error;
+      }
       checkDeadline();
       const u = body?.usageMetadata ?? {};
       const count = (k: string) => Number.isSafeInteger(u[k]) && u[k] >= 0 ? u[k] as number : undefined;
@@ -157,13 +112,18 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       if (restricted) throw new TailorError('blocked', attempts > 1
         ? `Google blocked or restricted the request or response after ${attempts} model requests. No further automatic retry. Your resumes are unchanged.`
         : 'Google blocked or restricted the request or response. No automatic retry. Your resumes are unchanged.');
-      const complete = candidateList.length === 1 && candidateList[0]?.finishReason === 'STOP';
+      if (!body || typeof body !== 'object' || !Array.isArray(body.candidates) || candidateList.length !== 1
+        || !candidateList[0] || typeof candidateList[0] !== 'object') {
+        throw new TailorError('invalid', 'Invalid response format. Your resumes are unchanged.');
+      }
+      const complete = candidateList[0].finishReason === 'STOP';
       const outputLimit = candidateList.length === 1 && candidateList[0]?.finishReason === 'MAX_TOKENS';
       if (outputLimit && !isSynthetic && i < candidates.length - 1) continue;
       if (!complete) throw new TailorError('incomplete', attempts > 1 ? `No completed response after ${attempts} model requests. No partial resume or further automatic retry.` : 'No completed response. No partial resume or automatic retry.');
       break;
     }
-    const parts: unknown = body.candidates[0]?.content?.parts;
+    const candidate = body && typeof body === 'object' && Array.isArray((body as any).candidates) ? (body as any).candidates[0] : undefined;
+    const parts: unknown = candidate?.content?.parts;
     if (!Array.isArray(parts) || parts.some(p => !p || typeof p !== 'object' || (!p.thought && typeof p.text !== 'string'))) throw new TailorError('invalid', 'Invalid response format. Your resumes are unchanged.');
     const text = parts.filter(p => !p.thought).map(p => p.text).join('');
     if (!text || text.length > 100000) throw new TailorError('invalid', 'Empty or oversized response. Your resumes are unchanged.');

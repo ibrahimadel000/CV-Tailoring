@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:unit": "node --test tests/*.test.cjs",
+    "test:transport": "node --test tests/transport-hard-timeout.test.cjs",
     "test:browser:offline": "npm --prefix tests/browser test"
   },
   "dependencies": {
