@@ -45,6 +45,43 @@ function awaitAbortable<T>(task: Promise<T>, signal: AbortSignal, onLateValue?: 
   });
 }
 
+const MAX_RESPONSE_BYTES = 512 * 1024;
+
+// Read successful envelopes through the stream so an oversized or stalled body
+// cannot be handed to response.json() without a bound. The fallback branch keeps
+// compatibility with the small response doubles used by offline tests.
+async function readJsonResponse(response: Response, signal: AbortSignal): Promise<unknown> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    try {
+      return await awaitAbortable(response.json(), signal, () => { void response.body?.cancel().catch(() => {}); });
+    } catch (error) {
+      if (signal.aborted) void response.body?.cancel().catch(() => {});
+      if (error instanceof SyntaxError) throw new TailorError('invalid', 'Invalid response JSON. Your resumes are unchanged.');
+      throw error;
+    }
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0, finished = false;
+  try {
+    while (true) {
+      const next = await awaitAbortable(reader.read(), signal, () => { void reader.cancel().catch(() => {}); });
+      if (next.done) { finished = true; break; }
+      size += next.value.byteLength;
+      if (size > MAX_RESPONSE_BYTES) throw new TailorError('invalid', 'Oversized response. Your resumes are unchanged.');
+      chunks.push(next.value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    try { return JSON.parse(new TextDecoder().decode(bytes)); }
+    catch { throw new TailorError('invalid', 'Invalid response JSON. Your resumes are unchanged.'); }
+  } finally {
+    if (!finished) void reader.cancel().catch(() => {});
+    try { reader.releaseLock(); } catch { /* A late read settles after cancellation. */ }
+  }
+}
+
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
@@ -102,15 +139,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         checkDeadline();
         throw new TailorError('provider', message);
       }
-      // JSON parsing can outlive an abort in a non-cooperative adapter. Ask the
-      // response body to release as soon as cancellation wins, and repeat the
-      // best-effort cleanup if the parser resolves late.
-      try {
-        body = await awaitAbortable(response.json(), controller.signal, () => { void response?.body?.cancel().catch(() => {}); });
-      } catch (error) {
-        if (controller.signal.aborted) void response?.body?.cancel().catch(() => {});
-        throw error;
-      }
+      body = await readJsonResponse(response, controller.signal);
       checkDeadline();
       const u = body?.usageMetadata ?? {};
       const count = (k: string) => Number.isSafeInteger(u[k]) && u[k] >= 0 ? u[k] as number : undefined;

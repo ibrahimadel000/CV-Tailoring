@@ -75,3 +75,11 @@ for(const phase of ['pending read','oversized body','oversized header']) test(`a
  const task=providerFailureMessage(response,1,controller.signal);if(phase==='pending read'){await new Promise(r=>setImmediate(r));controller.abort();}
  const result=await within(task);a.match(result,/HTTP 429/);a.equal(cancelled,true);a.equal(stream.locked,false);
 });
+
+test('oversized successful response is rejected before parsing the model payload', async()=>{
+ const oldFetch=global.fetch,oldStorage=global.localStorage;let calls=0;const storage=new Map();
+ global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+ global.fetch=()=>{calls++;return Promise.resolve(new Response(new Uint8Array(512*1024+1),{status:200}));};
+ try{const task=requestComposition(prepareNaturalComposition(createSampleProfile('Fictional'),job),new AbortController().signal);await within(a.rejects(task,e=>e.code==='invalid'&&/oversized/i.test(e.message)));a.equal(calls,1);}
+ finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
+});
