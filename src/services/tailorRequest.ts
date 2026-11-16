@@ -98,7 +98,8 @@ export async function requestTailor(
       throw new TailorError('invalid', 'Gemini returned an invalid response envelope. No resume was changed.');
     }
     const candidate = body.candidates[0];
-    if (candidate?.finishReason === 'MAX_TOKENS') throw new TailorError('truncated', 'The AI response reached its output limit. No partial changes were applied.');
+    if (typeof candidate.finishReason !== 'string') throw new TailorError('invalid', 'Gemini returned an invalid response candidate. No resume was changed.');
+    if (candidate.finishReason === 'MAX_TOKENS') throw new TailorError('truncated', 'The AI response reached its output limit. No partial changes were applied.');
     if (candidate?.finishReason !== 'STOP') throw new TailorError('blocked', 'Gemini did not return a completed result. No resume was changed.');
     const parts = candidate?.content?.parts;
     if (!Array.isArray(parts)) throw new TailorError('invalid', 'Gemini returned no readable result. No resume was changed.');

@@ -116,6 +116,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         || !candidateList[0] || typeof candidateList[0] !== 'object') {
         throw new TailorError('invalid', 'Invalid response format. Your resumes are unchanged.');
       }
+      if (typeof candidateList[0].finishReason !== 'string') throw new TailorError('invalid', 'Invalid response format. Your resumes are unchanged.');
       const complete = candidateList[0].finishReason === 'STOP';
       const outputLimit = candidateList.length === 1 && candidateList[0]?.finishReason === 'MAX_TOKENS';
       if (outputLimit && !isSynthetic && i < candidates.length - 1) continue;

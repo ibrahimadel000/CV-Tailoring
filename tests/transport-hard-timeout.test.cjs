@@ -76,7 +76,7 @@ test('successful response without a readable body is rejected before json() can 
  finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
 });
 
-for (const payload of [null, {}, 'malformed', { candidates: [] }]) test('malformed successful envelope is classified as invalid', async()=>{
+for (const payload of [null, {}, 'malformed', { candidates: [] }, { candidates: [{}] }]) test('malformed successful envelope is classified as invalid', async()=>{
  const oldFetch=global.fetch,oldStorage=global.localStorage;const storage=new Map();
  global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
  global.fetch=()=>Promise.resolve(new Response(JSON.stringify(payload),{status:200}));
