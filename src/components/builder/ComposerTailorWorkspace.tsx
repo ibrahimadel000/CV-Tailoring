@@ -15,6 +15,15 @@ const entryChangeText = {
   reordered: 'Wording unchanged; order changed',
   edited: 'Wording or content changed',
 } as const;
+
+const professionalReviewItems = [
+  ['Truth and scope', 'Check every summary sentence and rewritten bullet against the source. Verify actors, duties, limits, dates, numbers and ownership; local checks do not certify factual accuracy.'],
+  ['Job relevance', 'Confirm that the strongest visible evidence matches the actual job responsibilities. The job description is not evidence that the candidate performed a duty.'],
+  ['Coverage', 'Check that important source contributions, qualifications and useful adjacent strengths were not omitted merely because they were less keyword-rich.'],
+  ['Clarity', 'Remove repetition, generic praise and crowded skill lists. A professional result should be concise, specific and readable without inventing detail.'],
+  ['User control', 'Review selected skills, reordered bullets, locks and the change notes. The original resume remains the source of truth and should stay unchanged.'],
+  ['Preview and export', 'Open the editor preview and exported PDF. Confirm that wording, dates, headings and page breaks match and that nothing is clipped or orphaned.'],
+] as const;
 export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport, reviewComparisonRequest, summaryComparisonRequest }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void; reviewComparisonRequest: number; summaryComparisonRequest: number }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
@@ -137,6 +146,11 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
           <ul>{active.compositionChanges.skills.excluded.map((skill, i) => <li key={i}>{skill.name}{skill.level ? ` — ${skill.level}` : ''}</li>)}</ul>
           <p>These remain in the source resume.</p>
         </details>}
+      </details>}
+      {active?.compositionChanges && <details className="tailor-review professional-review" open>
+        <summary>Professional review checklist</summary>
+        <p>This checklist supports human review; it is not an AI score, factual certification or guarantee of job fit.</p>
+        <ul>{professionalReviewItems.map(([title, text]) => <li key={title}><strong>{title}:</strong> {title === 'Truth and scope' && notes.length ? 'Local review notes exist; inspect them first. ' : ''}{text}</li>)}</ul>
       </details>}
       <div className="tailor-source"><div className="tailor-source-heading"><label htmlFor="composer-source">Source resume</label><button className="text-button" disabled={busy} onClick={onImport}><Upload size={15} />Import CV</button></div>
         <select id="composer-source" value={activeId ?? ''} disabled={busy} onChange={e => { setActive(e.target.value); setMessage(''); setNotes([]); }}>{profiles.map(p => <option key={p.profileId} value={p.profileId}>{p.profileName}</option>)}</select>
