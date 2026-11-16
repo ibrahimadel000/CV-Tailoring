@@ -66,7 +66,10 @@ test('a prompt block takes precedence even with an inconsistent STOP candidate',
 });
 for(const body of [{},{candidates:[]},{candidates:[{}]},{candidates:[{finishReason:'OTHER'}]},{candidates:[{finishReason:'MAX_TOKENS'},{finishReason:'OTHER'}]}]){
  test('unknown or malformed response stops rather than switching models',async()=>{
-  const x=await mock([new Response(JSON.stringify(body),{status:200}),complete(10)]);assert.equal(x.calls.length,1);assert.equal(x.error.code,'incomplete');assert.equal(x.result,undefined);
+  const x=await mock([new Response(JSON.stringify(body),{status:200}),complete(10)]);
+  const candidate=Array.isArray(body.candidates) && body.candidates.length===1 ? body.candidates[0] : null;
+  const expected=candidate && typeof candidate==='object' && typeof candidate.finishReason==='string' ? 'incomplete' : 'invalid';
+  assert.equal(x.calls.length,1);assert.equal(x.error.code,expected);assert.equal(x.result,undefined);
  });
 }
 test('a restriction after a 503 stops the sequence and records both attempts',async()=>{

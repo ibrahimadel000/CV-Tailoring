@@ -11,6 +11,6 @@ test('legacy adapter keeps the shared bounded response and privacy cleanup expor
   assert.match(source, /export function clearTailorUsage\(\)/);
   assert.match(
     fs.readFileSync(path.join(root, 'src/services/resumeComposer/boundedResponse.ts'), 'utf8'),
-    /export function readBoundedJsonResponse/,
+    /export (?:async )?function readBoundedJsonResponse/,
   );
 });
