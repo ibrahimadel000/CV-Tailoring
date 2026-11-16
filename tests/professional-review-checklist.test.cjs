@@ -6,8 +6,10 @@ const source = fs.readFileSync('src/components/builder/ComposerTailorWorkspace.t
 
 test('professional review checklist covers the product quality dimensions', () => {
   for (const label of ['Truth and scope', 'Job relevance', 'Coverage', 'Clarity', 'User control', 'Preview and export']) {
-    assert.match(source, new RegExp(`['"]${label}['"]`), label);
+    assert.match(source, new RegExp(`[\"']${label}[\"']`), label);
   }
   assert.match(source, /not an AI score, factual certification or guarantee of job fit/);
   assert.match(source, /job description is not evidence/);
+  assert.match(source, /tailoredResultVisible/);
+  assert.match(source, /tailorReviewVisibility/);
 });

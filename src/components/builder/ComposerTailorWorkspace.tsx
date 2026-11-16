@@ -9,6 +9,7 @@ import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection, readLatestTailorUsage, type TailorUsageRecord } from '@/services/tailorRequest';
 import { summaryBoundaryNotice } from '@/services/resumeComposer/summaryBoundary';
 import { CurrentEntryComparison } from './CurrentEntryComparison';
+import { hasTailoredResult } from './tailorReviewVisibility';
 const entryChangeText = {
   empty: 'No entries',
   unchanged: 'Wording and order unchanged',
@@ -29,7 +30,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
   const hasCurrentSource = !!currentSource;
-  const hasTailoredResult = !!active?.compositionChanges || !!active?.tailoring?.sourceProfileId;
+  const tailoredResultVisible = hasTailoredResult(active);
   const missingSourceSkills = currentSource && active ? currentSource.skills.data.filter(skill => !active.skills.data.some(current => current.id === skill.id)) : [];
   const restoreSourceSkill = (skillId: string) => {
     useAppStore.setState(state => {
@@ -148,7 +149,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
           <p>These remain in the source resume.</p>
         </details>}
       </details>}
-      {hasTailoredResult && <details className="tailor-review professional-review" open>
+      {tailoredResultVisible && <details className="tailor-review professional-review" open>
         <summary>Professional review checklist</summary>
         <p>This checklist supports human review; it is not an AI score, factual certification or guarantee of job fit. {active?.compositionChanges ? 'Review notes and comparison data are available for this copy.' : 'This older tailored copy may have incomplete historical comparison metadata; inspect the source and output directly.'}</p>
         <ul>{professionalReviewItems.map(([title, text]) => <li key={title}><strong>{title}:</strong> {title === 'Truth and scope' && notes.length ? 'Local review notes exist; inspect them first. ' : ''}{text}</li>)}</ul>
