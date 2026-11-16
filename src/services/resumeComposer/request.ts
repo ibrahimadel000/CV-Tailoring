@@ -5,6 +5,7 @@ import type { NaturalPacket } from './naturalDocument';
 import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
 import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorRequest';
+import { awaitAbortable, BoundedResponseError, readBoundedJsonResponse } from './boundedResponse';
 export const COMPOSITION_MODEL = 'gemini-3.8-flash';
 // Explicit, bounded development choices; never silently switch or retry in synthetic tests.
 export const COMPOSITION_MODELS = [
@@ -26,7 +27,6 @@ const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flas
 export function liveCompositionCandidates(model: CompositionModel): CompositionModel[] {
   return [model, ...LIVE_FALLBACKS.filter(m => m !== model)];
 }
-import { awaitAbortable, BoundedResponseError, readBoundedJsonResponse } from './boundedResponse';
 
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');

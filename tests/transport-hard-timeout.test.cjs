@@ -15,7 +15,7 @@ for(const phase of ['fetch','success body','error body']) test(`deadline settles
  global.setTimeout=(fn,ms,...args)=>ms===300000?(fire=fn,timerHandle):oldSet(fn,ms,...args);
  global.clearTimeout=h=>h===timerHandle?undefined:oldClear(h);
  global.fetch=()=>{calls++;if(phase==='fetch')return new Promise(resolve=>{release=()=>resolve(new Response('',{status:503}));ready();});
-  if(phase==='success body'){ready();return Promise.resolve({ok:true,json:()=>new Promise(resolve=>{release=()=>resolve({candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]}}]});})});}
+  if(phase==='success body'){const stream=new ReadableStream({start(){ready();},cancel(){}});release=()=>{};return Promise.resolve(new Response(stream,{status:200}));}
   let cancelled=false;const stream=new ReadableStream({start(c){release=()=>{if(!cancelled)c.close();};ready();},cancel(){cancelled=true;}});return Promise.resolve(new Response(stream,{status:429}));};
  try{
   const p=prepareNaturalComposition(createSampleProfile('Fictional'),job),task=requestComposition(p,new AbortController().signal);
@@ -32,7 +32,7 @@ for (const phase of ['fetch','success body']) test(`cancellation settles uncoope
  global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
  const late={candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]}}]};
  global.fetch=()=>{calls++;if(phase==='fetch')return new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify(late),{status:200}));ready();});
-  ready();return Promise.resolve({ok:true,json:()=>new Promise(resolve=>{release=()=>resolve(late)})});};
+  const stream=new ReadableStream({start(){ready();},cancel(){}});release=()=>{};return Promise.resolve(new Response(stream,{status:200}));};
  try { const controller=new AbortController(),p=prepareNaturalComposition(createSampleProfile('Fictional'),job),task=requestComposition(p,controller.signal);
   await readyPromise;await new Promise(r=>setImmediate(r));controller.abort();
   await within(a.rejects(task,e=>e.code==='cancelled'&&/cancelled/i.test(e.message)));
