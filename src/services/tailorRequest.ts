@@ -1,7 +1,7 @@
 import { TailorError, prepareTailorInput } from './tailorModel';
 import { buildDraftInput, draftOutputSchema, decodeDraft } from '@/services/composer/draft';
 import { draftSystem as systemInstruction } from '@/services/composer/draftPrompt';
-import { BoundedResponseError, readBoundedJsonResponse } from './boundedResponse';
+import { BoundedResponseError, readBoundedJsonResponse } from './resumeComposer/boundedResponse';
 
 export const TAILOR_MODEL = 'gemini-2.5-flash';
 export const REQUEST_TIMEOUT_MS = 60000;
@@ -20,9 +20,6 @@ export function saveTailorUsage(record: TailorUsageRecord) {
     const entries = Array.isArray(previous) ? previous : [];
     localStorage.setItem(USAGE_KEY, JSON.stringify([...entries.slice(-59), record]));
   } catch { /* Diagnostics must never fail the resume operation. */ }
-}
-export function clearTailorUsage() {
-  try { localStorage.removeItem(USAGE_KEY); } catch { /* Privacy cleanup must not block deletion. */ }
 }
 export function readLatestTailorUsage(): TailorUsageRecord | null {
   try {
