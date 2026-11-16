@@ -42,6 +42,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
     });
   };
   const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  const [consent, setConsent] = useState(false);
   const [keepSourceWording, setKeepSourceWording] = useState(false);
   const [allowSourceReorder, setAllowSourceReorder] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
@@ -60,6 +61,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const summaryDetails = useRef<HTMLDetailsElement>(null), summaryHeading = useRef<HTMLElement>(null);
   const syncComparison = () => setComparing(!!(changeDetails.current?.open && (comparisonDetails.current?.open || summaryDetails.current?.open)));
   useEffect(() => { syncComparison(); }, [activeId, hasCurrentSource]);
+  useEffect(() => { setConsent(false); }, [active, activeId, job, model]);
   useEffect(() => {
     if (!reviewComparisonRequest || !changeDetails.current || !comparisonDetails.current) return;
     changeDetails.current.open = true;
@@ -88,7 +90,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const connection = getTailorConnection();
   const stopMessage = /^(Request timed out\.|Cancelled\.|Composition cancelled;)/.test(message);
   async function tailor() {
-    if (controller.current || !active) return;
+    if (controller.current || !active || !consent) return;
     selectedModel.current = model;
     const task = new AbortController(); controller.current = task;
     const previousUsageId = readLatestTailorUsage()?.id;
@@ -170,7 +172,8 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       {!!notes.length && <details className="tailor-review"><summary>Content review notes · {notes.length}</summary><p>Limited local checks, not factual verification. Review the wording in the editor.</p>{notes.map((n, i) => <p key={i}>{n}</p>)}</details>}
     </div>
     <footer className="tailor-footer">{stopMessage && <div className="tailor-feedback" role="status"><p>{message}</p></div>}<div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? 'Writing your tailored copy…' : connection.ready ? previewLabel : 'AI server/setup required'}</div>
-      {busy ? <button className="secondary-button" onClick={() => { controller.current?.abort(); runner.current?.cancel(); }}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
+      {!busy && <label className="tailor-consent"><input type="checkbox" checked={consent} disabled={!connection.ready || !active || job.trim().length < 40} onChange={e => setConsent(e.target.checked)} /><span>I understand that the current professional resume content and this job description will be sent to Google. Fallback may send the same content again; quota or charges may apply. I will review the result before export.</span></label>}
+      {busy ? <button className="secondary-button" onClick={() => { controller.current?.abort(); runner.current?.cancel(); }}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || !consent || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
       {busy && <p><Loader2 size={14} className="spin" />Tailoring in progress. Automatic model fallback may occur after a temporary server error or output-limit response.</p>}
       <p>Tailor CV sends professional resume content and this job to Google; automatic fallback may send the same content again. Contact fields, photos and private-note sections are excluded, but personal information typed into professional content or the job can be sent. Check both before tailoring. Free-tier quota may apply. No interview or extra AI review is required. New text is not factually certified. Edit and review before export.</p>
     </footer>
