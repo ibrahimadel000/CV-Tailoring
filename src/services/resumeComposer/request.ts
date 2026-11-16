@@ -102,7 +102,15 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
         checkDeadline();
         throw new TailorError('provider', message);
       }
-      body = await awaitAbortable(response.json(), controller.signal);
+      // JSON parsing can outlive an abort in a non-cooperative adapter. Ask the
+      // response body to release as soon as cancellation wins, and repeat the
+      // best-effort cleanup if the parser resolves late.
+      try {
+        body = await awaitAbortable(response.json(), controller.signal, () => { void response?.body?.cancel().catch(() => {}); });
+      } catch (error) {
+        if (controller.signal.aborted) void response?.body?.cancel().catch(() => {});
+        throw error;
+      }
       checkDeadline();
       const u = body?.usageMetadata ?? {};
       const count = (k: string) => Number.isSafeInteger(u[k]) && u[k] >= 0 ? u[k] as number : undefined;

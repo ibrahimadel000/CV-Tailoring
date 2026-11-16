@@ -59,6 +59,15 @@ test('late fetch response body is cancelled and cannot trigger a fallback', asyn
  finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
 });
 
+test('aborted JSON parsing releases a non-cooperative response body', async()=>{
+ const oldFetch=global.fetch,oldStorage=global.localStorage;let release,ready,cancelled=false,calls=0;const storage=new Map();
+ const readyPromise=new Promise(r=>ready=r);
+ global.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+ global.fetch=()=>{calls++;ready();return Promise.resolve({ok:true,body:{cancel(){cancelled=true;return Promise.resolve();}},json:()=>new Promise(r=>release=()=>r({candidates:[{finishReason:'STOP',content:{parts:[{text:'{}'}]}}]}))});};
+ try{const controller=new AbortController(),p=prepareNaturalComposition(createSampleProfile('Fictional'),job),task=requestComposition(p,controller.signal);await readyPromise;await new Promise(r=>setImmediate(r));controller.abort();await within(a.rejects(task,e=>e.code==='cancelled'));a.equal(cancelled,true);release();await new Promise(r=>setImmediate(r));a.equal(calls,1);}
+ finally{global.fetch=oldFetch;if(oldStorage===undefined)delete global.localStorage;else global.localStorage=oldStorage;}
+});
+
 for(const phase of ['pending read','oversized body','oversized header']) test(`abort or size limit releases diagnostic stream lock: ${phase}`,async()=>{
  const {providerFailureMessage}=get('services/resumeComposer/providerDiagnostics');let cancelled=false;
  const stream=new ReadableStream({start(c){if(phase==='oversized body')c.enqueue(new Uint8Array(32769));},cancel(){cancelled=true;return new Promise(()=>{});}});
