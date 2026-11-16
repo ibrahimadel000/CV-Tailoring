@@ -49,7 +49,7 @@ test('legacy tailored copy renders the advisory professional review checklist', 
   legacy.targetJob = 'Fictional job description for browser coverage.';
   legacy.tailoring = {
     sourceProfileId: normalizedSource.profileId,
-    requestKey: 'legacy-checklist-fixture',
+    requestKey: 'a'.repeat(64),
     jobTitle: 'Fictional role', company: 'Fictional organization',
     createdAt: new Date().toISOString(), model: 'gemini-2.5-flash',
     warnings: [], missingRequirements: [], requirements: [], changes: [], summaryEvidence: [],
@@ -71,5 +71,51 @@ test('legacy tailored copy renders the advisory professional review checklist', 
   await page.reload();
   await expect(page.getByText('Professional review checklist', { exact: true })).toBeVisible();
   await expect(page.getByText(/older tailored copy may have incomplete historical comparison metadata/)).toBeVisible();
-  await expect(page.getByText('Truth and scope', { exact: true })).toBeVisible();
+  for (const label of ['Truth and scope', 'Job relevance', 'Coverage', 'Clarity', 'User control', 'Preview and export']) {
+    await expect(page.getByText(label, { exact: true })).toBeVisible();
+  }
+
+  const older = JSON.parse(JSON.stringify(normalizedSource));
+  older.profileId = crypto.randomUUID();
+  older.baseProfileId = normalizedSource.profileId;
+  older.profileName = 'Checklist Older Copy';
+  older.targetJob = 'Fictional older tailoring job';
+  older.matchScore = 0.5;
+  delete older.tailoring; delete older.compositionChanges;
+  await page.evaluate(async ({ profiles, activeId, profileKey, activeKey }) => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('keyval-store', 1);
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('keyval', 'readwrite'), store = tx.objectStore('keyval');
+        store.put(profiles, profileKey); store.put(activeId, activeKey);
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+      });
+    } finally { db.close(); }
+  }, { profiles: [normalizedSource, legacy, older], activeId: older.profileId, profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
+  await page.reload();
+  await expect(page.getByText('Professional review checklist', { exact: true })).toBeVisible();
+
+  const ordinary = JSON.parse(JSON.stringify(normalizedSource));
+  ordinary.profileId = crypto.randomUUID();
+  ordinary.baseProfileId = normalizedSource.profileId;
+  ordinary.profileName = 'Checklist Ordinary Duplicate';
+  delete ordinary.targetJob; delete ordinary.matchScore; delete ordinary.tailoring; delete ordinary.compositionChanges;
+  await page.evaluate(async ({ profiles, activeId, profileKey, activeKey }) => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('keyval-store', 1);
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('keyval', 'readwrite'), store = tx.objectStore('keyval');
+        store.put(profiles, profileKey); store.put(activeId, activeKey);
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+      });
+    } finally { db.close(); }
+  }, { profiles: [normalizedSource, legacy, older, ordinary], activeId: ordinary.profileId, profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
+  await page.reload();
+  await expect(page.getByText('Professional review checklist', { exact: true })).toHaveCount(0);
 });
