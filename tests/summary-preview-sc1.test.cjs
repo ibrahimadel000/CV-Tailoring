@@ -18,7 +18,8 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
  return {...module.exports,records};
 }
 const signal=()=>new AbortController().signal;
-const complete=raw=>({ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}})});
+const jsonResponse=body=>new Response(JSON.stringify(body),{status:200,headers:{'content-type':'application/json'}});
+const complete=raw=>jsonResponse({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}});
 test('single-draft prompt and UI visibly name the actual experimental preview/model',()=>{
  a(instructions.includes('one focused, readable resume'));a(instructions.includes('not independent proof'));a(instructions.includes('not candidate facts'));
  const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental tailoring preview'));a(!ui.includes('Gemini 2.5 Flash'));
@@ -39,7 +40,7 @@ for(const status of [429,503])test('HTTP'+status+' stops one fetch, records fail
  await a.rejects(x.requestComposition(fakePacket,signal()),/No automatic retry/);a.equal(calls,1);a.equal(x.records[0].status,'failed');
 });
 for(const [label,body] of [['multiple',{candidates:[{finishReason:'STOP'},{finishReason:'STOP'}]}],['partial',{candidates:[{finishReason:'MAX_TOKENS'}]}],['bad JSON',{candidates:[{finishReason:'STOP',content:{parts:[{text:'bad-json'}]}}]}]])test('invalid response '+label+' never returns partial content',async()=>{
- let calls=0;const x=adapter(async()=>{calls++;return {ok:true,json:async()=>body};});await a.rejects(x.requestComposition(fakePacket,signal()));a.equal(calls,1);a.equal(x.records[0].status,'failed');
+ let calls=0;const x=adapter(async()=>{calls++;return jsonResponse(body);});await a.rejects(x.requestComposition(fakePacket,signal()));a.equal(calls,1);a.equal(x.records[0].status,'failed');
 });
 test('300s deadline aborts pending fetch and reports timeout with no retry',async()=>{
  let fire,calls=0;const handle={};const x=adapter(async(_url,options)=>{calls++;return new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')));fire();});},{timers:{setTimeout:(fn,ms)=>{a.equal(ms,300000);fire=fn;return handle;},clearTimeout:id=>a.equal(id,handle)}});
