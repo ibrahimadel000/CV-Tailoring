@@ -15,7 +15,7 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
  const module={exports:{}};
  vm.runInNewContext(code,{module,mocks:{providerFailureMessage:async res=>`Provider HTTP ${res.status}. No automatic retry.`,singleDraftInstructions:instructions,
   prepareSingleDraftRequest:p=>{a.deepEqual(p,fakePacket);return {wire:JSON.stringify(fakePacket),responseSchema:fakeSchema};},TailorError,getTailorConnection:()=>({ready:ready&&development}),saveTailorUsage:r=>records.push(JSON.parse(JSON.stringify(r)))},
-  fetch:fetchImpl,AbortController,DOMException,performance,crypto:global.crypto,setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout});
+  fetch:fetchImpl,AbortController,DOMException,TextDecoder,performance,crypto:global.crypto,setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout});
  return {...module.exports,records};
 }
 const signal=()=>new AbortController().signal;
