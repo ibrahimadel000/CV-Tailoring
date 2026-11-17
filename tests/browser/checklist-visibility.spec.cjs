@@ -119,3 +119,40 @@ test('legacy tailored copy renders the advisory professional review checklist', 
   await page.reload();
   await expect(page.getByText('Professional review checklist', { exact: true })).toHaveCount(0);
 });
+
+test('current composition copy keeps the checklist visible and source switching hides it', async ({ page }) => {
+  const source = createSampleProfile('Checklist Current Source');
+  await openAndSeed(page, source);
+  const current = JSON.parse(JSON.stringify(source));
+  current.profileId = crypto.randomUUID();
+  current.baseProfileId = source.profileId;
+  current.profileName = 'Checklist Current Copy';
+  current.version = source.version + 1;
+  current.compositionChanges = {
+    mode: 'rewrite', summary: 'changed', experience: 'unchanged', projects: 'empty',
+    skills: { retained: 0, excluded: [], added: 0, reordered: false, regrouped: false },
+  };
+  await page.evaluate(async ({ profiles, activeId, profileKey, activeKey }) => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('keyval-store', 1);
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('keyval', 'readwrite'), store = tx.objectStore('keyval');
+        store.put(profiles, profileKey); store.put(activeId, activeKey);
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+      });
+    } finally { db.close(); }
+  }, { profiles: [source, current], activeId: current.profileId, profileKey: PROFILE_KEY, activeKey: ACTIVE_KEY });
+  await page.reload();
+  const checklist = page.getByText('Professional review checklist', { exact: true });
+  await expect(checklist).toBeVisible();
+  for (const label of ['Truth and scope', 'Job relevance', 'Coverage', 'Clarity', 'User control', 'Preview and export']) {
+    await expect(page.getByText(`${label}:`, { exact: true })).toBeVisible();
+  }
+  await page.getByLabel('Source resume', { exact: true }).selectOption(source.profileId);
+  await expect(checklist).toHaveCount(0);
+  await page.getByLabel('Source resume', { exact: true }).selectOption(current.profileId);
+  await expect(checklist).toBeVisible();
+});
