@@ -4,10 +4,15 @@ import { TailorError } from '@/services/tailorModel';
 import { validateDraft, type Source, type Draft } from './engine';
 export type Choices = { summary: boolean; skills: boolean; entries: string[] };
 export function defaultChoices(draft: Draft): Choices { return { summary: true, skills: true, entries: [...draft.experience, ...draft.projects].map(e => e.id) }; }
+/** Imported leftovers are retained on the source for recovery, but are not resume content. */
+function removeImportedDetails(out: CVProfile): void {
+  out.customSections = out.customSections?.filter(section => section.title.trim().toLowerCase() !== 'imported details');
+}
 export function bindDraft(source: CVProfile, facts: Source, draft: Draft): CVProfile {
   const checked = validateDraft(facts, draft);
   if (checked.issues.length) throw new TailorError('invalid', 'The draft does not match the selected source. Nothing was saved.');
   const out: CVProfile = JSON.parse(JSON.stringify(source));
+  removeImportedDetails(out);
   out.summary.data = draft.summary.text;
   for (const section of ['experience', 'projects'] as const) {
     if (source[section].isLocked) continue;
@@ -38,6 +43,7 @@ export function reviewedCopy(source: CVProfile, candidate: CVProfile, draft: Dra
   const allowed = new Set([...draft.experience, ...draft.projects].map(e => e.id));
   if (new Set(choices.entries).size !== choices.entries.length || choices.entries.some(id => !allowed.has(id))) throw new TailorError('invalid', 'Invalid review choices. Nothing was saved.');
   const out: CVProfile = JSON.parse(JSON.stringify(source));
+  removeImportedDetails(out);
   if (choices.summary && !source.summary.isLocked) out.summary.data = candidate.summary.data;
   if (choices.skills && !source.skills.isLocked) out.skills.data = JSON.parse(JSON.stringify(candidate.skills.data));
   for (const section of ['experience', 'projects'] as const) {
