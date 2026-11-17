@@ -7,6 +7,15 @@ import { summarizeChanges, summarizeProposal } from './changeSummary';
 import { assertExactSourceFits, exactSourceWording } from './exactSourceWording';
 
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
+// A tailored copy must change the professional narrative, not only its skill
+// inventory. Skill selection alone can make a copy look different while leaving
+// the profile and all work/project evidence untouched. Treat that result as
+// unchanged so the user is never handed a misleading tailored PDF.
+const narrativeContent = (profile: CVProfile) => JSON.stringify([
+  profile.summary.data,
+  profile.experience.data.map(entry => [entry.description || '', entry.bullets.map(bullet => bullet.text)]),
+  profile.projects.data.map(entry => entry.bullets.map(bullet => bullet.text)),
+]);
 export type ComposeProvider = (packet: NaturalPacket, signal: AbortSignal) => Promise<unknown>;
 export type Repository = {
   readActive(): CVProfile | undefined;
@@ -50,8 +59,13 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         const result = keepSourceWording ? exactSourceWording(profile, compiled, parsed, allowSourceReorder) : compiled;
         // These are explicitly pre-check proposal counts, not copy changes.
         const proposalComparison = summarizeProposal(packet.source, parsed);
-        if (professionalContent(result.candidate) === professionalContent(profile)) {
+        const narrativeUnchanged = narrativeContent(result.candidate) === narrativeContent(profile);
+        if (professionalContent(result.candidate) === professionalContent(profile) || (!keepSourceWording && narrativeUnchanged)) {
           // Keeping already-good wording is a valid outcome, not an AI failure.
+          // In rewrite mode, a skill-only delta is also not a tailored copy: it
+          // leaves the profile and work/project evidence untouched. Do not save
+          // a misleading duplicate; the source remains available for retry after
+          // the user reviews the job description or source content.
           return { ...result, proposalComparison, candidate: profile, status: 'unchanged' as const, profileId: profile.profileId };
         }
         const copy = result.candidate;
