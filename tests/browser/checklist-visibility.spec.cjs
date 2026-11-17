@@ -72,7 +72,7 @@ test('legacy tailored copy renders the advisory professional review checklist', 
   await expect(page.getByText('Professional review checklist', { exact: true })).toBeVisible();
   await expect(page.getByText(/older tailored copy may have incomplete historical comparison metadata/)).toBeVisible();
   for (const label of ['Truth and scope', 'Job relevance', 'Coverage', 'Clarity', 'User control', 'Preview and export']) {
-    await expect(page.getByText(label, { exact: true })).toBeVisible();
+    await expect(page.getByText(`${label}:`, { exact: true })).toBeVisible();
   }
 
   const older = JSON.parse(JSON.stringify(normalizedSource));
