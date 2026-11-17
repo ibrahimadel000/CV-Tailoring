@@ -6,7 +6,8 @@ export type Choices = { summary: boolean; skills: boolean; entries: string[] };
 export function defaultChoices(draft: Draft): Choices { return { summary: true, skills: true, entries: [...draft.experience, ...draft.projects].map(e => e.id) }; }
 /** Imported leftovers are retained on the source for recovery, but are not resume content. */
 function removeImportedDetails(out: CVProfile): void {
-  out.customSections = out.customSections?.filter(section => section.title.trim().toLowerCase() !== 'imported details');
+  if (!out.customSections) return;
+  out.customSections = out.customSections.filter(section => section.title.trim().toLowerCase() !== 'imported details');
 }
 export function bindDraft(source: CVProfile, facts: Source, draft: Draft): CVProfile {
   const checked = validateDraft(facts, draft);
