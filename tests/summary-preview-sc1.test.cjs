@@ -3,11 +3,12 @@ const {test}=require('node:test'),a=require('node:assert/strict'),fs=require('no
 const {stripTypeScriptTypes}=require('node:module'),crypto=require('node:crypto');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const bounded=read('src/services/resumeComposer/boundedResponse.ts'),request=read('src/services/resumeComposer/request.ts'),writer=read('src/services/resumeComposer/singleDraftRequest.ts');
+const stripCompatible=source=>source.replace("constructor(public readonly kind: 'oversized' | 'invalid', message: string) {","constructor(kind: 'oversized' | 'invalid', message: string) { this.kind = kind;");
 const instructions=vm.runInNewContext(writer.match(/export const singleDraftInstructions = (`[\s\S]*?`);/)[1]);
 const fakePacket={revision:'synthetic-offline-packet',source:{fictional:true}},fakeSchema={type:'OBJECT',properties:{synthetic:{type:'STRING'}}};
 function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clearTimeout}}={}){
  const records=[];class TailorError extends Error{constructor(code,message){super(message);this.code=code;}}
- let code=stripTypeScriptTypes(bounded+'\n'+request,{mode:'strip'}).replace(/^import .*;\s*$/gm,'')
+ let code=stripTypeScriptTypes(stripCompatible(bounded)+'\n'+request,{mode:'strip'}).replace(/^import .*;\s*$/gm,'')
   .replaceAll('import.meta.env.DEV',String(development)).replaceAll('import.meta.env.VITE_GEMINI_API_KEY',"'synthetic-preview-key'")
   .replace(/^export /gm,'');
  code='const {providerFailureMessage,singleDraftInstructions,prepareSingleDraftRequest,TailorError,getTailorConnection,saveTailorUsage}=mocks;\n'+code+'\nmodule.exports={requestComposition,COMPOSITION_MODEL,COMPOSITION_TIMEOUT_MS,COMPOSITION_PREVIEW_LABEL};';
