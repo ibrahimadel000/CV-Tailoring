@@ -60,7 +60,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         // These are explicitly pre-check proposal counts, not copy changes.
         const proposalComparison = summarizeProposal(packet.source, parsed);
         const narrativeUnchanged = narrativeContent(result.candidate) === narrativeContent(profile);
-        if (professionalContent(result.candidate) === professionalContent(profile) || (!keepSourceWording && narrativeUnchanged)) {
+        if (professionalContent(result.candidate) === professionalContent(profile) || (!keepSourceWording && !profile.summary.isLocked && narrativeUnchanged)) {
           // Keeping already-good wording is a valid outcome, not an AI failure.
           // In rewrite mode, a skill-only delta is also not a tailored copy: it
           // leaves the profile and work/project evidence untouched. Do not save
