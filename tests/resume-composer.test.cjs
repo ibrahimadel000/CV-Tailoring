@@ -23,6 +23,20 @@ test('concurrent clicks blocked; compare-and-append failure does not commit',asy
 test('provider/contract failure never retries or stores an output',async()=>{for(const value of ['error','invalid']){const r=rig(fixture(),async()=>{if(value==='error')throw Error('synthetic provider 503');return{incomplete:true};});await assert.rejects(r.runner.run(job,new AbortController().signal));assert.equal(r.calls,1);assert.equal(r.profiles.length,1);}});
 test('aborted before start and invalid inputs make zero provider calls',async()=>{const r=rig(),c=new AbortController();c.abort();await assert.rejects(r.runner.run(job,c.signal));await assert.rejects(r.runner.run('short',new AbortController().signal));assert.equal(r.calls,0);});
 test('unchanged output creates no redundant copy',async()=>{const p=fixture(),r=rig(p,packet=>{const raw=written(packet);raw.summary={text:p.summary.data,sourceIds:['summary']};raw.skillIds=packet.source.skillIds;return raw;});const result=await r.runner.run(job,new AbortController().signal);assert.equal(result.status,'unchanged');assert.equal(result.profileId,p.profileId);assert.deepEqual(result.candidate,p);assert.equal(r.profiles.length,1);});
+
+test('skill-only tailoring does not save a misleading duplicate copy',async()=>{
+ const p=fixture(),r=rig(p,packet=>{
+   const raw=written(packet);
+   raw.summary={text:p.summary.data,sourceIds:['summary']};
+   raw.skillIds=packet.source.skillIds.slice(1);
+   return raw;
+ });
+ const result=await r.runner.run(job,new AbortController().signal);
+ assert.equal(result.status,'unchanged');
+ assert.equal(result.profileId,p.profileId);
+ assert.deepEqual(result.candidate,p);
+ assert.equal(r.profiles.length,1);
+});
 test('qualifier loss is flagged, not silently repaired or certified as factual',()=>{const p=fixture(),raw=written(core.prepareComposition(p,job));raw.summary={text:'Investigated Laravel form defects.',sourceIds:['work_1_b1']};const out=core.compileComposition(p,raw);assert(out.warnings.some(w=>w.path==='summary'));assert.equal(out.candidate.summary.data,raw.summary.text);});
 test('entry scope loss is advisory and never repaired silently',()=>{const p=fixture(),raw=written(core.prepareComposition(p,job));raw.entries[0].bullets[0].text='Investigated Laravel form defects.';const out=core.compileComposition(p,raw);assert(out.warnings.some(w=>w.path==='experience.0.bullets.0'));assert.equal(out.candidate.experience.data[0].bullets[0].text,raw.entries[0].bullets[0].text);});
 test('explicit limitation: valid citations do not prove claims; structural acceptance is NOT semantic certification',()=>{const p=fixture(),raw=written(core.prepareComposition(p,job));raw.summary={text:'Designed production automated testing systems.',sourceIds:['work_1_b2']};const out=core.compileComposition(p,raw);assert.equal(out.candidate.summary.data,raw.summary.text);assert.equal(out.warnings.length,0);/* Deliberately exposes a quality gap, not a production acceptance case. */});
@@ -41,7 +55,7 @@ test('single composer transport: bound schema, one intercepted request, no conta
  calls=0;global.fetch=async()=>{calls++;throw Error('must not send')};const c=new AbortController();c.abort();await assert.rejects(requestComposition(packet,c.signal));await assert.rejects(requestComposition({...packet,revision:'stale'},new AbortController().signal));assert.equal(calls,0);
  }finally{global.fetch=oldFetch;}
 });
-test('active one-button UI uses current editable source, not old two-stage review',()=>{const ui=fs.readFileSync(path.join(root,'src/components/builder/ComposerTailorWorkspace.tsx'),'utf8');assert(ui.includes('createStoreComposer((packet, signal) => requestComposition(packet, signal, selectedModel.current))'));assert(ui.includes('selectedModel.current = model')); assert(ui.includes('Tailor CV'));assert(!ui.includes('chooseContent'));assert(!ui.includes('writeContent'));assert(!ui.includes('resolveTailorSource'));assert(ui.includes('controller.current?.abort()'));const studio=fs.readFileSync(path.join(root,'src/components/builder/BuilderStudio.tsx'),'utf8');assert(studio.includes("from './ComposerTailorWorkspace'"));assert(studio.includes("setExpanded('summary')"));});
+test('active one-button UI uses current editable source, not old two-stage review',()=>{const ui=fs.readFileSync(path.join(root,'src/components/builder/ComposerTailorWorkspace.tsx'),'utf8');assert(ui.includes('createStoreComposer((packet, signal) => requestComposition(packet, signal, selectedModel.current)'));assert(ui.includes('selectedModel.current = model')); assert(ui.includes('Tailor CV'));assert(!ui.includes('chooseContent'));assert(!ui.includes('writeContent'));assert(!ui.includes('resolveTailorSource'));assert(ui.includes('controller.current?.abort()'));const studio=fs.readFileSync(path.join(root,'src/components/builder/BuilderStudio.tsx'),'utf8');assert(studio.includes("from './ComposerTailorWorkspace'"));assert(studio.includes("setExpanded('summary')"));});
 test('request adapter blocks embedded contact or credentials before fetch',async()=>{
  const {requestComposition}=m('services/resumeComposer/request'), natural=m('services/resumeComposer/naturalDocument'), oldFetch=global.fetch;let calls=0;
  try{global.fetch=async()=>{calls++;throw Error('No network should occur');};const p=fixture();p.experience.data[0].bullets[0].text='Work contact: person@example.invalid';const packet=natural.prepareNaturalComposition(p,job);await assert.rejects(requestComposition(packet,new AbortController().signal),e=>e.code==='input'&&e.message.includes('Nothing was sent')&&!e.message.includes('person@example.invalid'));assert.equal(calls,0);}finally{global.fetch=oldFetch;}
