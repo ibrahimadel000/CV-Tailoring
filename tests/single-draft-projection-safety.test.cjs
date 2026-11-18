@@ -19,6 +19,13 @@ function setup() {
   return p;
 }
 
+test('Product Operations Analyst tailoring keeps responsibility evidence explicit', () => {
+  a.match(d.singleDraftInstructions, /directly supported, adjacent, or unsupported/);
+  a.match(d.singleDraftInstructions, /reporting, dashboards, KPIs, spreadsheets/);
+  a.match(d.singleDraftInstructions, /database name as proof of SQL reporting/);
+  a.match(d.singleDraftInstructions, /finance or product partnership/);
+});
+
 test('summary schema removes skill-only IDs when other citation IDs exist without losing skill selection', () => {
   const p = setup(), packet = n.prepareNaturalComposition(p, job), { wire, responseSchema } = d.prepareSingleDraftRequest(packet), w = JSON.parse(wire);
   a.deepEqual(w.guide.skillListOnlyIds, ['skill_2']);
