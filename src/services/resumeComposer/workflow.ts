@@ -22,8 +22,13 @@ export type Repository = {
   // Synchronous compare-and-append. Persistence is a separate, observable boundary.
   appendIfCurrent(snapshot: string, copy: CVProfile): boolean;
 };
+type ActiveComposition = {
+  token: AbortController;
+  providerSettled: boolean;
+  runFinished: boolean;
+};
 export function createCompositionRunner(repository: Repository, provider: ComposeProvider) {
-  let current: AbortController | undefined;
+  let current: ActiveComposition | undefined;
   const cancellable = (task: Promise<unknown>, signal: AbortSignal) => new Promise<unknown>((resolve, reject) => {
     const cancelled = () => { signal.removeEventListener('abort', cancelled); reject(new CompositionError('cancelled', 'Composition cancelled; nothing was saved. The provider may still have processed or charged the request.')); };
     // Always observe late provider rejection even if cancellation already won.
@@ -31,7 +36,7 @@ export function createCompositionRunner(repository: Repository, provider: Compos
     if (signal.aborted) cancelled(); else signal.addEventListener('abort', cancelled, { once: true });
   });
   return {
-    cancel() { current?.abort(); current = undefined; },
+    cancel() { current?.token.abort(); },
     // Opt-in keeps native wording; it does not validate the source or ordering.
     async run(job: string, signal: AbortSignal, options: { exactSourceWording?: boolean; allowSourceReorder?: boolean } = {}) {
       const keepSourceWording = options.exactSourceWording === true;
@@ -42,16 +47,29 @@ export function createCompositionRunner(repository: Repository, provider: Compos
       const snapshot = JSON.stringify(original), profile: CVProfile = JSON.parse(snapshot);
       const packet = prepareNaturalComposition(profile, job);
       if (keepSourceWording) assertExactSourceFits(packet.source);
-      const token = new AbortController(); current = token;
+      const token = new AbortController();
+      const active: ActiveComposition = { token, providerSettled: false, runFinished: false };
+      const release = () => {
+        if (active.runFinished && active.providerSettled && current === active) current = undefined;
+      };
+      current = active;
       const abort = () => token.abort();
       signal.addEventListener('abort', abort, { once: true });
       const ensureCurrent = () => {
-        if (signal.aborted || token.signal.aborted || current !== token) throw new CompositionError('cancelled', 'Composition cancelled; nothing was saved. The provider may still have processed or charged the request.');
+        if (signal.aborted || token.signal.aborted || current !== active) throw new CompositionError('cancelled', 'Composition cancelled; nothing was saved. The provider may still have processed or charged the request.');
         if (JSON.stringify(repository.readActive()) !== snapshot) throw new CompositionError('stale', 'The active resume changed; nothing was saved.');
       };
       try {
         ensureCurrent();
-        const response = await cancellable(provider(packet, token.signal), token.signal); // Exactly one invocation.
+        // Keep the runner occupied until the underlying provider settles. The
+        // caller-facing cancellation may reject immediately, but clearing the
+        // lock here would allow a second in-flight provider request.
+        const providerTask = Promise.resolve().then(() => provider(packet, token.signal));
+        void providerTask.then(
+          () => { active.providerSettled = true; release(); },
+          () => { active.providerSettled = true; release(); },
+        );
+        const response = await cancellable(providerTask, token.signal); // Exactly one invocation.
         ensureCurrent();
         const compiled = compileNaturalComposition(profile, response, packet.job);
         // Compilation must succeed before the optional source-only projection.
@@ -92,7 +110,11 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         ensureCurrent();
         if (!repository.appendIfCurrent(snapshot, copy)) throw new CompositionError('stale', 'Source changed at commit; nothing was saved.');
         return { ...result, proposalComparison, status: 'created' as const, profileId: copy.profileId };
-      } finally { signal.removeEventListener('abort', abort); if (current === token) current = undefined; }
+      } finally {
+        signal.removeEventListener('abort', abort);
+        active.runFinished = true;
+        release();
+      }
     },
   };
 }
