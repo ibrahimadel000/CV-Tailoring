@@ -9,8 +9,8 @@ import { assertExactSourceFits, exactSourceWording } from './exactSourceWording'
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
 // A tailored copy must change the professional narrative, not only its skill
 // inventory. Skill selection alone can make a copy look different while leaving
-// the profile and all work/project evidence untouched. Treat that result as
-// unchanged so the user is never handed a misleading tailored PDF.
+// the profile and all work/project evidence untouched. Treat a clean skill-only
+// result as unchanged so the user is never handed a misleading tailored PDF.
 const narrativeContent = (profile: CVProfile) => JSON.stringify([
   profile.summary.data,
   profile.experience.data.map(entry => [entry.description || '', entry.bullets.map(bullet => bullet.text)]),
@@ -60,12 +60,15 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         // These are explicitly pre-check proposal counts, not copy changes.
         const proposalComparison = summarizeProposal(packet.source, parsed);
         const narrativeUnchanged = narrativeContent(result.candidate) === narrativeContent(profile);
-        if (professionalContent(result.candidate) === professionalContent(profile) || (!keepSourceWording && !profile.summary.isLocked && narrativeUnchanged)) {
+        // A skill-only result with no local review signal is not a meaningful
+        // tailored document. Keep it memory-only. If the compiler had to
+        // remove/recover content or found a qualification/normalization issue,
+        // preserve the copy and its notes so the user can inspect that result.
+        const hasReviewSignal = result.warnings.length > 0 || result.normalizations.length > 0 || result.summaryRemovals.length > 0;
+        if (professionalContent(result.candidate) === professionalContent(profile) || (!keepSourceWording && !profile.summary.isLocked && narrativeUnchanged && !hasReviewSignal)) {
           // Keeping already-good wording is a valid outcome, not an AI failure.
-          // In rewrite mode, a skill-only delta is also not a tailored copy: it
-          // leaves the profile and work/project evidence untouched. Do not save
-          // a misleading duplicate; the source remains available for retry after
-          // the user reviews the job description or source content.
+          // In rewrite mode, a clean skill-only delta is also not a tailored
+          // copy: it leaves the profile and work/project evidence untouched.
           return { ...result, proposalComparison, candidate: profile, status: 'unchanged' as const, profileId: profile.profileId };
         }
         const copy = result.candidate;
