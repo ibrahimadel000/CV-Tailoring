@@ -10,9 +10,9 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
  let code=stripTypeScriptTypes(request,{mode:'strip'}).replace(/^import .*;\s*$/gm,'')
   .replaceAll('import.meta.env.DEV',String(development)).replaceAll('import.meta.env.VITE_GEMINI_API_KEY',"'synthetic-preview-key'")
   .replace(/^export /gm,'');
- code='const {providerFailureMessage,singleDraftInstructions,prepareSingleDraftRequest,TailorError,getTailorConnection,saveTailorUsage}=mocks;\n'+code+'\nmodule.exports={requestComposition,COMPOSITION_MODEL,COMPOSITION_TIMEOUT_MS,COMPOSITION_PREVIEW_LABEL};';
+ code='const {BoundedResponseError,readBoundedJson,providerFailureMessage,singleDraftInstructions,prepareSingleDraftRequest,TailorError,getTailorConnection,saveTailorUsage}=mocks;\n'+code+'\nmodule.exports={requestComposition,COMPOSITION_MODEL,COMPOSITION_TIMEOUT_MS,COMPOSITION_PREVIEW_LABEL};';
  const module={exports:{}};
- vm.runInNewContext(code,{module,mocks:{providerFailureMessage:async res=>`Provider HTTP ${res.status}. No automatic retry.`,singleDraftInstructions:instructions,
+ vm.runInNewContext(code,{module,mocks:{BoundedResponseError:class BoundedResponseError extends Error{constructor(k,m){super(m);this.kind=k;}},readBoundedJson:async(res)=>res.json(),providerFailureMessage:async res=>`Provider HTTP ${res.status}. No automatic retry.`,singleDraftInstructions:instructions,
   prepareSingleDraftRequest:p=>{a.deepEqual(p,fakePacket);return {wire:JSON.stringify(fakePacket),responseSchema:fakeSchema};},TailorError,getTailorConnection:()=>({ready:ready&&development}),saveTailorUsage:r=>records.push(JSON.parse(JSON.stringify(r)))},
   fetch:fetchImpl,AbortController,DOMException,performance,crypto:global.crypto,setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout});
  return {...module.exports,records};
@@ -20,8 +20,8 @@ function adapter(fetchImpl,{ready=true,development=true,timers={setTimeout,clear
 const signal=()=>new AbortController().signal;
 const complete=raw=>({ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'NOT_FOR_EXPORT'},{text:JSON.stringify(raw)}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5}})});
 test('single-draft prompt and UI visibly name the actual experimental preview/model',()=>{
- a(instructions.includes('one focused, readable resume'));a(instructions.includes('not independent proof'));a(instructions.includes('not candidate facts'));
- const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Experimental tailoring preview'));a(!ui.includes('Gemini 2.5 Flash'));
+ a(instructions.includes('ONE sharp, truthful, job-targeted resume'));a(instructions.includes('JOB describes a vacancy, not the candidate'));
+ const ui=read('src/components/builder/ComposerTailorWorkspace.tsx');a(ui.includes('COMPOSITION_PREVIEW_LABEL'));a(ui.includes('Creates a tailored copy grounded in your real experience'));a(!ui.includes('Gemini 2.5 Flash'));
 });
 test('one actual adapter invocation uses3.5 Flash-Lite compatible settings, full packet/schema and candidate instructions',async()=>{
  let calls=0;const raw={summarySegments:[],entries:[],skillSelections:[]};
@@ -42,7 +42,7 @@ for(const [label,body] of [['multiple',{candidates:[{finishReason:'STOP'},{finis
  let calls=0;const x=adapter(async()=>{calls++;return {ok:true,json:async()=>body};});await a.rejects(x.requestComposition(fakePacket,signal()));a.equal(calls,1);a.equal(x.records[0].status,'failed');
 });
 test('300s deadline aborts pending fetch and reports timeout with no retry',async()=>{
- let fire,calls=0;const handle={};const x=adapter(async(_url,options)=>{calls++;return new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')));fire();});},{timers:{setTimeout:(fn,ms)=>{a.equal(ms,300000);fire=fn;return handle;},clearTimeout:id=>a.equal(id,handle)}});
+ let fire,calls=0;const handle={};const x=adapter(async(_url,options)=>{calls++;return new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')));fire();});},{timers:{setTimeout:(fn,ms)=>{a.equal(ms,90000);fire=fn;return handle;},clearTimeout:id=>a.equal(id,handle)}});
  await a.rejects(x.requestComposition(fakePacket,signal()),e=>e.code==='timeout');a.equal(calls,1);a.equal(x.records[0].reason,'timeout');
 });
 test('pre-cancelled request makes zero fetches',async()=>{let calls=0;const x=adapter(async()=>calls++),c=new AbortController();c.abort();await a.rejects(x.requestComposition(fakePacket,c.signal));a.equal(calls,0);});
@@ -51,7 +51,7 @@ test('metrics contain no packet, prompt, key or response document',async()=>{
  const x=adapter(async()=>complete({summarySegments:[{text:'FICTIONAL_PRIVATE_SENTINEL',sourceIds:['fictional']}],entries:[],skillSelections:[]}));await x.requestComposition(fakePacket,signal());
  for(const value of ['FICTIONAL_PRIVATE_SENTINEL','synthetic-preview-key',instructions])a(!JSON.stringify(x.records).includes(value));
 });
-for(const model of ['gemini-3-flash-preview','gemini-3.8-flash']) test('explicit '+model+' selection makes one request and records the selected model',async()=>{
+for(const model of ['gemini-3.6-flash','gemini-3.8-flash']) test('explicit '+model+' selection makes one request and records the selected model',async()=>{
  let calls=0;const x=adapter(async(url)=>{calls++;a(url.endsWith('/'+model+':generateContent'));return complete({summarySegments:[],entries:[],skillSelections:[]})});
  await x.requestComposition(fakePacket,signal(),model);a.equal(calls,1);a.equal(x.records[0].model,model);a.equal(x.records[0].attempts,1);
 });

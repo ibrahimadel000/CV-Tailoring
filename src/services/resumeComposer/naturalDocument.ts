@@ -138,8 +138,7 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
   // job-token match is a review signal, not evidence of work or proficiency.
   const coverage = explicitSkillCoverage(profile, source, job, doc.skillSelections);
   for (const item of coverage) {
-    doc.skillSelections.push({ id: item.id, category: item.category });
-    guarded.notes.push({ path: 'skillSelections', kind: 'review', message: `Kept your existing skill “${item.name}” because the job mentions “${item.token}”. This is a literal match, not a verified relevance or experience claim; review it.` });
+    guarded.notes.push({ path: 'skillSelections', kind: 'review', message: `Optional skill suggestion: your CV also lists “${item.name}” (matched “${item.token}” in the job); add it in the editor if relevant.` });
   }
   // Defense in depth: the guard already filtered and deduplicated selections.
   const warningsForCategory: { path: string; message: string }[] = [];
@@ -159,8 +158,11 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
     }
   }
   renderSummaryCapabilities(source, doc.summaryCapabilityIds, normalized.selected.map(s => s.id));
+  const conceptualSkill = /^(?:business operations|workflow automation|project management|strategic planning|technical documentation|system analysis|cross[-\s]?functional collaboration|process improvement|agile\s*\/\s*scrum|stakeholder management|problem solving)$/i;
   const boundary = applySummaryBoundary(source.evidence, profile.skills.data.flatMap((skill, i) =>
-    source.skillIds.includes(`skill_${i + 1}`) ? [{ id: `skill_${i + 1}`, name: skill.name }] : []), doc.summarySegments);
+    source.skillIds.includes(`skill_${i + 1}`) && !conceptualSkill.test(skill.name.trim())
+      ? [{ id: `skill_${i + 1}`, name: skill.name }]
+      : []), doc.summarySegments);
   const warnings: { path: string; message: string }[] = [...guarded.notes.map(n => ({ path: n.path, message: n.message })), ...warningsForCategory];
   const summaryRemovals = boundary.removals.map(removal => ({ ...removal, segmentIndex: guarded.summarySegmentIndices[removal.segmentIndex] }));
   for (const removal of summaryRemovals) warnings.push({ path: `summarySegments.${removal.segmentIndex}`, message: summaryRemovalMessage(removal) });

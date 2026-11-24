@@ -85,6 +85,7 @@ export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   const certs = p.certifications.data.filter(e => e.name.trim());
   if (certs.length) blocks.push({ id: 'certifications', title: 'Certifications', items: certs.map(e => ({ entryId: e.id, title: e.name, subtitle: e.issuer, date: e.date })) });
   for (const custom of p.customSections || []) {
+    if (custom.title.trim().toLowerCase() === 'imported details') continue;
     const paragraphs = custom.paragraphs.map(x => plainText(x)).filter(Boolean);
     const items: ResumeBlock['items'] = custom.kind === 'experience'
       ? (custom.entries || []).filter(e => e.title.trim() || e.organization.trim() || e.description.trim()).map(e => ({ entryId: e.id, title: plainText(e.title), subtitle: [plainText(e.organization), plainText(e.location)].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description) }))

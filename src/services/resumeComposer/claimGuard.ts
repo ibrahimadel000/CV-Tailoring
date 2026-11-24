@@ -1,8 +1,8 @@
 /**
  * Graceful, deterministic normalization of one AI document before native compilation.
- * It never writes new prose: every fallback restores the candidate's original passage
- * or omits generated text, and every change is reported for user review.
- * Literal checks are conservative signals, not semantic verification.
+ * Preserves hard truthfulness guards (unlisted tools/tech, unverified numbers, scope inversions,
+ * verbatim summary copies, cross-entry references) while avoiding false-positive reverts on
+ * conceptual/process skills (e.g. Business Operations, Workflow Automation, Project Management).
  */
 import type { Source } from '../contentEngine/engine';
 import { isEntryMetadata } from './references';
@@ -23,16 +23,20 @@ const empty = (): Paragraph => ({ text: '', sourceIds: [] });
 const unique = <T>(values: readonly T[]) => [...new Set(values)];
 const list = (terms: readonly string[]) => terms.slice(0, 3).map(t => `“${t}”`).join(', ');
 
+// Conceptual/process skills that represent general work methods rather than concrete software tools;
+// allow natural phrasing of these in summaries/bullets without triggering literal skill-collision reverts.
+const CONCEPTUAL_SKILL = /^(?:business operations|workflow automation|project management|strategic planning|technical documentation|system analysis|cross[-\s]?functional collaboration|process improvement|agile\s*\/\s*scrum|stakeholder management|problem solving)$/i;
+
 export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax: number, refsMax: number) {
   const notes: GuardNote[] = [];
   const facts = new Map(source.evidence.map(f => [f.id, f]));
-  const skillNames = source.evidence.filter(f => f.kind === 'skill').map(f => f.text.split(' — ')[0]);
+  const skillNames = source.evidence
+    .filter(f => f.kind === 'skill')
+    .map(f => f.text.split(' — ')[0])
+    .filter(name => !CONCEPTUAL_SKILL.test(name.trim()));
   const index: Term[] = buildTermIndex(skillNames);
-  // Work/project passages a summary or overview must synthesize, not repeat.
-  // Copying is always literally "supported", so grounding checks miss it.
   const narrative = source.evidence.filter(f => f.kind === 'achievement' || f.kind === 'role');
 
-  // Summary: valid, deduplicated references only; budgets enforced by omission, never truncation.
   let summarySegments: Paragraph[] = [];
   const summarySegmentIndices: number[] = [];
   if (source.locks.summary) {
@@ -47,9 +51,6 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that cited content not found in your CV.' });
         continue;
       }
-      // Apply the same literal signals used for work passages to the summary.
-      // A cited term or number is not proof of the claim's meaning or scope.
-      // Skill-only practice claims are checked separately by summaryBoundary.
       const cited = ids.map(id => facts.get(id)!);
       if (copiedPassage(text, narrative)) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that repeats one experience/project passage instead of introducing your background.' });
@@ -57,7 +58,6 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       }
       const support = cited.map(f => f.text);
       const citedNarrative = cited.filter(f => f.kind !== 'skill');
-      // Let the dedicated boundary handle and report its own removals.
       const boundaryWillRemove = !citedNarrative.length || skillNames.some(name => containsSkillName(text, name)
         && !citedNarrative.some(f => containsSkillName(f.text, name)));
       const signals = analyzeTerms(text, support, index);
@@ -89,7 +89,6 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
   }
   if (doc.summaryCapabilityIds?.length) notes.push({ path: 'summaryCapabilityIds', kind: 'ignored', message: 'Ignored a retired automatic skills list; skills stay in the Skills section.' });
 
-  // Entries: every unlocked entry exactly once; restore originals instead of failing.
   const unlocked = [
     ...(source.locks.experience ? [] : source.experience),
     ...(source.locks.projects ? [] : source.projects),
@@ -138,14 +137,12 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         return ids.map(original);
       }
       if (signals.splitPhrases.length) notes.push({ path: where, kind: 'review', message: `${label}: review ${list(signals.splitPhrases)}. The cited source uses a different word order; this literal match does not verify the claim or its scope.` });
-      return null; // accepted as written; no semantic verification
+      return null;
     };
     let overview = empty();
     if (u.overviewId && w.overview.text.trim()) {
       const text = w.overview.text.trim();
       const result = check({ text, sourceIds: w.overview.sourceIds }, `entries.${u.id}.overview`, true);
-      // An unchanged original may legitimately resemble its own bullet; a NEW
-      // overview that repeats one contribution adds no overview value.
       const repeatsOwnBullet = result === null && text !== facts.get(u.overviewId)!.text
         && copiedPassage(text, u.bulletIds.map(id => facts.get(id)!).filter(Boolean));
       if (repeatsOwnBullet) {
@@ -183,10 +180,6 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       notes.push({ path: `entries.${u.id}`, kind: 'restored', message: `${label}: kept the complete original entry because a rejected line could not be matched safely to its source.` });
       return originalEntry;
     }
-    // If a rejected split/combined passage causes an original to be restored,
-    // another accepted passage citing that same source can duplicate it. Restore
-    // the connected cited originals instead of trying to merge their meanings.
-    // Independent edits and valid splits with no restoration remain untouched.
     const originalText = (id: string) => facts.get(id)?.text;
     const changed = (p: Paragraph) => p.sourceIds.length !== 1 || p.text !== originalText(p.sourceIds[0]);
     let overlap = false, expanded = true;
@@ -217,7 +210,6 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     return { id: u.id, overview, bullets };
   });
 
-  // Skills: existing IDs only, first occurrence wins.
   let skillSelections = doc.skillSelections;
   if (source.locks.skills) {
     if (skillSelections.length) notes.push({ path: 'skillSelections', kind: 'ignored', message: 'Your skills are locked, so the AI skill selection was ignored.' });

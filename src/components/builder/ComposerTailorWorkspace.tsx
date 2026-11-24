@@ -18,7 +18,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile);
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
-  const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  const [job, setJob] = useState(''), [busy, setBusy] = useState(false), [elapsedSec, setElapsedSec] = useState(0), [message, setMessage] = useState('');
   const [notes, setNotes] = useState<string[]>([]);
   const [model, setModel] = useState<CompositionModel>(COMPOSITION_MODEL);
   const selectedModel = useRef<CompositionModel>(COMPOSITION_MODEL);
@@ -28,34 +28,55 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
   if (!runner.current) runner.current = createStoreComposer((packet, signal) => requestComposition(packet, signal, selectedModel.current));
   const controller = useRef<AbortController>(), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; controller.current?.abort(); runner.current?.cancel(); }; }, []);
+  useEffect(() => {
+    if (!busy) { setElapsedSec(0); return; }
+    const started = Date.now();
+    const interval = setInterval(() => setElapsedSec(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(interval);
+  }, [busy]);
   const connection = getTailorConnection();
+  function cancelTailor() {
+    const task = controller.current;
+    controller.current = undefined;
+    task?.abort();
+    runner.current?.cancel();
+    if (alive.current) {
+      setBusy(false);
+      setMessage('Tailoring cancelled. Your original resume is unchanged.');
+    }
+  }
   async function tailor() {
     if (controller.current || !active) return;
     selectedModel.current = model;
     const task = new AbortController(); controller.current = task;
-    setBusy(true); setMessage(''); setNotes([]);
+    setBusy(true); setElapsedSec(0); setMessage(''); setNotes([]);
     try {
       const result = await runner.current!.run(job, task.signal);
-      if (!alive.current) return;
+      if (!alive.current || controller.current !== task || task.signal.aborted) return;
       const notice = summaryBoundaryNotice(result.summaryRemovals.length, result.summarySegments.length);
       const reviewNotes = [...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)];
       setNotes(reviewNotes);
       const draft = result.proposalComparison;
-      const unchangedDetail = ` The AI proposed ${draft.proposed} work/project bullet lines; ${draft.different} did not exactly match a source passage in the same entry before local checks. This is not a quality or accuracy assessment.`;
-      setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : `The content was unchanged. No duplicate copy was created.${unchangedDetail}`) + (notice ? ` ${notice}` : ''));
+      const unchangedDetail = ` The AI proposed ${draft.proposed} work/project bullet lines; ${draft.different} differed from the source before local checks.`;
+      setMessage((result.status === 'created' ? 'A new editable copy is open. Your original is unchanged. Check the content before exporting; browser save status is shown above.' : `No meaningful narrative changes were produced, so no duplicate copy was created.${unchangedDetail}`) + (notice ? ` ${notice}` : ''));
       if (result.status === 'created') onCreated(result.profileId, notice, reviewNotes);
     } catch (e) {
-      if (alive.current) setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. No automatic retry. Check your original before trying again.');
+      if (!alive.current || controller.current !== task) return;
+      if (task.signal.aborted) {
+        setMessage('Tailoring cancelled. Your original resume is unchanged.');
+      } else {
+        setMessage(e instanceof CompositionError || e instanceof TailorError ? e.message : 'Could not complete tailoring. Check your original before trying again.');
+      }
     } finally { if (controller.current === task) { controller.current = undefined; if (alive.current) setBusy(false); } }
   }
   return <aside className="tailor-pane" aria-labelledby="tailor-heading" aria-busy={busy}>
     <header className="tailor-heading"><span className="tailor-mark"><Sparkles size={20} /></span><div><h2 id="tailor-heading">CV Tailor</h2><p>A focused resume from your real content.</p></div></header>
     <div className="tailor-scroll" role="region" aria-label="CV tailoring inputs" tabIndex={0}>
-      <div className="tailor-feedback" role="note"><strong>{previewLabel}</strong><p>Experimental tailoring preview. Review every claim; factual safety, writing quality and latency are not certified. Use fictional data while evaluating free-tier access.</p></div>
+      <div className="tailor-feedback" role="note"><strong>{previewLabel}</strong><p>Creates a tailored copy grounded in your real experience. Review every claim before exporting.</p></div>
       {message && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
       {active?.compositionChanges && <details className="tailor-review" open>
         <summary>What changed during tailoring</summary>
-        <p>This compares the copy with its source at the time it was made. Later edits are not included. It is not a quality or factual accuracy assessment.</p>
+        <p>This compares the copy with its source at the time it was made. Later edits are not included.</p>
         <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
         {currentSource && <details>
           <summary>Compare current summaries</summary>
@@ -75,7 +96,7 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
             {!profile.experience.data.length && !profile.projects.data.length && <p>No experience or project entries.</p>}
           </section>)}
         </details>}
-        {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry. These counts cover the first response for each unlocked entry, not quality or accuracy.</p>}
+        {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry.</p>}
         <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>
         {active.compositionChanges.skills.reordered && <p>Selected skills were reordered.</p>}
         {active.compositionChanges.skills.regrouped && <p>Some selected skills were moved to different groups.</p>}
@@ -89,17 +110,16 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
         <select id="composer-source" value={activeId ?? ''} disabled={busy} onChange={e => { setActive(e.target.value); setMessage(''); setNotes([]); }}>{profiles.map(p => <option key={p.profileId} value={p.profileId}>{p.profileName}</option>)}</select>
         <p>Uses the currently selected resume, including your edits. Creates a separate copy; your original, identity, dates, design and locked sections stay unchanged.</p>
         <button className="text-button" disabled={busy} onClick={onEditOriginal}>Open source editor</button>
-        <p>If you want to add a personal interest or career direction that is missing from the imported CV, explicitly write it in the source editor first. The job description and skill list do not establish your interests.</p>
         {active?.importedFrom && <button className="text-button" disabled={busy} onClick={() => onReviewImport(active.importedFrom!)}>Review imported content</button>}
       </div>
-      <div className="tailor-job"><label htmlFor="composer-model">AI model</label><select id="composer-model" disabled={busy} value={model} onChange={e => setModel(e.target.value as CompositionModel)}>{COMPOSITION_MODELS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select><p>Experimental selection. Availability, cost, and writing quality vary by model. One request to the selected model; no automatic fallback.</p></div>
+      <div className="tailor-job"><label htmlFor="composer-model">AI model</label><select id="composer-model" disabled={busy} value={model} onChange={e => setModel(e.target.value as CompositionModel)}>{COMPOSITION_MODELS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select><p>Availability, speed, and writing quality vary by model. Live transient 503 errors may fail over once to a backup Flash model.</p></div>
       <div className="tailor-job"><label htmlFor="composer-job">Job description</label><textarea id="composer-job" dir="auto" value={job} disabled={busy} maxLength={32000} placeholder="Paste the full job description…" onChange={e => setJob(e.target.value)} /><p>{job.length.toLocaleString()} / 32,000 characters. Minimum 40.</p></div>
-      {!!notes.length && <details className="tailor-review"><summary>Content review notes · {notes.length}</summary><p>Limited local checks, not factual verification. Review the wording in the editor.</p>{notes.map((n, i) => <p key={i}>{n}</p>)}</details>}
+      {!!notes.length && <details className="tailor-review"><summary>Content review notes · {notes.length}</summary><p>Review these highlighted notes in the editor before exporting.</p>{notes.map((n, i) => <p key={i}>{n}</p>)}</details>}
     </div>
-    <footer className="tailor-footer"><div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? 'Writing your tailored copy…' : connection.ready ? previewLabel : 'AI server/setup required'}</div>
-      {busy ? <button className="secondary-button" onClick={() => { controller.current?.abort(); runner.current?.cancel(); }}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
-      {busy && <p><Loader2 size={14} className="spin" />One request in progress. No automatic retry.</p>}
-      <p>Tailor CV sends professional resume content and this job to Google in one request. Contact fields, photos and private-note sections are excluded, but personal information typed into professional content or the job can be sent. Check both before tailoring. Free-tier quota may apply. No interview or extra AI review is required. New text is not factually certified. Edit and review before export.</p>
+    <footer className="tailor-footer"><div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? `Writing your tailored copy… (${elapsedSec}s)` : connection.ready ? previewLabel : 'AI server/setup required'}</div>
+      {busy ? <button className="secondary-button" onClick={cancelTailor}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
+      {busy && <p><Loader2 size={14} className="spin" />Request in progress ({elapsedSec}s). Click Cancel to stop.</p>}
+      <p>Tailor CV sends professional resume content and this job to Google. Contact fields, photos and private-note sections are excluded. Review your tailored copy before exporting.</p>
     </footer>
   </aside>;
 }

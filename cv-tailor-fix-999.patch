@@ -1,0 +1,28 @@
+diff --git a/src/services/resumeComposer/singleDraftRequest.ts b/src/services/resumeComposer/singleDraftRequest.ts
+index 52fce21..4be51bc 100644
+--- a/src/services/resumeComposer/singleDraftRequest.ts
++++ b/src/services/resumeComposer/singleDraftRequest.ts
+@@ -16,12 +16,12 @@ TRUTHFULNESS BOUNDARIES (strict):
+ - JOB describes a vacancy, not the candidate. Use only real facts from SOURCE. Never invent employers, titles, dates, metrics, numbers, tools, duties, seniority, or qualifications.
+ - A listed skill does not prove employer/project usage or proficiency (guide.skillListOnlyIds is only a literal hint, not proof) unless cited work/project bullets support it.
+ - Preserve incomplete degrees ("in progress", "Expected YYYY"), course-only/academic limits, and actual scope/attribution.
+-- Never copy redaction placeholders like [link omitted] or [contact omitted].
++- Do not copy [link omitted] or [contact omitted] or infer their contents.
+ 
+ PROFESSIONAL SUMMARY (summarySegments):
+ - Write a cohesive, natural 2–3 sentence summary (each item {text, sourceIds}, joined with spaces) that positions the candidate's real background and transferable strengths for JOB.
+ - Synthesize complementary facts across SOURCE (experience, projects, education) rather than copying a single experience bullet verbatim.
+-- Cite the relevant non-skill fact IDs from guide.primaryFactIds / guide.qualificationFactIds (plus headline/entrymeta if referencing the candidate's role title). Do not cite skill IDs alone.
++- Cite the relevant non-skill fact IDs from guide.primaryFactIds / guide.qualificationFactIds (plus headline or entrymeta title if referencing the candidate's role title). Do not cite skill IDs alone.
+ - Keep it grounded: never claim the target job title as past experience or invent unstated career passions. If no useful summary is possible, return [].
+ 
+ EXPERIENCE & PROJECTS (entries):
+@@ -36,7 +36,7 @@ CURATED SKILLS (skillSelections):
+ - Categories: Languages (programming/markup/style languages), Tools (concrete products, databases, platforms, and frameworks such as MySQL, Firebase, Flutter, TailwindCSS), Technical (engineering concepts, business operations, workflow automation, project management, Agile/Scrum, technical documentation, strategic planning, system analysis), Soft (interpersonal/communication traits). Keep combined labels intact and select each equivalent skill once.
+ 
+ LOCKS & LIMITS:
+-- Respect locks (summarySegments:[], skillSelections:[], omit locked entries). Keep identity, dates, education, certificates, and contact unchanged. Use SOURCE's language. Max 24 summary sentences (2400 chars), 24 IDs/passage, 40 bullets/entry, 200 skills.`;
++- Respect locks (summarySegments:[], skillSelections:[], omit locked entries). Keep identity, dates, education, certificates, and contact unchanged. Use SOURCE's language. Max 24 summary sentences (2400 chars), 24 IDs/passage, 40 bullets/entry, 200 skills. References enable review, not independent proof.`;
+ 
+ /** A narrow preflight, not a comprehensive secret or personal-data detector. */
+ function checkEmbeddedSensitiveData(value: unknown): void {

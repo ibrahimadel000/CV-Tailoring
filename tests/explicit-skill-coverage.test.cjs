@@ -13,13 +13,12 @@ function profile(){const p=fixture();p.skills.data=[
 ];return p;}
 function plan(p,j=job){return n.prepareNaturalComposition(p,j).source;}
 function response(p,j=job){const s=plan(p,j),m=new Map(s.evidence.map(x=>[x.id,x]));return {summarySegments:[],entries:s.experience.filter(()=>!s.locks.experience).map(e=>({id:e.id,overview:{text:'',sourceIds:[]},bullets:e.bulletIds.map(id=>({text:m.get(id).text,sourceIds:[id]}))})),skillSelections:[{id:'skill_3',category:'Technical'}]};}
-test('job-listed SaaS restores only the existing qualified skill; no implied experience',()=>{
+test('job-listed SaaS surfaces an optional review suggestion without forcing skill re-insertion or implying experience',()=>{
  const p=profile(), before=JSON.stringify(p), out=n.compileNaturalComposition(p,response(p),job);
- const restored=out.candidate.skills.data.find(s=>s.name==='Full-Stack SaaS Architecture');
- a.deepEqual(restored,p.skills.data[0]);a.equal(restored.level,'Coursework only');
- a(out.guardNotes.some(note=>note.path==='skillSelections'&&note.message.includes('literal match')));
+ a.equal(out.candidate.skills.data.some(s=>s.name==='Full-Stack SaaS Architecture'),false);
+ a(out.guardNotes.some(note=>note.path==='skillSelections'&&note.message.includes('Full-Stack SaaS Architecture')&&note.message.includes('Optional skill suggestion')));
  a.equal(JSON.stringify(p),before);a(!out.candidate.skills.data.some(s=>s.name==='AI Automation'));
- a.deepEqual(out.candidate.experience,p.experience,'skill restoration must never write experience');
+ a.deepEqual(out.candidate.experience,p.experience,'skill suggestions must never write experience');
 });
 test('matching is case-insensitive but token-boundary exact',()=>{
  const p=profile(),s=plan(p);a(coverage.explicitSkillCoverage(p,s,'A SaaS platform engineer with relevant experience.',[]).some(x=>x.id==='skill_1'));

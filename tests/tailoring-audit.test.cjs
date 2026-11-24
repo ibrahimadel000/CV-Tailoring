@@ -17,7 +17,7 @@ test('compiled result retains exact qualified skill and does not invent experien
  const s=n.prepareNaturalComposition(p,j).source,m=new Map(s.evidence.map(x=>[x.id,x]));
  const raw={summarySegments:[],alternativeSummarySegments:[],entries:s.experience.map(e=>({id:e.id,overview:{text:'',sourceIds:[]},bullets:e.bulletIds.map(k=>({text:m.get(k).text,sourceIds:[k]}))})),skillSelections:[]};
  const before=JSON.stringify(p),out=n.compileNaturalComposition(p,raw,j);
- a.deepEqual(out.candidate.skills.data,[p.skills.data[0]]);a.equal(out.candidate.skills.data[0].level,'Coursework only');a.deepEqual(out.candidate.experience,p.experience);a.equal(JSON.stringify(p),before);a(out.warnings.some(w=>w.message.includes('problem solving')&&w.message.includes('literal match')));a.equal(id,'skill_1');
+ a.deepEqual(out.candidate.skills.data,[]);a.deepEqual(out.candidate.experience,p.experience);a.equal(JSON.stringify(p),before);a(out.warnings.some(w=>w.message.includes('problem solving')&&w.message.includes('Optional skill suggestion')));a.equal(id,'skill_1');
 });
 test('word fragments and unmatched international words do not create skills',()=>{const p=profile();skill(p,'Data Analysis');skill(p,'تحليل البيانات');for(const j of ['Seeking metadata analyst expertise for our team.','Seeking data analysts with forecasting experience.','القدرة على معالجة المعلومات والعمل ضمن الفريق مطلوب'])a.equal(additions(p,j).length,0);});
 test('negated acronyms and phrase references suppress restoration',()=>{const p=profile();skill(p,'Cloud Platform Administration');for(const j of ["Cloud platform administration isn't required.","We don't require cloud platform administration.","Cloud platform administration is optional."])a.equal(additions(p,j).length,0,j);});
