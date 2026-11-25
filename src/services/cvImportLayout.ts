@@ -4,9 +4,12 @@ import type { ImportRegion } from './cvImportModel';
 export interface PositionedText { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean; fontName?: string; dir?: string }
 
 function join(spans: readonly TextSpan[], pageWidth: number): string {
+  const isRtl = spans.length > 1 && spans[0].x > spans[spans.length - 1].x;
   let text = ''; let previous: TextSpan | undefined;
   for (const s of spans) {
-    const gap = previous ? s.x - previous.x - previous.width : 0;
+    const gap = previous
+      ? (isRtl ? previous.x - (s.x + s.width) : s.x - previous.x - previous.width)
+      : 0;
     if (previous && gap > Math.max(pageWidth * 0.1, Math.max(previous.fontSize, s.fontSize) * 2.5)) text += ' | ';
     else if (previous && gap > Math.max(1.5, Math.max(previous.fontSize, s.fontSize) * 0.2) && !/\s$/.test(text) && !/^\s/.test(s.text)) text += ' ';
     text += s.text; previous = s;
@@ -58,7 +61,7 @@ export function pdfPageLines(items: PositionedText[], pageWidth: number, pageHei
     const crossing = line.spans.some(s => s.x < split && s.x + s.width > split);
     if (crossing) { wide.push(line); continue; }
     for (const [target, spans] of [[left, line.spans.filter(s => s.x + s.width / 2 < split)], [right, line.spans.filter(s => s.x + s.width / 2 >= split)]] as const) {
-      if (spans.length) target.push({ ...line, spans, text: join(spans, pageWidth), x: spans[0].x, width: spans[spans.length - 1].x + spans[spans.length - 1].width - spans[0].x });
+      if (spans.length) { const minX = Math.min(...spans.map(s => s.x)); const maxR = Math.max(...spans.map(s => s.x + s.width)); target.push({ ...line, spans, text: join(spans, pageWidth), x: minX, width: Math.max(0, maxR - minX) }); }
     }
   }
   // Crossing rows are kept in their vertical band. Do not move a mid-page wide heading to the top.

@@ -3,7 +3,7 @@ import { AlertCircle, FileText, Loader2 } from 'lucide-react';
 import { getDocument, GlobalWorkerOptions, TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { CVProfile } from '@/types/schema';
-import type { DocumentTheme } from '@/store/useAppStore';
+import { useAppStore, type DocumentTheme } from '@/store/useAppStore';
 import { fullName, hasUnsupportedPDFText, resumeBlocks, type SectionId } from './resumeModel';
 import { ResumePaper } from './ResumePaper';
 import { useResumePDF } from './pdfPipeline';
@@ -136,13 +136,22 @@ export default function PaginatedPreview({ profile, theme, scale, section, visib
     });
     return () => cancelAnimationFrame(frame);
   }, [section, visible, loaded, scale]);
+  const setDocumentTheme = useAppStore(st => st.setDocumentTheme);
   const failed = result.error || parseError;
+  const certCount = profile.certifications.data.filter(c => c.name.trim()).length;
+  const canAutoFit = Boolean(!unsupported && !failed && current && loaded && loaded.pdf.numPages === 2 && (!theme.fitOnePage || (certCount >= 4 && !theme.compactCertifications)));
+  const applyAutoFit = () => {
+    setDocumentTheme({
+      fitOnePage: true,
+      ...(certCount >= 4 ? { compactCertifications: true } : {}),
+    });
+  };
   return <>
     <div className={`pagination-status ${failed || unsupported ? 'pagination-warning' : ''}`} aria-live="polite" aria-atomic="true" data-pagination-current={current && !failed ? 'true' : 'false'}>
-      {unsupported ? <><AlertCircle size={15} /><span>Unpaginated · PDF fonts support Latin script only</span></> : failed ? <><AlertCircle size={15} /><span>Couldn’t update pages</span><button className="text-button" onClick={() => { setParseRetry(x => x + 1); result.retry(); }}>Retry</button></> : <><FileText size={15} /><strong>{current && loaded ? `${loaded.pdf.numPages} ${loaded.pdf.numPages === 1 ? 'page' : 'pages'} · A4` : loaded ? 'Updating page count…' : 'Preparing pages…'}</strong><span className="pagination-detail">{current ? (theme.fitOnePage && loaded && loaded.pdf.numPages > 1 ? `Still ${loaded.pdf.numPages} pages — try compact certifications or trimming a few bullets` : 'Matches your PDF') : <><Loader2 size={13} className="spin" />Updating preview</>}</span></>}
+      {unsupported ? <><AlertCircle size={15} /><span>Unpaginated · PDF fonts support Latin script only</span></> : failed ? <><AlertCircle size={15} /><span>Couldn’t update pages</span><button className="text-button" onClick={() => { setParseRetry(x => x + 1); result.retry(); }}>Retry</button></> : <><FileText size={15} /><strong>{current && loaded ? `${loaded.pdf.numPages} ${loaded.pdf.numPages === 1 ? 'page' : 'pages'} · ${theme.pageSize === 'Letter' ? 'Letter' : 'A4'}` : loaded ? 'Updating page count…' : 'Preparing pages…'}</strong><span className="pagination-detail">{current ? (theme.fitOnePage && loaded && loaded.pdf.numPages > 1 ? `Still ${loaded.pdf.numPages} pages — try compact certifications or trimming a few bullets` : 'Matches your PDF') : <><Loader2 size={13} className="spin" />Updating preview</>}</span>{(canAutoFit || (!unsupported && !failed && current && theme.fitOnePage)) && <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>{canAutoFit && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={applyAutoFit}>Auto-fit 1 page</button>}{!unsupported && !failed && current && theme.fitOnePage && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={() => setDocumentTheme({ fitOnePage: false })}>Reset fit</button>}</span>}</>}
     </div>
     <div ref={stage} className={`preview-stage paginated-stage ${!current && loaded && !unsupported ? 'preview-is-updating' : ''}`} role="region" tabIndex={0} aria-label="Paginated resume preview" aria-busy={!current && !unsupported && !failed}>
-      {unsupported ? <><p className="pagination-fallback-note">Your text is kept. Accurate page breaks need PDF fonts for this script; this is a continuous preview.</p><Unpaginated profile={profile} theme={theme} scale={scale} onEdit={onEdit} /></> : loaded ? Array.from({ length: loaded.pdf.numPages }, (_, i) => <PDFPage key={`${loaded.key}-${i}`} document={loaded} number={i + 1} scale={scale} anchors={loaded.anchors.filter(a => a.page === i + 1)} root={stage.current} onEdit={onEdit} />) : <div className="page-preview-placeholder" style={{ width: WIDTH * scale, height: 1123 * scale } as CSSProperties}>{failed ? <AlertCircle size={24} /> : <Loader2 size={24} className="spin" />}<p>{failed ? 'Preview unavailable. Retry above or open PDF preview.' : 'Preparing your A4 pages…'}</p></div>}
+      {unsupported ? <><p className="pagination-fallback-note">Your text is kept. Accurate page breaks need PDF fonts for this script; this is a continuous preview.</p><Unpaginated profile={profile} theme={theme} scale={scale} onEdit={onEdit} /></> : loaded ? Array.from({ length: loaded.pdf.numPages }, (_, i) => <PDFPage key={`${loaded.key}-${i}`} document={loaded} number={i + 1} scale={scale} anchors={loaded.anchors.filter(a => a.page === i + 1)} root={stage.current} onEdit={onEdit} />) : <div className="page-preview-placeholder" style={{ width: WIDTH * scale, height: 1123 * scale } as CSSProperties}>{failed ? <AlertCircle size={24} /> : <Loader2 size={24} className="spin" />}<p>{failed ? 'Preview unavailable. Retry above or open PDF preview.' : `Preparing your ${theme.pageSize === 'Letter' ? 'Letter' : 'A4'} pages…`}</p></div>}
     </div>
   </>;
 }

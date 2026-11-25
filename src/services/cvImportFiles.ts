@@ -50,6 +50,7 @@ function xmlText(xml: string, listStyles = new Set<string>(), links = new Map<st
   const walk = (node: Node, root: Node, acc: { text: string }): string => {
     if (node.nodeType !== 1) return '';
     const el = node as Element;
+    if (el.localName === 'Fallback') return '';
     if (el !== root && el.namespaceURI === WORD_NS && el.localName === 'p') return '';
     if (el.namespaceURI === WORD_NS) {
       if (['del', 'instrText', 'delText', 'pPr'].includes(el.localName)) return '';
@@ -80,7 +81,7 @@ function xmlText(xml: string, listStyles = new Set<string>(), links = new Map<st
     }
     return [...node.childNodes].map(child => walk(child, root, acc)).join('');
   };
-  const visible = (p: Element) => { let parent = p.parentElement; while (parent) { if (parent.namespaceURI === WORD_NS && parent.localName === 'del') return false; parent = parent.parentElement; } return true; };
+  const visible = (p: Element) => { let parent = p.parentElement; while (parent) { if ((parent.namespaceURI === WORD_NS && parent.localName === 'del') || parent.localName === 'Fallback') return false; parent = parent.parentElement; } return true; };
   const lineOf = (p: Element) => {
     const t = walk(p, p, { text: '' }).trim();
     const style = p.getElementsByTagNameNS(WORD_NS, 'pStyle')[0]?.getAttributeNS(WORD_NS, 'val') || '';

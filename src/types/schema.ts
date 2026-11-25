@@ -269,6 +269,7 @@ export const documentThemeSchema = z.object({
   layoutStyle: z.enum(['modern', 'split', 'classic', 'minimal']),
   compactCertifications: z.boolean().optional(),
   fitOnePage: z.boolean().optional(),
+  pageSize: z.enum(['A4', 'Letter']).optional(),
 });
 export type DocumentTheme = z.infer<typeof documentThemeSchema>;
 

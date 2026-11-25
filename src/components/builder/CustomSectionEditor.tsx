@@ -28,6 +28,7 @@ export function CustomSectionEditor({ profile, section, onRemove }: { profile: C
   };
   return <EntryGroup><div className="custom-section-editor">
     <div className="custom-format-note">{({ text: 'Text section', experience: 'Experience section', list: 'Bullet list', skills: 'Skills & languages' })[kind]}<button className="icon-button danger-text" aria-label={`Delete section ${data.title}`} onClick={onRemove}><Trash2 size={16} /></button></div>
+    {data.title.trim().toLowerCase() === 'imported details' && <div className="locked-notice"><span>Unmapped import notes stay hidden from preview, PDF, and Word exports.</span> <button type="button" className="text-button" onClick={() => update({ title: 'Additional information' })}>Rename to show on resume</button></div>}
     <Field label="Section title" ariaLabel="Custom section title" value={data.title} maxLength={80} placeholder="Name this section" onChange={v => update({ title: v })} />
     {kind === 'text' && <Field label="Section content" area value={data.paragraphs.join('\n\n')} onChange={v => update({ paragraphs: v.split('\n\n') })} placeholder="Write your details here…" hint="Leave a blank line between paragraphs. Empty content stays out of your PDF." />}
     {kind === 'list' && <Field label="List items" area value={data.paragraphs.join('\n')} onChange={v => update({ paragraphs: v.split('\n') })} placeholder={'Received a community service award\nOrganized a student showcase'} hint="One item per line. Bullet points are added automatically in your resume." />}

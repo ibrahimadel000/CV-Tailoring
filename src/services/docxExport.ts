@@ -192,6 +192,7 @@ interface ParagraphOpts {
   keepLines?: boolean;
   pageBreakBefore?: boolean;
   bottomBorder?: { color: string; sz: number; space: number };
+  shadingFill?: string;
   rightTabPos?: number;
   hangingIndent?: { left: number; hanging: number };
   bidi?: boolean;
@@ -207,6 +208,9 @@ function buildParagraph(innerXml: string, opts: ParagraphOpts = {}): string {
     pPr.push(
       `<w:pBdr><w:bottom w:val="single" w:sz="${opts.bottomBorder.sz}" w:space="${opts.bottomBorder.space}" w:color="${opts.bottomBorder.color}"/></w:pBdr>`,
     );
+  }
+  if (opts.shadingFill) {
+    pPr.push(`<w:shd w:val="clear" w:color="auto" w:fill="${opts.shadingFill}"/>`);
   }
   if (opts.rightTabPos) {
     pPr.push(`<w:tabs><w:tab w:val="right" w:pos="${opts.rightTabPos}"/></w:tabs>`);
@@ -339,7 +343,7 @@ export function buildResumeDocxBytes(
   const mutedHex = '526074';
   const { latin: latinFont, cs: csFont } = mapFontFamily(theme.fontFamily);
 
-  const pageSize = options.pageSize ?? 'A4';
+  const pageSize = options.pageSize ?? theme.pageSize ?? 'A4';
   const pageWidthTwips = pageSize === 'Letter' ? 12240 : 11906;
   const pageHeightTwips = pageSize === 'Letter' ? 15840 : 16838;
   const marginTwips = ptToTwips(m.margin);
@@ -361,6 +365,8 @@ export function buildResumeDocxBytes(
   const paragraphs: string[] = [];
 
   const isClassic = theme.layoutStyle === 'classic';
+  const isMinimal = theme.layoutStyle === 'minimal';
+  const bulletColorHex = !isClassic && !isMinimal ? accentHex : '243044';
   const headerAlign: 'center' | undefined = isClassic ? 'center' : undefined;
 
   // ── Header ──
@@ -452,7 +458,8 @@ export function buildResumeDocxBytes(
           spaceAfter: 80,
           line: 240,
           bidi: isRTLText(cleanTitle),
-          bottomBorder: { color: accentHex, sz: 6, space: 3 },
+          bottomBorder: isMinimal ? undefined : { color: isClassic ? accentHex : 'CBD5E1', sz: 6, space: 3 },
+          shadingFill: isMinimal ? 'F1F5F9' : undefined,
         },
       ),
     );
@@ -493,7 +500,7 @@ export function buildResumeDocxBytes(
     if (!clean) return;
     const bidi = isRTLText(clean);
     const inner =
-      buildRun('•', { color: accentHex, sizeHp: bodySizeHp }) +
+      buildRun('•', { color: bulletColorHex, sizeHp: bodySizeHp }) +
       '<w:r><w:tab/></w:r>' +
       buildRun(clean, { sizeHp: bodySizeHp });
     paragraphs.push(
@@ -567,7 +574,7 @@ export function buildResumeDocxBytes(
         });
         if (subtitle && e.roleTitle.trim()) {
           paragraphs.push(
-            buildParagraph(buildRun(subtitle, { italic: true, color: mutedHex, sizeHp: smallSizeHp }), {
+            buildParagraph(buildRun(subtitle, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
               keepNext: Boolean(desc || bullets.length),
               spaceBefore: 0,
               spaceAfter: 30,
@@ -612,7 +619,7 @@ export function buildResumeDocxBytes(
         if (subRole || rawUrl) {
           const bidi = isRTLText(subRole);
           const parts: string[] = [];
-          if (subRole) parts.push(buildRun(subRole, { italic: true, color: mutedHex, sizeHp: smallSizeHp }));
+          if (subRole) parts.push(buildRun(subRole, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }));
           if (subRole && rawUrl) parts.push(buildRun(' · ', { color: mutedHex, sizeHp: smallSizeHp, forceLtr: bidi }));
           if (rawUrl) {
             parts.push(
@@ -687,7 +694,7 @@ export function buildResumeDocxBytes(
         });
         if (subtitle && e.degree.trim()) {
           paragraphs.push(
-            buildParagraph(buildRun(subtitle, { italic: true, color: mutedHex, sizeHp: smallSizeHp }), {
+            buildParagraph(buildRun(subtitle, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
               keepNext: Boolean(details.length),
               spaceBefore: 0,
               spaceAfter: 20,
@@ -760,7 +767,7 @@ export function buildResumeDocxBytes(
           });
           if (issuer) {
             paragraphs.push(
-              buildParagraph(buildRun(issuer, { italic: true, color: mutedHex, sizeHp: smallSizeHp }), {
+              buildParagraph(buildRun(issuer, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
                 keepLines: true,
                 spaceBefore: 0,
                 spaceAfter: 20,
@@ -798,7 +805,7 @@ export function buildResumeDocxBytes(
           });
           if (subtitle && e.title.trim()) {
             paragraphs.push(
-              buildParagraph(buildRun(subtitle, { italic: true, color: mutedHex, sizeHp: smallSizeHp }), {
+              buildParagraph(buildRun(subtitle, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
                 keepNext: Boolean(desc),
                 spaceBefore: 0,
                 spaceAfter: 20,

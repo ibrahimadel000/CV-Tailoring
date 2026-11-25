@@ -36,19 +36,20 @@ const isBullet = (s: string) => /^\s*[•●▪◦‣–—*-]\s+/.test(s);
 const key = (s: string) => s.toLowerCase().replace(/[أإآ]/g, 'ا').replace(/[\u064b-\u065f]/g, '').replace(/[:：\s]+$/g, '').replace(/\s+/g, ' ').trim();
 type Section = 'summary' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications' | 'languages' | 'other';
 const headingNames: Record<Exclude<Section, 'other'>, string[]> = {
-  summary: ['summary','professional summary','profile','professional profile','objective','career objective','about me','نبذة','نبذة شخصية','الملخص المهني','ملخص','الهدف المهني'],
-  experience: ['experience','work experience','professional experience','employment','employment history','work history','الخبرات','الخبرة المهنية','الخبرات المهنية','الخبرات العملية','الخبرة العملية'],
-  education: ['education','academic background','education and qualifications','التعليم','المؤهلات العلمية','المؤهلات الاكاديمية'],
-  skills: ['skills','technical skills','core skills','core competencies','expertise','key skills','competencies','business & management competencies','business and management competencies','المهارات','المهارات التقنية','المهارات الفنية'],
-  projects: ['projects','selected projects','personal projects','academic projects','المشاريع','المشروعات','المشاريع الاكاديمية'],
-  certifications: ['certifications','certificates','licenses and certifications','الشهادات','الشهادات المهنية','الدورات والشهادات'],
+  summary: ['summary','professional summary','profile','professional profile','objective','career objective','about','about me','bio','executive summary','نبذة','نبذة عني','نبذة شخصية','الملخص المهني','ملخص','الهدف المهني'],
+  experience: ['experience','work experience','professional experience','employment','employment history','work history','career history','professional background','الخبرات','الخبرة المهنية','الخبرات المهنية','الخبرات العملية','الخبرة العملية'],
+  education: ['education','academic background','education and qualifications','academic qualifications','التعليم','المؤهلات العلمية','المؤهلات الاكاديمية'],
+  skills: ['skills','technical skills','core skills','core competencies','expertise','key skills','competencies','tech stack','technical stack','toolkit','business & management competencies','business and management competencies','المهارات','المهارات التقنية','المهارات الفنية'],
+  projects: ['projects','selected projects','key projects','personal projects','academic projects','المشاريع','المشروعات','المشاريع الاكاديمية'],
+  certifications: ['certifications','certificates','licenses and certifications','licenses','credentials','الشهادات','الشهادات المهنية','الدورات والشهادات'],
   languages: ['languages','language skills','اللغات'],
 };
 const compactKey = (value: string) => key(value).replace(/\s+/g, '');
 function heading(line: string): { section: Section | 'header'; title: string; inline?: string } | undefined {
-  const colon = line.indexOf(':');
-  const original = colon >= 0 ? line.slice(0, colon) : line;
-  if (original.length > 100) return;
+  const colon = line.search(/[:：]/);
+  const rawHead = colon >= 0 ? line.slice(0, colon) : line;
+  const original = rawHead.replace(/^(?:\d{1,2}[.)]\s*|[—–•▪■◆►▸|]+\s*)/, '').replace(/\s*[—–•▪■◆|]+$/, '').trim();
+  if (!original || original.length > 100) return;
   const candidate = compactKey(original);
   if (['contact','contactdetails','contactinformation','personal details','بيانات التواصل','معلومات الاتصال'].some(v => compactKey(v) === candidate)) return { section: 'header', title: 'Contact', inline: colon >= 0 ? line.slice(colon + 1).trim() : undefined };
   for (const [section, aliases] of Object.entries(headingNames)) {
@@ -61,10 +62,12 @@ function heading(line: string): { section: Section | 'header'; title: string; in
 }
 const dateToken = '(?:(?:[A-Za-z]{3,9}\\.?|[\\u0600-\\u06ff]+)\\s+)?(?:19|20)\\d{2}|\\d{1,2}[/.](?:19|20)\\d{2}|Present|Current|Now|حتى الآن|حاليا|الان|الآن';
 const range = new RegExp(`(${dateToken})\\s*(?:[-–—]|\\bto\\b|إلى|الى)\\s*(${dateToken})`, 'i');
+const normalizeDigits = (value: string) => value.replace(/[\u0660-\u0669]/g, ch => String(ch.charCodeAt(0) - 0x0660));
 export function extractImportDates(line: string): { rest: string; start: string; end: string } {
-  const m = range.exec(line);
+  const normalized = normalizeDigits(line);
+  const m = range.exec(normalized);
   if (!m) return { rest: line, start: '', end: '' };
-  return { rest: line.replace(m[0], '').replace(/^[\s|·,]+|[\s|·,]+$/g, '').trim(), start: m[1].trim(), end: m[2].trim() };
+  return { rest: normalized.replace(m[0], '').replace(/^[\s|·,/]+|[\s|·,/]+$/g, '').trim(), start: m[1].trim(), end: m[2].trim() };
 }
 function chunks(lines: string[]): string[][] {
   const result: string[][] = []; let part: string[] = []; let sawBullet = false;
@@ -83,24 +86,45 @@ function chunks(lines: string[]): string[][] {
 // This does not infer missing employers/degrees or collapse arbitrary whitespace.
 function structuredChunks(lines: string[], kind: 'experience' | 'education'): string[][] {
   const groups = chunks(lines), output: string[][] = [];
-  const role = /engineer|developer|manager|designer|analyst|specialist|consultant|intern|مهندس|مطور|مدير|محلل|متدرب/i;
-  const degree = /\b(?:bachelor|master|ph\.?d|doctor|diploma|associate|b\.?sc|m\.?sc|mba|b\.?s\.?|m\.?s\.?|b\.?a\.?)\b|بكالوريوس|ماجستير|دكتوراه|دبلوم|ثانوية/i;
+  const role = /\b(?:engineer|developer|manager|designer|analyst|specialist|consultant|intern|architect|director|lead|principal|founder|co-founder|researcher|scientist|accountant|auditor|lawyer|nurse|doctor|pharmacist|teacher|professor|coordinator|administrator|executive|officer|technician|product\s+owner|scrum\s+master)\b|مهندس|مطور|مدير|محلل|متدرب|باحث|محاسب|طبيب|أستاذ|منسق|رئيس/i;
+  const degree = /\b(?:bachelor|master|ph\.?d|doctor|diploma|associate|b\.?sc|m\.?sc|b\.?eng|m\.?eng|b\.?tech|m\.?tech|bba|bfa|llb|mba|md|jd|high\s+school|b\.?s\.?|m\.?s\.?|b\.?a\.?)\b|بكالوريوس|ماجستير|دكتوراه|دبلوم|ثانوية/i;
   const datedIdentity = (part: string[]) => {
     const bullet = part.findIndex(isBullet), heads = (bullet < 0 ? part : part.slice(0, bullet)).filter(x => x.trim());
     if (!heads.length || heads.length > 4) return false;
     let dates = 0;
-    const labels = heads.map(line => {
-      const ranges = [...line.matchAll(new RegExp(range.source, 'gi'))];
-      if (ranges.length) { dates += ranges.length; return extractImportDates(line).rest; }
-      if (kind === 'education') {
-        if (singleDate(line)) { dates++; return ''; }
-        const expected = /(?:\s*\|\s*|\s+)((?:Expected|Anticipated)\s+(?:19|20)\d{2})$/i.exec(line);
-        if (expected) { dates++; return line.slice(0, expected.index).trim(); }
+    const labels: string[] = [];
+    for (const line of heads) {
+      const normalized = normalizeDigits(line);
+      const ranges = [...normalized.matchAll(new RegExp(range.source, 'gi'))];
+      if (ranges.length) {
+        dates += ranges.length;
+        const r = extractImportDates(line).rest;
+        if (r) labels.push(r);
+        continue;
       }
-      return line;
-    }).filter(Boolean);
+      if (kind === 'education') {
+        if (singleDate(line)) { dates++; continue; }
+        const expected = /(?:\s*\|\s*|\s+)((?:Expected|Anticipated)\s+(?:19|20)\d{2})$/i.exec(normalized);
+        if (expected) {
+          dates++;
+          const r = normalized.slice(0, expected.index).trim();
+          if (r) labels.push(r);
+          continue;
+        }
+        const parts = splitPair(line, true);
+        if (parts.length >= 2 && parts.some(part => Boolean(singleDate(part)))) {
+          const nonDate = parts.filter(part => {
+            if (singleDate(part)) { dates++; return false; }
+            return true;
+          });
+          labels.push(...nonDate);
+          continue;
+        }
+      }
+      labels.push(line);
+    }
     if (dates !== 1 || !labels.length || labels.length > 2) return false;
-    const identities = labels.length === 1 ? splitPair(labels[0]) : labels;
+    const identities = labels.length === 1 ? splitPair(labels[0], kind === 'education') : labels;
     if (identities.length !== 2 || (labels.length === 2 && labels.some(s => splitPair(s).length !== 1))) return false;
     const pattern = kind === 'experience' ? role : degree;
     // Exactly one recognizable role/degree and one other identity label. Two
@@ -139,10 +163,10 @@ function joinWrapped(lines: string[]): string[] {
   }
   return output;
 }
-function splitPair(line: string) { return line.split(/\s+[|·]\s+|\s+at\s+|\s+@\s+/i).map(x => x.trim()).filter(Boolean); }
+function splitPair(line: string, allowSlash = false) { const re = allowSlash && !/[|·]/.test(line) ? /\s+[|·/]\s+|\s+at\s+|\s+@\s+/i : /\s+[|·]\s+|\s+at\s+|\s+@\s+/i; return line.split(re).map(x => x.trim()).filter(Boolean); }
 // Only recover decorative spacing in known month names, never infer a missing month/year.
 function singleDate(value: string): string | undefined {
-  const original = value.trim().replace(/^[|\s]+|[|\s]+$/g, '').replace(/(?<=\d)\s+(?=\d)/g, '');
+  const original = normalizeDigits(value).trim().replace(/^[|\s/]+|[|\s/]+$/g, '').replace(/(?<=\d)\s+(?=\d)/g, '');
   if (/^(?:19|20)\d{2}$/.test(original)) return original;
   if (/^(?:Expected|Anticipated|المتوقع|متوقع)\s+(?:19|20)\d{2}$/i.test(original)) return original;
   const match = /^([A-Za-z][A-Za-z .]*?)\s*((?:19|20)\d{2})$/.exec(original);
@@ -268,7 +292,7 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
         else continue;
         line = line.replace(value, '');
       }
-      line = line.replace(/\b(?:email|phone|mobile|linkedin|github|portfolio|website|tel)\s*:/gi, '').replace(/^[\s|·,;]+|[\s|·,;]+$/g, '').trim();
+      line = line.replace(/(?:\b(?:email|phone|mobile|linkedin|github|portfolio|website|tel)|الهاتف|الجوال|البريد\s+الإلكتروني|البريد\s+الالكتروني)\s*[:：]/gi, '').replace(/^[\s|·,;]+|[\s|·,;]+$/g, '').trim();
       if (!line || /^(?:cv|resume|curriculum vitae|السيرة الذاتية)$/i.test(line)) continue;
       if (!h.name && /^[\p{L}][\p{L}\p{M} .’'-]{2,85}$/u.test(line) && line.split(/\s+/).length >= 2 && line.split(/\s+/).length <= 7 && !/engineer|developer|manager|designer|analyst|مهندس|مطور|مدير/i.test(line)) {
         h.name = line;
@@ -276,7 +300,7 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
         h.firstName = parts[0];
         h.lastName = parts.slice(1).join(' ');
       }
-      else if (h.name && !p.headline.data && /engineer|developer|manager|designer|analyst|specialist|consultant|student|مهندس|مطور|مدير|طالب|محلل|مصمم/i.test(line) && line.length <= 130) { p.headline.data = line; h.desiredJobPosition = line; }
+      else if (h.name && !p.headline.data && /\b(?:engineer|developer|manager|designer|analyst|specialist|consultant|student|architect|director|lead|principal|founder|researcher|scientist|accountant|coordinator|product\s+owner)\b|مهندس|مطور|مدير|طالب|محلل|مصمم|باحث|محاسب/i.test(line) && line.length <= 130) { p.headline.data = line; h.desiredJobPosition = line; }
       else if (/^(?:location|address|العنوان|الموقع)\s*:/i.test(line) && !h.location) h.location = line.replace(/^[^:]+:\s*/, '');
       else leftovers.push(line);
     }
@@ -315,7 +339,7 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
         for (const line of heads.slice(1)) { const d = extractImportDates(line); if (!start && d.start) { start = d.start; end = d.end; } if (d.rest) otherHeads.push(d.rest); }
         const pair = splitPair(first.rest);
         let role = pair[0] || ''; let company = pair[1] || (otherHeads.length === 1 ? otherHeads[0] : '');
-        const rolePattern = /engineer|developer|manager|designer|analyst|specialist|consultant|intern|مهندس|مطور|مدير|محلل|متدرب/i;
+        const rolePattern = /\b(?:engineer|developer|manager|designer|analyst|specialist|consultant|intern|architect|director|lead|principal|founder|co-founder|researcher|scientist|accountant|auditor|lawyer|nurse|doctor|pharmacist|teacher|professor|coordinator|administrator|executive|officer|technician|product\s+owner|scrum\s+master)\b|مهندس|مطور|مدير|محلل|متدرب|باحث|محاسب|طبيب|أستاذ|منسق|رئيس/i;
         if (!rolePattern.test(role) && rolePattern.test(company)) [role, company] = [company, role];
         if (!role || !company || heads.length > 4 || (bulletIndex < 0 && !start)) { preserve(title, group); continue; }
         const bullets = bulletIndex >= 0 ? joinWrapped(group.slice(bulletIndex)) : [];
@@ -336,11 +360,21 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
           return range;
         });
         const date = ds.find(item => item.start); const rest = ds.map(item => item.rest).filter(Boolean);
-        const pair = splitPair(rest[0] || ''); let degree = pair[0] || ''; let institution = pair[1] || rest[1] || '';
-        const degreePattern = /\b(?:bachelor|master|ph\.?d|doctor|diploma|associate|b\.?sc|m\.?sc|mba|b\.?s\.?|m\.?s\.?|b\.?a\.?)\b|بكالوريوس|ماجستير|دكتوراه|دبلوم|ثانوية/i;
+        const rawParts = rest.flatMap(line => splitPair(line, true));
+        const nonDateParts: string[] = [];
+        for (const part of rawParts) {
+          const maybeDate = singleDate(part);
+          if (maybeDate && !graduationDate && !date?.start) {
+            graduationDate = maybeDate;
+          } else {
+            nonDateParts.push(part);
+          }
+        }
+        let degree = nonDateParts[0] || ''; let institution = nonDateParts[1] || '';
+        const degreePattern = /\b(?:bachelor|master|ph\.?d|doctor|diploma|associate|b\.?sc|m\.?sc|b\.?eng|m\.?eng|b\.?tech|m\.?tech|bba|bfa|llb|mba|md|jd|high\s+school|b\.?s\.?|m\.?s\.?|b\.?a\.?)\b|بكالوريوس|ماجستير|دكتوراه|دبلوم|ثانوية/i;
         if (!degreePattern.test(degree) && degreePattern.test(institution)) [degree, institution] = [institution, degree];
         if (!degree || !institution || !degreePattern.test(degree)) { preserve(title, group); continue; }
-        p.education.data.push({ id: uuid(), degree, institution, startDate: date?.start || '', endDate: date?.end || graduationDate, graduationDate: graduationDate || undefined, gpa: gpa || undefined, description: rest.slice(pair.length > 1 ? 1 : 2).join('\n') });
+        p.education.data.push({ id: uuid(), degree, institution, startDate: date?.start || '', endDate: date?.end || graduationDate, graduationDate: graduationDate || undefined, gpa: gpa || undefined, description: nonDateParts.slice(2).join('\n') });
       }
     } else if (section === 'projects') {
       for (const group of chunks(lines)) {

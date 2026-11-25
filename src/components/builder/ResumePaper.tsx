@@ -17,7 +17,7 @@ export function ResumePaper({ profile, theme, onEdit }: { profile: CVProfile; th
       <p className="paper-contacts">{contacts(profile).join('  ·  ') || 'Your contact details will appear here'}</p></span></span>
     </button>
     {resumeBlocks(profile).map(block => <section data-resume-section={block.id} key={block.id} style={{ marginBottom: m.gap * 4 / 3 }}>
-      <button className="paper-section-title paper-edit" onClick={() => onEdit(block.id)} style={{ color: theme.accentColor }} aria-label={`Edit ${block.title} from preview`}>{block.title}</button>
+      <button className="paper-section-title paper-edit" onClick={() => onEdit(block.id)} style={{ color: theme.accentColor, ...(m.sectionBgColor !== 'transparent' ? { backgroundColor: m.sectionBgColor, padding: '3px 8px', borderRadius: 3, width: '100%' } : { borderBottom: `1px solid ${m.sectionRuleColor}`, paddingBottom: 3, width: '100%' }) }} aria-label={`Edit ${block.title} from preview`}>{block.title}</button>
       {block.id === 'certifications' && theme.compactCertifications ? (
         <div className="paper-cert-grid">
           {block.items.map((item, i) => (
@@ -27,9 +27,18 @@ export function ResumePaper({ profile, theme, onEdit }: { profile: CVProfile; th
             </div>
           ))}
         </div>
+      ) : block.id === 'skills' ? (
+        <div className="paper-skills-inline">
+          {block.items.map((item, i) => (
+            <p key={i} className="paper-body" style={{ marginBottom: i === block.items.length - 1 ? 0 : (theme.fitOnePage ? 3 : 5) }}>
+              {item.title && <strong>{item.title}: </strong>}
+              {item.text}
+            </p>
+          ))}
+        </div>
       ) : block.items.map((item, i) => <div key={i} className="paper-item" style={{ marginBottom: i === block.items.length - 1 ? 0 : (theme.fitOnePage ? 8 : 14) }}>
         {(item.title || item.date) && <div className="paper-item-heading"><strong>{item.title}</strong><span>{item.date}</span></div>}
-        {item.subtitle && <p className="paper-subtitle">{item.subtitle}</p>}
+        {item.subtitle && <p className="paper-subtitle" style={m.subtitleItalic ? { fontStyle: 'italic' } : undefined}>{item.subtitle}</p>}
         {item.text && <p className="paper-body" style={{ marginTop: item.title ? 6 : 0 }}>{item.text}</p>}
         {item.bullets && item.bullets.length > 0 && <ul>{item.bullets.map((b, j) => <li key={j}>{b}</li>)}</ul>}
       </div>)}

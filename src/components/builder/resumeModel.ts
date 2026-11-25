@@ -138,13 +138,18 @@ export function themeMetrics(theme: DocumentTheme) {
   const baseLeading = { compact: 1.35, normal: 1.5, relaxed: 1.65 }[theme.lineSpacing];
   const font = theme.fontFamily === 'serif' ? 'Times-Roman' : theme.fontFamily === 'mono' ? 'Courier' : 'Helvetica';
   const bold = font === 'Times-Roman' ? 'Times-Bold' : font === 'Courier' ? 'Courier-Bold' : 'Helvetica-Bold';
-  const baseGap = theme.layoutStyle === 'minimal' ? 12 : 18;
-  const baseMargin = theme.layoutStyle === 'minimal' ? 36 : 42;
+  const italic = font === 'Times-Roman' ? 'Times-Italic' : font === 'Courier' ? 'Courier-Oblique' : 'Helvetica-Oblique';
+  const isClassic = theme.layoutStyle === 'classic';
+  const isMinimal = theme.layoutStyle === 'minimal';
+  const isLetter = theme.pageSize === 'Letter';
+  const baseGap = isMinimal ? 12 : 18;
+  const baseMargin = isMinimal ? 36 : 42;
   return {
     size: fit ? Math.max(8.5, baseSize - 1.5) : baseSize,
     leading: fit ? Math.max(1.2, Number((baseLeading - 0.2).toFixed(2))) : baseLeading,
     font,
     bold,
+    italic,
     gap: fit ? Math.min(baseGap, 10) : baseGap,
     margin: fit ? 26 : baseMargin,
     itemGap: fit ? 5 : 8,
@@ -154,6 +159,12 @@ export function themeMetrics(theme: DocumentTheme) {
     headerContactSize: fit ? 8.5 : 9,
     headerPadBottom: fit ? 7 : 11,
     photoSize: fit ? 56 : 72,
+    pageWidthPt: isLetter ? 612 : 595.28,
+    pageHeightPt: isLetter ? 792 : 841.89,
+    sectionRuleColor: isClassic ? theme.accentColor : isMinimal ? 'transparent' : '#CBD5E1',
+    sectionBgColor: isMinimal ? '#F1F5F9' : 'transparent',
+    subtitleItalic: isClassic,
+    bulletColor: !isClassic && !isMinimal ? theme.accentColor : '#243044',
   };
 }
 

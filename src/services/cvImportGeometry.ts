@@ -123,15 +123,18 @@ function clusterLines(spans: readonly TextSpan[], pageNumber: number, tolerance:
 	return groups.map((group) => toLine(group, pageNumber));
 }
 
+const RTL_SCRIPT_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+
 function toLine(group: readonly TextSpan[], pageNumber: number): TextLine {
-	const ordered = [...group].sort((a, b) => a.x - b.x || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
+	const isRtlLine = group.some((s) => RTL_SCRIPT_RE.test(s.text)) && !group.some((s) => /[A-Za-z]{3,}/.test(s.text));
+	const ordered = [...group].sort((a, b) => (isRtlLine ? b.x - a.x : a.x - b.x) || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
 
 	let text = "";
 	let previous: TextSpan | null = null;
 
 	for (const span of ordered) {
 		if (previous) {
-			const gap = span.x - (previous.x + previous.width);
+			const gap = isRtlLine ? previous.x - (span.x + span.width) : span.x - (previous.x + previous.width);
 			const threshold = SPACE_GAP_RATIO * Math.max(previous.fontSize, span.fontSize, 1);
 			const needsSpace = gap > threshold && !/\s$/.test(text) && !/^\s/.test(span.text);
 			if (needsSpace) text += " ";
@@ -306,10 +309,11 @@ export function columnSegments(line: TextLine): TextLine[] {
 	const [first, ...rest] = line.spans;
 	if (!first || rest.length === 0) return [line];
 
+	const isRtl = line.spans.length > 1 && line.spans[0].x > line.spans[line.spans.length - 1].x;
 	const groups: TextSpan[][] = [[first]];
 	let previous = first;
 	for (const span of rest) {
-		const gap = span.x - (previous.x + previous.width);
+		const gap = isRtl ? previous.x - (span.x + span.width) : span.x - (previous.x + previous.width);
 		const threshold = Math.max(MIN_COLUMN_GAP_PT, COLUMN_GAP_RATIO * Math.max(previous.fontSize, span.fontSize, 1));
 
 		if (gap > threshold) groups.push([span]);
