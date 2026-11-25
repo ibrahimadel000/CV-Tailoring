@@ -4,24 +4,26 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRateLimiter, handleTailorRequest } from './tailorHandler.mjs';
+import { createRateLimiter, handleTailorRequest, isConfiguredApiKey } from './tailorHandler.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const distDir = path.join(root, 'dist');
 
-// Load .env locally if present without overwriting existing environment variables.
+// Load local .env files in Vite precedence order without overwriting existing environment variables.
 function loadLocalEnv() {
-  const envPath = path.join(root, '.env');
-  if (!fs.existsSync(envPath)) return;
-  for (const raw of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const eq = line.indexOf('=');
-    if (eq <= 0) continue;
-    const key = line.slice(0, eq).trim();
-    const val = line.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-    if (key && !(key in process.env)) process.env[key] = val;
+  for (const name of ['.env.development.local', '.env.local', '.env']) {
+    const envPath = path.join(root, name);
+    if (!fs.existsSync(envPath)) continue;
+    for (const raw of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eq = line.indexOf('=');
+      if (eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      const val = line.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+      if (key && !(key in process.env)) process.env[key] = val;
+    }
   }
 }
 loadLocalEnv();
@@ -66,7 +68,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/api/health') {
-    const configured = Boolean((process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '').trim());
+    const configured = isConfiguredApiKey(process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '');
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ ok: true, configured }));
     return;
@@ -74,7 +76,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/tailor') {
     const abortController = new AbortController();
-    req.on('close', () => {
+    res.on('close', () => {
       if (!res.writableEnded) abortController.abort();
     });
     let bodyBuf = Buffer.alloc(0);
@@ -105,6 +107,8 @@ const server = http.createServer(async (req, res) => {
     const webRes = await handleTailorRequest(webReq, {
       apiKey: process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '',
       accessToken: process.env.TAILOR_ACCESS_TOKEN || '',
+      allowedOrigin: process.env.TAILOR_ALLOWED_ORIGIN || '',
+      clientIp: process.env.TRUST_PROXY === '1' ? undefined : (req.socket?.remoteAddress || 'local'),
       rateLimiter,
     });
     const outHeaders = {};
