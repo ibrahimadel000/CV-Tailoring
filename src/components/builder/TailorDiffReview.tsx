@@ -1,10 +1,11 @@
+import { useMemo } from 'react';
 import { diffWords } from 'diff';
-import { RotateCcw, Plus } from 'lucide-react';
+import { RotateCcw, Plus, ArrowUpDown } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import type { CVProfile, SkillTag } from '@/types/schema';
+import type { BulletPoint, CVProfile, SkillTag } from '@/types/schema';
 
 function WordDiff({ before, after }: { before: string; after: string }) {
-  const parts = diffWords(before, after);
+  const parts = useMemo(() => diffWords(before, after), [before, after]);
   return (
     <span className="diff-text">
       {parts.map((part, idx) =>
@@ -20,50 +21,254 @@ function WordDiff({ before, after }: { before: string; after: string }) {
   );
 }
 
-export function TailorDiffReview({ active, source }: { active: CVProfile; source: CVProfile }) {
+export function TailorDiffReview({ active, source }: { active: CVProfile; source?: CVProfile }) {
   const updateSummary = useAppStore(s => s.updateSummary);
   const updateExperience = useAppStore(s => s.updateExperience);
+  const updateProject = useAppStore(s => s.updateProject);
 
-  const summaryBefore = source.summary.data.trim();
+  const snapshot = active.compositionSnapshot;
+  const originMap = snapshot?.bulletOriginMap ?? {};
+  const baselineSummary = snapshot ? snapshot.summary : (source?.summary.data ?? '');
+  const baselineExperience = snapshot
+    ? snapshot.experience
+    : (source?.experience.data.map(e => ({
+        id: e.id,
+        description: e.description ?? '',
+        bullets: e.bullets.map(b => ({ id: b.id, text: b.text })),
+      })) ?? []);
+  const baselineProjects = snapshot
+    ? snapshot.projects
+    : (source?.projects.data.map(p => ({ id: p.id, bullets: p.bullets.map(b => ({ id: b.id, text: b.text })) })) ?? []);
+  const baselineSkills: SkillTag[] = snapshot ? snapshot.skills : (source?.skills.data ?? []);
+
+  if (!snapshot && !source) return null;
+
+  const summaryLocked = active.summary.isLocked;
+  const experienceLocked = active.experience.isLocked;
+  const projectsLocked = active.projects.isLocked;
+  const skillsLocked = active.skills.isLocked;
+
+  const summaryBefore = baselineSummary.trim();
   const summaryAfter = active.summary.data.trim();
   const summaryChanged = summaryBefore !== summaryAfter;
 
+  const resolveOriginIds = (bulletId: string, srcBulletById: Map<string, string>): string[] => {
+    const mapped = originMap[bulletId];
+    if (mapped?.length) return mapped.filter(id => srcBulletById.has(id));
+    return srcBulletById.has(bulletId) ? [bulletId] : [];
+  };
+
+  const canonicalBulletKey = (bulletId: string, srcBulletById: Map<string, string>): string => {
+    const origins = resolveOriginIds(bulletId, srcBulletById);
+    return origins[0] ?? bulletId;
+  };
+
+  const computeRestoredOrder = (
+    bullets: BulletPoint[],
+    originalBullets: { id: string; text: string }[],
+  ): BulletPoint[] => {
+    const srcBulletById = new Map(originalBullets.map(b => [b.id, b.text]));
+    const grouped = new Map<string, BulletPoint[]>();
+    for (const b of bullets) {
+      const key = canonicalBulletKey(b.id, srcBulletById);
+      const list = grouped.get(key) ?? [];
+      list.push(b);
+      grouped.set(key, list);
+    }
+    const ordered: BulletPoint[] = [];
+    for (const orig of originalBullets) {
+      const matches = grouped.get(orig.id);
+      if (matches) ordered.push(...matches);
+    }
+    const orderedSet = new Set(ordered.map(b => b.id));
+    const extras = bullets.filter(b => !orderedSet.has(b.id));
+    return [...ordered, ...extras];
+  };
+
   const restoreSkill = (skillName: string) => {
-    const match = source.skills.data.find(
+    if (skillsLocked) return;
+    const matchIndex = baselineSkills.findIndex(
       s => s.name.trim().toLowerCase() === skillName.trim().toLowerCase(),
     );
-    if (!match) return;
+    if (matchIndex < 0) return;
+    const match = baselineSkills[matchIndex];
+    useAppStore.setState(state => ({
+      profiles: state.profiles.map(p => {
+        if (p.profileId !== active.profileId || p.skills.isLocked) return p;
+        const alreadyPresent = p.skills.data.some(
+          s => s.id === match.id || s.name.trim().toLowerCase() === match.name.trim().toLowerCase(),
+        );
+        if (alreadyPresent) return p;
+        const current = [...p.skills.data];
+        let insertAt = current.length;
+        for (let k = matchIndex + 1; k < baselineSkills.length; k++) {
+          const nextIdx = current.findIndex(s => s.id === baselineSkills[k].id);
+          if (nextIdx >= 0) { insertAt = nextIdx; break; }
+        }
+        current.splice(insertAt, 0, { ...match });
+        return { ...p, skills: { ...p.skills, data: current } };
+      }),
+    }));
+  };
+
+  const revertExpBullet = (entryId: string, bulletId: string, originalText: string, originalId?: string) => {
+    if (experienceLocked) return;
+    const entry = active.experience.data.find(e => e.id === entryId);
+    if (!entry) return;
+    const canRestoreId = Boolean(
+      originalId && !entry.bullets.some(other => other.id === originalId && other.id !== bulletId),
+    );
+    updateExperience(entryId, {
+      bullets: entry.bullets.map(b =>
+        b.id === bulletId ? { ...b, id: canRestoreId ? originalId! : b.id, text: originalText, isVerified: true } : b,
+      ),
+    });
+  };
+
+  const revertExpDescription = (entryId: string, originalDesc: string) => {
+    if (experienceLocked) return;
+    updateExperience(entryId, { description: originalDesc });
+  };
+
+  const restoreExpOrder = (entryId: string, originalBullets: { id: string; text: string }[]) => {
+    if (experienceLocked) return;
+    const entry = active.experience.data.find(e => e.id === entryId);
+    if (!entry) return;
+    updateExperience(entryId, { bullets: computeRestoredOrder(entry.bullets, originalBullets) });
+  };
+
+  const revertProjBullet = (projectId: string, bulletId: string, originalText: string, originalId?: string) => {
+    if (projectsLocked) return;
+    const proj = active.projects.data.find(p => p.id === projectId);
+    if (!proj) return;
+    const canRestoreId = Boolean(
+      originalId && !proj.bullets.some(other => other.id === originalId && other.id !== bulletId),
+    );
+    updateProject(projectId, {
+      bullets: proj.bullets.map(b =>
+        b.id === bulletId ? { ...b, id: canRestoreId ? originalId! : b.id, text: originalText, isVerified: true } : b,
+      ),
+    });
+  };
+
+  const restoreProjOrder = (projectId: string, originalBullets: { id: string; text: string }[]) => {
+    if (projectsLocked) return;
+    const proj = active.projects.data.find(p => p.id === projectId);
+    if (!proj) return;
+    updateProject(projectId, { bullets: computeRestoredOrder(proj.bullets, originalBullets) });
+  };
+
+  const revertAll = () => {
     useAppStore.setState(state => ({
       profiles: state.profiles.map(p => {
         if (p.profileId !== active.profileId) return p;
-        const alreadyPresent = p.skills.data.some(
-          s => s.name.trim().toLowerCase() === match.name.trim().toLowerCase(),
-        );
-        if (alreadyPresent) return p;
-        const restored: SkillTag = { ...match };
+        const baseExpById = new Map(baselineExperience.map(e => [e.id, e]));
+        const baseProjById = new Map(baselineProjects.map(pr => [pr.id, pr]));
+        const mappedTailoredIds = new Set(Object.keys(originMap));
         return {
           ...p,
-          skills: { ...p.skills, data: [...p.skills.data, restored] },
+          summary: p.summary.isLocked ? p.summary : { ...p.summary, data: baselineSummary },
+          experience: p.experience.isLocked ? p.experience : {
+            ...p.experience,
+            data: p.experience.data.map(entry => {
+              const origEntry = baseExpById.get(entry.id);
+              if (!origEntry) return entry;
+              const origIds = new Set(origEntry.bullets.map(ob => ob.id));
+              const currentById = new Map(entry.bullets.map(b => [b.id, b]));
+              const extras = entry.bullets.filter(b => !origIds.has(b.id) && !mappedTailoredIds.has(b.id));
+              return {
+                ...entry,
+                ...(origEntry.description !== undefined ? { description: origEntry.description } : {}),
+                bullets: [
+                  ...origEntry.bullets.map(ob => ({
+                    id: ob.id,
+                    text: ob.text,
+                    isVerified: currentById.get(ob.id)?.isVerified ?? true,
+                  })),
+                  ...extras,
+                ],
+              };
+            }),
+          },
+          projects: p.projects.isLocked ? p.projects : {
+            ...p.projects,
+            data: p.projects.data.map(proj => {
+              const origProj = baseProjById.get(proj.id);
+              if (!origProj) return proj;
+              const origIds = new Set(origProj.bullets.map(ob => ob.id));
+              const currentById = new Map(proj.bullets.map(b => [b.id, b]));
+              const extras = proj.bullets.filter(b => !origIds.has(b.id) && !mappedTailoredIds.has(b.id));
+              return {
+                ...proj,
+                bullets: [
+                  ...origProj.bullets.map(ob => ({
+                    id: ob.id,
+                    text: ob.text,
+                    isVerified: currentById.get(ob.id)?.isVerified ?? true,
+                  })),
+                  ...extras,
+                ],
+              };
+            }),
+          },
+          skills: p.skills.isLocked ? p.skills : { ...p.skills, data: baselineSkills.map(s => ({ ...s })) },
         };
       }),
     }));
   };
 
-  const revertBullet = (entryId: string, bulletId: string, originalText: string) => {
-    const entry = active.experience.data.find(e => e.id === entryId);
-    if (!entry) return;
-    updateExperience(entryId, {
-      bullets: entry.bullets.map(b => (b.id === bulletId ? { ...b, text: originalText } : b)),
-    });
-  };
-
   const activeSkillNames = new Set(active.skills.data.map(s => s.name.trim().toLowerCase()));
-  const restorableExcluded = (active.compositionChanges?.skills.excluded ?? []).filter(
+  const restorableExcluded = baselineSkills.filter(
     s => !activeSkillNames.has(s.name.trim().toLowerCase()),
   );
 
+  const entryBulletsHaveDiff = (bullets: BulletPoint[], origBullets: { id: string; text: string }[]): boolean => {
+    const srcBulletById = new Map(origBullets.map(b => [b.id, b.text]));
+    const restored = computeRestoredOrder(bullets, origBullets);
+    if (restored.map(b => b.id).join(',') !== bullets.map(b => b.id).join(',')) return true;
+    const presentOrigIds = new Set<string>();
+    for (const b of bullets) {
+      if (Object.prototype.hasOwnProperty.call(originMap, b.id)) return true;
+      const origins = resolveOriginIds(b.id, srcBulletById);
+      origins.forEach(id => presentOrigIds.add(id));
+      if (origins.length) {
+        const origText = origins.map(id => srcBulletById.get(id)!).join(' ');
+        if (origText.trim() !== b.text.trim()) return true;
+      }
+    }
+    return origBullets.some(ob => !presentOrigIds.has(ob.id));
+  };
+
+  const expHasDiff = !experienceLocked && active.experience.data.some(entry => {
+    const srcEntry = baselineExperience.find(e => e.id === entry.id);
+    if (!srcEntry) return false;
+    if (srcEntry.description !== undefined && (entry.description ?? '').trim() !== srcEntry.description.trim()) return true;
+    return entryBulletsHaveDiff(entry.bullets, srcEntry.bullets);
+  });
+
+  const projHasDiff = !projectsLocked && active.projects.data.some(proj => {
+    const srcProj = baselineProjects.find(pr => pr.id === proj.id);
+    if (!srcProj) return false;
+    return entryBulletsHaveDiff(proj.bullets, srcProj.bullets);
+  });
+
+  const skillsHaveDiff =
+    !skillsLocked &&
+    JSON.stringify(active.skills.data.map(s => `${s.id}:${s.category}`)) !==
+      JSON.stringify(baselineSkills.map(s => `${s.id}:${s.category}`));
+  const hasRevertibleChanges = (!summaryLocked && summaryChanged) || expHasDiff || projHasDiff || skillsHaveDiff;
+
   return (
     <div className="tailor-diff-review">
+      <div className="diff-toolbar">
+        <span className="diff-snapshot-label">
+          {snapshot ? 'Comparing against frozen pre-tailor snapshot' : 'Comparing against source resume'}
+        </span>
+        <button type="button" className="text-button diff-action" disabled={!hasRevertibleChanges} onClick={revertAll}>
+          <RotateCcw size={13} /> Revert all
+        </button>
+      </div>
+
       <div className="diff-card">
         <div className="diff-header">
           <strong>Summary diff</strong>
@@ -71,7 +276,8 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
             <button
               type="button"
               className="text-button diff-action"
-              onClick={() => updateSummary(source.summary.data)}
+              disabled={summaryLocked}
+              onClick={() => updateSummary(baselineSummary)}
             >
               <RotateCcw size={13} /> Revert summary
             </button>
@@ -87,14 +293,23 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
       </div>
 
       {active.experience.data.map(entry => {
-        const srcEntry = source.experience.data.find(e => e.id === entry.id);
+        const srcEntry = baselineExperience.find(e => e.id === entry.id);
         if (!srcEntry) return null;
         const srcBulletById = new Map(srcEntry.bullets.map(b => [b.id, b.text]));
+        const descBefore = (srcEntry.description ?? '').trim();
+        const descAfter = (entry.description ?? '').trim();
+        const descChanged = srcEntry.description !== undefined && descBefore !== descAfter;
         const changedBullets = entry.bullets
-          .map(b => ({ bullet: b, original: srcBulletById.get(b.id) }))
-          .filter(item => item.original !== undefined && item.original.trim() !== item.bullet.text.trim());
-        const reordered =
-          entry.bullets.map(b => b.id).join(',') !== srcEntry.bullets.map(b => b.id).join(',');
+          .map(b => {
+            const origins = resolveOriginIds(b.id, srcBulletById);
+            if (!origins.length) return null;
+            const original = origins.map(id => srcBulletById.get(id)!).join(' ');
+            const originalId = origins.length === 1 ? origins[0] : undefined;
+            return { bullet: b, original, originalId };
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item && item.original.trim() !== item.bullet.text.trim()));
+        const restoredOrder = computeRestoredOrder(entry.bullets, srcEntry.bullets);
+        const reordered = restoredOrder.map(b => b.id).join(',') !== entry.bullets.map(b => b.id).join(',');
 
         return (
           <div key={entry.id} className="diff-card">
@@ -103,17 +318,105 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
                 {entry.roleTitle}
                 {entry.companyName ? ` · ${entry.companyName}` : ''}
               </strong>
-              {reordered && <span className="diff-badge">Reordered</span>}
+              {reordered && (
+                <button
+                  type="button"
+                  className="text-button diff-action"
+                  disabled={experienceLocked}
+                  onClick={() => restoreExpOrder(entry.id, srcEntry.bullets)}
+                >
+                  <ArrowUpDown size={13} /> Restore order
+                </button>
+              )}
             </div>
+            {descChanged && (
+              <div className="diff-item">
+                <div className="diff-body">
+                  <WordDiff before={descBefore} after={descAfter} />
+                </div>
+                <button
+                  type="button"
+                  className="text-button diff-action"
+                  disabled={experienceLocked}
+                  onClick={() => revertExpDescription(entry.id, srcEntry.description ?? '')}
+                >
+                  <RotateCcw size={12} /> Revert overview
+                </button>
+              </div>
+            )}
             {changedBullets.length > 0 ? (
               <ul className="diff-list">
-                {changedBullets.map(({ bullet, original }) => (
+                {changedBullets.map(({ bullet, original, originalId }) => (
                   <li key={bullet.id} className="diff-item">
-                    <WordDiff before={original!} after={bullet.text} />
+                    <div className="diff-body">
+                      <WordDiff before={original} after={bullet.text} />
+                    </div>
                     <button
                       type="button"
                       className="text-button diff-action"
-                      onClick={() => revertBullet(entry.id, bullet.id, original!)}
+                      disabled={experienceLocked}
+                      onClick={() => revertExpBullet(entry.id, bullet.id, original, originalId)}
+                    >
+                      <RotateCcw size={12} /> Revert
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : !descChanged ? (
+              <p className="diff-unchanged">
+                {reordered ? 'Bullets reordered by relevance; wording matches original.' : 'Matches original bullets.'}
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
+
+      {active.projects.data.map(proj => {
+        const srcProj = baselineProjects.find(pr => pr.id === proj.id);
+        if (!srcProj) return null;
+        const srcBulletById = new Map(srcProj.bullets.map(b => [b.id, b.text]));
+        const changedBullets = proj.bullets
+          .map(b => {
+            const origins = resolveOriginIds(b.id, srcBulletById);
+            if (!origins.length) return null;
+            const original = origins.map(id => srcBulletById.get(id)!).join(' ');
+            const originalId = origins.length === 1 ? origins[0] : undefined;
+            return { bullet: b, original, originalId };
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item && item.original.trim() !== item.bullet.text.trim()));
+        const restoredOrder = computeRestoredOrder(proj.bullets, srcProj.bullets);
+        const reordered = restoredOrder.map(b => b.id).join(',') !== proj.bullets.map(b => b.id).join(',');
+
+        return (
+          <div key={proj.id} className="diff-card">
+            <div className="diff-header">
+              <strong>
+                {proj.name}
+                {proj.role ? ` · ${proj.role}` : ''}
+              </strong>
+              {reordered && (
+                <button
+                  type="button"
+                  className="text-button diff-action"
+                  disabled={projectsLocked}
+                  onClick={() => restoreProjOrder(proj.id, srcProj.bullets)}
+                >
+                  <ArrowUpDown size={13} /> Restore order
+                </button>
+              )}
+            </div>
+            {changedBullets.length > 0 ? (
+              <ul className="diff-list">
+                {changedBullets.map(({ bullet, original, originalId }) => (
+                  <li key={bullet.id} className="diff-item">
+                    <div className="diff-body">
+                      <WordDiff before={original} after={bullet.text} />
+                    </div>
+                    <button
+                      type="button"
+                      className="text-button diff-action"
+                      disabled={projectsLocked}
+                      onClick={() => revertProjBullet(proj.id, bullet.id, original, originalId)}
                     >
                       <RotateCcw size={12} /> Revert
                     </button>
@@ -122,7 +425,7 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
               </ul>
             ) : (
               <p className="diff-unchanged">
-                {reordered ? 'Bullets reordered by relevance; wording matches original.' : 'Wording and order match original.'}
+                {reordered ? 'Bullets reordered by relevance; wording matches original.' : 'Matches original bullets.'}
               </p>
             )}
           </div>
@@ -132,15 +435,15 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
       {restorableExcluded.length > 0 && (
         <div className="diff-card">
           <div className="diff-header">
-            <strong>Omitted skills ({restorableExcluded.length})</strong>
+            <strong>Omitted skills (click to restore)</strong>
           </div>
           <div className="diff-chips">
-            {restorableExcluded.map((skill, idx) => (
+            {restorableExcluded.map(skill => (
               <button
-                key={`${skill.name}-${idx}`}
+                key={skill.id}
                 type="button"
                 className="diff-chip"
-                title={`Restore "${skill.name}" to this tailored copy`}
+                disabled={skillsLocked}
                 onClick={() => restoreSkill(skill.name)}
               >
                 <Plus size={12} /> {skill.name}

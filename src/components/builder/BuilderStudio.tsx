@@ -3,6 +3,8 @@ import { FileText, Maximize2, Minimize2, Download, Plus, Copy, Trash2, X, CheckC
 import { useAppStore } from '@/store/useAppStore';
 import { SectionWorkspace } from './SectionWorkspace';
 import { getResumePDF } from './pdfPipeline';
+import { buildResumeDocxBlob } from '@/services/docxExport';
+import { buildBackupBlob, parseBackupJson } from '@/services/profileBackup';
 import { DesignPanel } from './DesignPanel';
 import { essentials, fullName, hasUnsupportedPDFText, type SectionId } from './resumeModel';
 import { useBuilderPersistence } from './useBuilderPersistence';
@@ -55,6 +57,7 @@ export function BuilderStudio() {
   const [zoom, setZoom] = useState<number | null>(null);
   const [stageWidth, setStageWidth] = useState(700);
   const editor = useRef<HTMLDivElement>(null);
+  const backupInput = useRef<HTMLInputElement>(null);
   const profile = s.profiles.find(p => p.profileId === s.activeProfileId);
   const compositionNotice = profile && profile.profileId !== hiddenReviewId ? profile.compositionReview : undefined;
   const workspaceResize = useWorkspaceResize(ready && !!profile);
@@ -78,6 +81,28 @@ export function BuilderStudio() {
     requestAnimationFrame(() => { const node = document.getElementById('quick-add-sections'); const container = editor.current; if (node && container) container.scrollTo({ top: container.scrollTop + node.getBoundingClientRect().top - container.getBoundingClientRect().top - 16, behavior: 'instant' }); });
   };
   const newResume = () => { s.createProfile('Untitled resume'); setModal(null); selectSection('personal'); };
+  const exportBackup = () => {
+    if (!s.profiles.length) return;
+    const blob = buildBackupBlob(s.profiles);
+    const stamp = new Date().toISOString().slice(0, 10);
+    download(blob, `folio-resumes-backup-${stamp}.json`);
+    setModal(null);
+    setToast(`Exported ${s.profiles.length} resume${s.profiles.length === 1 ? '' : 's'} as a JSON backup.`);
+  };
+  const restoreBackup = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const { profiles: restored, skippedCount } = parseBackupJson(text, s.profiles.map(p => p.profileId));
+      s.importProfiles(restored);
+      setModal(null);
+      selectSection('personal');
+      setToast(`Restored ${restored.length} resume${restored.length === 1 ? '' : 's'} from backup${skippedCount ? ` (${skippedCount} invalid skipped)` : ''}.`);
+    } catch (err) {
+      setModal(null);
+      setToast(err instanceof Error ? err.message : 'Could not restore this JSON backup.');
+    }
+  };
   const exportPDF = async () => {
     if (!profile || exporting) return;
     if (!fullName(profile)) { setModal(null); selectSection('personal'); setToast('Add your name before exporting your resume.'); return; }
@@ -90,6 +115,18 @@ export function BuilderStudio() {
       setToast('Your PDF is ready. Its pages match the live preview.');
       setModal(null);
     } catch { setModal(null); setToast('Could not generate the PDF. Your resume is unchanged. Please try again.'); }
+    finally { setExporting(false); }
+  };
+  const exportDOCX = () => {
+    if (!profile || exporting) return;
+    if (!fullName(profile)) { setModal(null); selectSection('personal'); setToast('Add your name before exporting your resume.'); return; }
+    setExporting(true);
+    try {
+      const blob = buildResumeDocxBlob(profile, s.documentTheme);
+      download(blob, `${safeName(fullName(profile) || profile.profileName)}_Resume.docx`);
+      setToast('Your ATS-friendly Word (.docx) resume is ready.');
+      setModal(null);
+    } catch { setModal(null); setToast('Could not generate the Word file. Your resume is unchanged. Please try again.'); }
     finally { setExporting(false); }
   };
   if (!ready) return <div className="builder-loading"><div className="brand"><span className="brand-mark"><FileText size={22} /></span>folio<span className="brand-dot">.</span></div>{status === 'error' ? <><AlertCircle size={24} /><h1>We couldn’t open your workspace.</h1><p>{message}</p><button className="primary-button" onClick={() => window.location.reload()}>Reload and retry</button></> : <><Loader2 className="spin" size={24} /><p>Opening your workspace…</p></>}</div>;
@@ -111,9 +148,9 @@ export function BuilderStudio() {
         <TailorWorkspace onEditOriginal={() => { setMobile('edit'); setPreviewFocused(false); setDesignOpen(false); }} onImport={openImport} onReviewImport={reviewImport} onCreated={() => { setHiddenReviewId(null); setDesignOpen(false); setPreviewFocused(false); setMobile('edit'); setSection('summary'); setExpanded('summary'); requestAnimationFrame(() => editor.current?.scrollTo({ top: 0 })); }} />
       </main>
     </>}
-    {modal === 'library' && <Modal title="My resumes" onClose={() => { setModal(null); setDeleting(null); }}><div className="library-intro"><p>A workspace for every next step.</p><div className="library-create-actions"><button className="secondary-button" onClick={openImport}><FileText size={16} />Import CV</button><button className="primary-button" onClick={newResume}><Plus size={16} />New resume</button></div></div><div className="resume-library">{s.profiles.map(p => <div key={p.profileId} className={`library-card ${s.activeProfileId === p.profileId ? 'selected' : ''}`}><FileText size={24} /><button className="library-open" onClick={() => { s.setActiveProfile(p.profileId); setModal(null); selectSection('personal'); }}><strong>{p.profileName || 'Untitled resume'}</strong><span>{fullName(p) || 'Add your personal details'}{s.activeProfileId === p.profileId ? ' · Current document' : ''}</span></button><button className="icon-button" aria-label={`Duplicate ${p.profileName}`} onClick={() => { s.cloneProfile(p.profileId, `${p.profileName} (Copy)`); setToast('Resume duplicated.'); }}><Copy size={17} /></button><button className="icon-button danger-text" aria-label={`Delete ${p.profileName}`} onClick={() => setDeleting(p.profileId)}><Trash2 size={17} /></button>{deleting === p.profileId && <div className="delete-confirm"><p>Delete this resume from this browser? This cannot be undone.</p><button className="secondary-button" onClick={() => setDeleting(null)}>Keep resume</button><button className="danger-button" onClick={() => { s.deleteProfile(p.profileId); setDeleting(null); }}>Delete resume</button></div>}</div>)}{!s.profiles.length && <p className="subtle-note">No resumes yet. Start with a blank document or try the demo.</p>}</div><div className="library-bottom"><button className="text-button" onClick={() => { s.loadSampleProfile(); setModal(null); selectSection('personal'); setToast('Demo resume loaded. Replace the sample information with your own.'); }}><FileText size={16} />Try a demo resume</button></div><p className="library-privacy"><HardDrive size={14} />Stored in this browser, not in a cloud account. Clearing browser data can remove your resumes.</p></Modal>}
-    {modal === 'export' && profile && <Modal title="Ready for your next chapter?" onClose={() => setModal(null)}><div className="export-dialog"><div className="export-art"><FileText size={42} /><CheckCircle2 size={22} /></div><h3>A polished resume. A portable PDF.</h3><p>Export your <strong>{selectedTemplate}</strong> template on A4 paper, with selectable text and no watermark.</p><div className="export-checklist">{checklist.map(x => <div key={x.label}>{x.done ? <CheckCircle2 size={16} /> : <Info size={16} />}<span>{x.label}</span><small>{x.done ? 'Included' : 'Not added'}</small></div>)}</div><p className="subtle-note">Optional sections can stay empty. This is a content checklist, not a guarantee of job or ATS outcomes. Latin-script PDF export in this release.</p><button className="primary-button export-main" disabled={exporting} onClick={() => void exportPDF()}>{exporting ? <Loader2 className="spin" size={18} /> : <Download size={18} />}{exporting ? 'Preparing PDF…' : 'Download PDF'}</button><div className="export-secondary"><button className="text-button" onClick={() => setModal('pdf')}><Eye size={16} />Inspect PDF first</button></div></div></Modal>}
-    {modal === 'pdf' && profile && <Modal title="PDF preview · Final page breaks" wide onClose={() => setModal(null)}><div className="pdf-preview-note"><Info size={16} />Preview of the file you will download. Latin-script fonts in this release.<button className="text-button" disabled={exporting} onClick={() => void exportPDF()}><Download size={16} />Download</button></div><Suspense fallback={<div className="pdf-loading"><Loader2 className="spin" size={24} />Preparing your PDF…</div>}>{unsupportedPDF ? <div className="pdf-loading">Non-Latin PDF export needs dedicated fonts and shaping. Your content is kept in this browser.</div> : <PDFInspection profile={profile} theme={s.documentTheme} />}</Suspense></Modal>}
+    {modal === 'library' && <Modal title="My resumes" onClose={() => { setModal(null); setDeleting(null); }}><div className="library-intro"><p>A workspace for every next step.</p><div className="library-create-actions"><button className="secondary-button" onClick={openImport}><FileText size={16} />Import CV</button><button className="primary-button" onClick={newResume}><Plus size={16} />New resume</button></div></div><div className="resume-library">{s.profiles.map(p => <div key={p.profileId} className={`library-card ${s.activeProfileId === p.profileId ? 'selected' : ''}`}><FileText size={24} /><button className="library-open" onClick={() => { s.setActiveProfile(p.profileId); setModal(null); selectSection('personal'); }}><strong>{p.profileName || 'Untitled resume'}</strong><span>{fullName(p) || 'Add your personal details'}{s.activeProfileId === p.profileId ? ' · Current document' : ''}</span></button><button className="icon-button" aria-label={`Duplicate ${p.profileName}`} onClick={() => { s.cloneProfile(p.profileId); setToast('Resume duplicated.'); }}><Copy size={17} /></button><button className="icon-button danger-text" aria-label={`Delete ${p.profileName}`} onClick={() => setDeleting(p.profileId)}><Trash2 size={17} /></button>{deleting === p.profileId && <div className="delete-confirm"><p>Delete this resume from this browser? This cannot be undone.</p><button className="secondary-button" onClick={() => setDeleting(null)}>Keep resume</button><button className="danger-button" onClick={() => { s.deleteProfile(p.profileId); setDeleting(null); }}>Delete resume</button></div>}</div>)}{!s.profiles.length && <p className="subtle-note">No resumes yet. Start with a blank document or try the demo.</p>}</div><div className="library-bottom"><button type="button" className="text-button" onClick={() => { s.loadSampleProfile(); setModal(null); selectSection('personal'); setToast('Demo resume loaded. Replace the sample information with your own.'); }}><FileText size={16} />Try a demo resume</button><button type="button" className="text-button" disabled={!s.profiles.length} onClick={exportBackup}><Download size={16} />Export JSON backup</button><button type="button" className="text-button" onClick={() => backupInput.current?.click()}><HardDrive size={16} />Restore JSON</button><input ref={backupInput} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={e => { void restoreBackup(e.target.files?.[0]); e.target.value = ''; }} /></div><p className="library-privacy"><HardDrive size={14} />Stored in this browser, not in a cloud account. Clearing browser data can remove your resumes.</p></Modal>}
+    {modal === 'export' && profile && <Modal title="Ready for your next chapter?" onClose={() => setModal(null)}><div className="export-dialog"><div className="export-art"><FileText size={42} /><CheckCircle2 size={22} /></div><h3>A polished resume. A portable PDF.</h3><p>Export your <strong>{selectedTemplate}</strong> template on A4 paper, with selectable text and no watermark.</p><div className="export-checklist">{checklist.map(x => <div key={x.label}>{x.done ? <CheckCircle2 size={16} /> : <Info size={16} />}<span>{x.label}</span><small>{x.done ? 'Included' : 'Not added'}</small></div>)}</div><p className="subtle-note">Optional sections can stay empty. This is a content checklist, not a guarantee of job or ATS outcomes. Latin-script PDF export in this release.</p><button className="primary-button export-main" disabled={exporting} onClick={() => void exportPDF()}>{exporting ? <Loader2 className="spin" size={18} /> : <Download size={18} />}{exporting ? 'Preparing PDF…' : 'Download PDF'}</button><button className="secondary-button export-docx" disabled={exporting} onClick={exportDOCX}><FileText size={18} />Download Word (.docx)</button><div className="export-secondary"><button className="text-button" onClick={() => setModal('pdf')}><Eye size={16} />Inspect PDF first</button></div></div></Modal>}
+    {modal === 'pdf' && profile && <Modal title="PDF preview · Final page breaks" wide onClose={() => setModal(null)}><div className="pdf-preview-note"><Info size={16} />Preview of the file you will download. Latin-script fonts in this release.<button className="text-button" disabled={exporting} onClick={() => void exportPDF()}><Download size={16} />Download</button></div><Suspense fallback={<div className="pdf-loading"><Loader2 className="spin" size={24} />Preparing your PDF…</div>}>{unsupportedPDF ? <div className="pdf-loading"><p>Non-Latin PDF export needs dedicated fonts and shaping. Your content is kept in this browser—export as Word (.docx) for full Arabic and Unicode support.</p><button className="primary-button" disabled={exporting} onClick={exportDOCX}><FileText size={16} />Download Word (.docx)</button></div> : <PDFInspection profile={profile} theme={s.documentTheme} />}</Suspense></Modal>}
     {importOpen && <ImportCVDialog review={importReview} onClose={() => setImportOpen(false)} onImported={() => { setImportOpen(false); setDesignOpen(false); setPreviewFocused(false); setMobile('preview'); setToast('Resume imported as a new document. Check the extracted content before using it.'); }} />}
     {toast && <div className="builder-toast" role="status"><Info size={18} /><span>{toast}</span><button className="icon-button" aria-label="Dismiss notification" onClick={() => setToast('')}><X size={16} /></button></div>}
   </div>;

@@ -46,30 +46,47 @@ function xmlText(xml: string, listStyles = new Set<string>(), links = new Map<st
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length || doc.getElementsByTagNameNS('*', 'parsererror').length) throw new CVImportError('xml', 'The DOCX text is damaged and could not be read.');
   const paragraphs = [...doc.getElementsByTagNameNS(WORD_NS, 'p')];
-  const walk = (node: Node, root: Node): string => {
+  const normUrl = (u: string) => u.trim().replace(/^(?:mailto:|https?:\/\/)(?:www\.)?/i, '').replace(/\/+$/, '').toLowerCase();
+  const walk = (node: Node, root: Node, acc: { text: string }): string => {
     if (node.nodeType !== 1) return '';
     const el = node as Element;
     if (el !== root && el.namespaceURI === WORD_NS && el.localName === 'p') return '';
     if (el.namespaceURI === WORD_NS) {
       if (['del', 'instrText', 'delText', 'pPr'].includes(el.localName)) return '';
       if (el.localName === 'hyperlink') {
-        const label = [...node.childNodes].map(child => walk(child, root)).join('');
+        const label = [...node.childNodes].map(child => walk(child, root, acc)).join('');
         const id = el.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || '';
         const target = links.get(id);
-        return target && !label.includes(target) ? label + ' ' + target : label;
+        if (!target) return label;
+        const nLabel = normUrl(label);
+        const nTarget = normUrl(target);
+        if (nTarget && nLabel.includes(nTarget)) return label;
+        return label + ' ' + target;
       }
-      if (el.localName === 't') return el.textContent || '';
-      if (['tab'].includes(el.localName)) return ' | ';
-      if (['br', 'cr'].includes(el.localName)) return '\n';
+      if (el.localName === 't') {
+        const chunk = el.textContent || '';
+        acc.text += chunk;
+        return chunk;
+      }
+      if (['tab'].includes(el.localName)) {
+        const sep = /^[•●▪◦‣–—*-]$/.test(acc.text.trim()) ? ' ' : ' | ';
+        acc.text += sep;
+        return sep;
+      }
+      if (['br', 'cr'].includes(el.localName)) {
+        acc.text += '\n';
+        return '\n';
+      }
     }
-    return [...node.childNodes].map(child => walk(child, root)).join('');
+    return [...node.childNodes].map(child => walk(child, root, acc)).join('');
   };
   const visible = (p: Element) => { let parent = p.parentElement; while (parent) { if (parent.namespaceURI === WORD_NS && parent.localName === 'del') return false; parent = parent.parentElement; } return true; };
   const lineOf = (p: Element) => {
-    const t = walk(p, p).trim();
+    const t = walk(p, p, { text: '' }).trim();
     const style = p.getElementsByTagNameNS(WORD_NS, 'pStyle')[0]?.getAttributeNS(WORD_NS, 'val') || '';
     const numbered = p.getElementsByTagNameNS(WORD_NS, 'numPr').length > 0 || listStyles.has(style);
-    return (numbered && t ? '• ' : '') + t;
+    const alreadyBulleted = /^[•●▪◦‣–—*-]\s/.test(t);
+    return (numbered && t && !alreadyBulleted ? '• ' : '') + t;
   };
   const lines = paragraphs.filter(visible).map(lineOf);
   // Recognize only a whole-document, single-row sidebar-left / named-main-right layout.

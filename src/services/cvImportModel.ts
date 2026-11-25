@@ -194,8 +194,18 @@ function certificateGroups(lines: string[]): { lines: string[]; date: string }[]
     const date = singleDate(line);
     if (date && current.length) { flush(date); continue; }
     if (date) { groups.push({ lines: [line], date: '' }); continue; }
+    const stripped = stripBullet(line);
+    const inlineParts = stripped.split(/\s*\|\s*/).map(x => x.trim()).filter(Boolean);
+    if (inlineParts.length >= 2) {
+      const tailDate = singleDate(inlineParts[inlineParts.length - 1]);
+      if (tailDate) {
+        flush();
+        groups.push({ lines: [inlineParts.slice(0, -1).join(' | ')], date: tailDate });
+        continue;
+      }
+    }
     if (isBullet(line)) flush();
-    current.push(stripBullet(line));
+    current.push(stripped);
   }
   flush(); return groups;
 }
@@ -203,7 +213,7 @@ function certificateGroups(lines: string[]): { lines: string[]; date: string }[]
 export function buildImportedProfile(extracted: ExtractedCV, fileName: string, format: ImportFormat, theme: DocumentTheme): CVProfile {
   const text = validateImportText(extracted.text);
   const wrap = <T,>(title: string, data: T) => ({ id: uuid(), title, data, isLocked: false });
-  const p: CVProfile = { profileId: uuid(), profileName: fileName.replace(/\.(pdf|docx)$/i, '').slice(0, 100) || 'Imported resume', version: 0, lastConfirmed: '', documentTheme: { ...theme },
+  const p: CVProfile = { profileId: uuid(), profileName: fileName.replace(/\.(pdf|docx)$/i, '').replace(/[_]+/g, ' ').trim().slice(0, 100) || 'Imported resume', version: 0, lastConfirmed: '', documentTheme: { ...theme },
     resumeHeader: wrap('Resume Header', { name: '', email: '', phone: '', linkedin: '', location: '', showLocation: true, showPhone: true, showLinkedin: true, showGithub: true, showPortfolio: true, showOtherUrl: true }),
     headline: wrap('Headline', ''), summary: wrap('Professional Summary', ''), experience: wrap('Work Experience', []), education: wrap('Education', []), skills: wrap('Skills', []), projects: wrap('Projects', []), certifications: wrap('Certifications', []), customSections: [], sectionOrder: ['personal'] };
   const warnings = [...extracted.warnings];
@@ -223,7 +233,7 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
       const line = raw.trim(); let found = line ? heading(line) : undefined;
       // A known academic subgroup inside skills is context for the following
       // skill names; outside skills it remains an editable professional section.
-      if (current.section === 'skills' && found?.section === 'other' && isOriginalSkillGroupHeading(line.replace(/[:：].*$/, '').trim())) found = undefined;
+      if (current.section === 'skills' && ((found?.section === 'other' && isOriginalSkillGroupHeading(line.replace(/[:：].*$/, '').trim())) || (found?.section === 'languages' && Boolean(found.inline)))) found = undefined;
       if (found) {
         recoveredHeadingSpacing ||= key(found.title) !== key(line.replace(/:.*$/, ''));
         current = { section: found.section, title: found.title, lines: found.inline ? [found.inline] : [] }; blocks.push(current);
@@ -251,9 +261,21 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
         const value = match[0]; if (/linkedin/i.test(value) && !h.linkedin) h.linkedin = value; else if (/github/i.test(value) && !h.github) h.github = value; else continue;
         line = line.replace(value, '');
       }
-      line = line.replace(/\b(?:email|phone|mobile|linkedin|github|tel)\s*:/gi, '').replace(/^[\s|·,;]+|[\s|·,;]+$/g, '').trim();
+      for (const match of [...line.matchAll(/(?:https?:\/\/|www\.)[^\s|·,]+/gi)]) {
+        const value = match[0];
+        if (!h.portfolio) h.portfolio = value;
+        else if (!h.otherUrl) h.otherUrl = value;
+        else continue;
+        line = line.replace(value, '');
+      }
+      line = line.replace(/\b(?:email|phone|mobile|linkedin|github|portfolio|website|tel)\s*:/gi, '').replace(/^[\s|·,;]+|[\s|·,;]+$/g, '').trim();
       if (!line || /^(?:cv|resume|curriculum vitae|السيرة الذاتية)$/i.test(line)) continue;
-      if (!h.name && /^[\p{L}][\p{L}\p{M} .’'-]{2,85}$/u.test(line) && line.split(/\s+/).length >= 2 && line.split(/\s+/).length <= 7 && !/engineer|developer|manager|designer|analyst|مهندس|مطور|مدير/i.test(line)) h.name = line;
+      if (!h.name && /^[\p{L}][\p{L}\p{M} .’'-]{2,85}$/u.test(line) && line.split(/\s+/).length >= 2 && line.split(/\s+/).length <= 7 && !/engineer|developer|manager|designer|analyst|مهندس|مطور|مدير/i.test(line)) {
+        h.name = line;
+        const parts = line.split(/\s+/);
+        h.firstName = parts[0];
+        h.lastName = parts.slice(1).join(' ');
+      }
       else if (h.name && !p.headline.data && /engineer|developer|manager|designer|analyst|specialist|consultant|student|مهندس|مطور|مدير|طالب|محلل|مصمم/i.test(line) && line.length <= 130) { p.headline.data = line; h.desiredJobPosition = line; }
       else if (/^(?:location|address|العنوان|الموقع)\s*:/i.test(line) && !h.location) h.location = line.replace(/^[^:]+:\s*/, '');
       else leftovers.push(line);
@@ -268,8 +290,22 @@ export function buildImportedProfile(extracted: ExtractedCV, fileName: string, f
     if (section === 'summary') { p.summary.data = [p.summary.data, lines.filter(Boolean).map(stripBullet).join(' ')].filter(Boolean).join('\n\n'); }
     else if (section === 'skills') {
       for (const {text: raw, label} of skillLines(lines)) {
-        const category = /business|management|soft|ادار/i.test(title + ' ' + label) ? 'Soft' as const : /tools|ادوات/i.test(label) ? 'Tools' as const : 'Technical' as const;
-        for (const name of skillItems(raw)) if (!p.skills.data.some(item => key(item.name) === key(name))) p.skills.data.push({ id: uuid(), name, category });
+        const ctx = `${title} ${label}`;
+        const category = /business|management|soft|interpersonal|ادار/i.test(ctx)
+          ? 'Soft' as const
+          : /languages?|اللغات/i.test(ctx)
+            ? 'Languages' as const
+            : /tools|ادوات/i.test(label)
+              ? 'Tools' as const
+              : 'Technical' as const;
+        for (const rawItem of skillItems(raw)) {
+          const levelMatch = /^(.+?)\s+[—–]\s+(.+)$/.exec(rawItem);
+          const name = (levelMatch ? levelMatch[1] : rawItem).trim();
+          const level = levelMatch ? levelMatch[2].trim() : undefined;
+          if (name && !p.skills.data.some(item => key(item.name) === key(name))) {
+            p.skills.data.push({ id: uuid(), name, category, ...(level ? { level } : {}) });
+          }
+        }
       }
     } else if (section === 'experience') {
       for (const group of structuredChunks(lines, 'experience')) {

@@ -1,11 +1,11 @@
-import { Document, Font, Image, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Font, Image, Link, Page, Text, View } from '@react-pdf/renderer';
 
 // Prevent awkward mid-word syllable breaks (e.g. 'collab-oration') in exported PDFs.
 Font.registerHyphenationCallback(word => [word]);
 import type { CVProfile } from '@/types/schema';
 import type { DocumentTheme } from '@/store/useAppStore';
 import { visiblePhoto } from './photoModel';
-import { contacts, fullName, headline, resumeBlocks, themeMetrics } from './resumeModel';
+import { contactItems, fullName, headline, resumeBlocks, themeMetrics } from './resumeModel';
 
 // A first, naturally wrapped render measures the real font/layout heights and the
 // page on which every entry and bullet starts. Never disable wrapping on a guessed
@@ -78,16 +78,17 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
   const fits = (key: string, limit = bodyHeight - 2) => Boolean(measurements?.heights[key] && measurements.heights[key] <= limit);
   const measuring = !measurements;
   const continued = continuations === null ? {} : continuations ?? deriveContinuations(profile, measurements);
-  const titleStyle = { fontFamily: m.bold, fontSize: 10, textTransform: 'uppercase' as const, color: theme.accentColor, marginBottom: 6 };
+  const fit = Boolean(theme.fitOnePage);
+  const titleStyle = { fontFamily: m.bold, fontSize: fit ? 9 : 10, textTransform: 'uppercase' as const, color: theme.accentColor, marginBottom: fit ? 4 : 6 };
   return <Document title={profile.profileName} author={fullName(profile)} onRender={onMeasure ? result => { const data = (result as unknown as { _INTERNAL__LAYOUT__DATA_?: PDFLayoutNode })._INTERNAL__LAYOUT__DATA_; if (data) onMeasure(data); } : undefined}>
     <Page size="A4" style={{ padding: m.margin, fontFamily: m.font, fontSize: m.size, color: '#243044', lineHeight: m.leading }}>
-      <View id="measure-header" style={{ paddingBottom: 11, marginBottom: Math.max(10, m.gap - 4), borderBottomWidth: classic ? 1 : 2, borderBottomColor: theme.accentColor }}>
-        <View style={{ flexDirection: photo && !classic ? 'row' : 'column', alignItems: photo && !classic ? 'center' : 'stretch', gap: photo ? 16 : 0 }}>
-          {photo && <Image src={photo.source} style={{ width: 72, height: 72, borderRadius: photo.shape === 'circle' ? 36 : 6, alignSelf: classic ? 'center' : 'flex-start' }} />}
+      <View id="measure-header" style={{ paddingBottom: m.headerPadBottom, marginBottom: Math.max(fit ? 7 : 10, m.gap - 4), borderBottomWidth: classic ? 1 : 2, borderBottomColor: theme.accentColor }}>
+        <View style={{ flexDirection: photo && !classic ? 'row' : 'column', alignItems: photo && !classic ? 'center' : 'stretch', gap: photo ? (fit ? 12 : 16) : 0 }}>
+          {photo && <Image src={photo.source} style={{ width: m.photoSize, height: m.photoSize, borderRadius: photo.shape === 'circle' ? m.photoSize / 2 : 6, alignSelf: classic ? 'center' : 'flex-start' }} />}
           <View style={photo && !classic ? { flex: 1 } : {}}>
-            <Text style={{ fontSize: 27, lineHeight: 1.25, fontFamily: m.bold, color: '#172337', textAlign: classic ? 'center' : 'left' }}>{fullName(profile) || 'Your name'}</Text>
-            {Boolean(headline(profile)) && <Text style={{ fontSize: 12, lineHeight: 1.45, color: theme.accentColor, marginTop: 5, textAlign: classic ? 'center' : 'left' }}>{headline(profile)}</Text>}
-            {contacts(profile).length > 0 && <Text style={{ marginTop: 8, fontSize: 9, lineHeight: 1.5, color: '#526074', textAlign: classic ? 'center' : 'left' }}>{contacts(profile).join('  ·  ')}</Text>}
+            <Text style={{ fontSize: m.headerNameSize, lineHeight: 1.25, fontFamily: m.bold, color: '#172337', textAlign: classic ? 'center' : 'left' }}>{fullName(profile) || 'Your name'}</Text>
+            {Boolean(headline(profile)) && <Text style={{ fontSize: m.headerHeadlineSize, lineHeight: 1.4, color: theme.accentColor, marginTop: fit ? 3 : 5, textAlign: classic ? 'center' : 'left' }}>{headline(profile)}</Text>}
+            {contactItems(profile).length > 0 && <Text style={{ marginTop: fit ? 5 : 8, fontSize: m.headerContactSize, lineHeight: 1.45, color: '#526074', textAlign: classic ? 'center' : 'left' }}>{contactItems(profile).map((c, idx) => <Text key={idx}>{idx > 0 ? '  ·  ' : ''}{c.url ? <Link src={c.url} style={{ color: '#526074', textDecoration: 'none' }}>{c.label}</Link> : c.label}</Text>)}</Text>}
           </View>
         </View>
       </View>
@@ -102,6 +103,54 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
         const keepTogether = !measuring && !manualEntryBreak && blockHeight !== undefined && blockHeight <= bodyHeight - 2;
         const points = continued[block.id] ?? { items: [] as number[], bullets: {} as Record<number, number[]> };
         const heading = <Text minPresenceAhead={28} style={titleStyle}>{`${block.title} (continued)`}</Text>;
+        if (block.id === 'certifications' && Boolean(theme.compactCertifications)) {
+          type CertCell = { item: typeof block.items[number]; index: number };
+          const rows: { items: CertCell[]; manualBreak: boolean }[] = [];
+          let currentRow: CertCell[] = [];
+          let pendingBreak = false;
+          for (let i = 0; i < block.items.length; i++) {
+            const item = block.items[i];
+            const mode = item.entryId ? profile.pageLayout?.entries?.[item.entryId] || 'auto' : 'auto';
+            if (!measuring && mode === 'new-page') {
+              if (currentRow.length) { rows.push({ items: currentRow, manualBreak: pendingBreak }); currentRow = []; pendingBreak = false; }
+              pendingBreak = true;
+            }
+            currentRow.push({ item, index: i });
+            if (currentRow.length === 2) {
+              rows.push({ items: currentRow, manualBreak: pendingBreak });
+              currentRow = []; pendingBreak = false;
+            }
+          }
+          if (currentRow.length) rows.push({ items: currentRow, manualBreak: pendingBreak });
+          if (rows.length && !measuring && sectionBreak && !keepTogether) rows[0].manualBreak = true;
+
+          const compactRows = rows.map((row, rowIndex) => {
+            const isLastRow = rowIndex === rows.length - 1;
+            const showContinued = row.items.some(cell => points.items.includes(cell.index));
+            return (
+              <View key={`cert-row-${rowIndex}`} break={row.manualBreak} wrap={measuring} style={{ marginBottom: isLastRow ? Math.max(fit ? 7 : 10, m.gap - 4) : (fit ? 4 : 6) }}>
+                {rowIndex === 0 && <Text minPresenceAhead={35} style={titleStyle}>{block.title}</Text>}
+                {rowIndex > 0 && showContinued && heading}
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  {row.items.map(({ item, index }) => {
+                    const key = `measure-entry-${block.id}-${index}`;
+                    const meta = [item.subtitle, item.date].filter(Boolean).join(' · ');
+                    return (
+                      <View key={key} id={key} style={{ flex: 1 }}>
+                        <View id={`${key}-start`}>
+                          {Boolean(item.title) && <Text style={{ fontFamily: m.bold, fontSize: Math.max(8, m.size - 0.5), color: '#172337' }}>{item.title}</Text>}
+                          {Boolean(meta) && <Text style={{ fontSize: Math.max(7.5, m.size - 1.5), color: '#526074', marginTop: 1.5 }}>{meta}</Text>}
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {row.items.length === 1 && <View style={{ flex: 1 }} />}
+                </View>
+              </View>
+            );
+          });
+          return <View key={block.id} id={blockKey} break={sectionBreak && keepTogether} wrap={!keepTogether}>{compactRows}</View>;
+        }
         const items = block.items.map((item, i) => {
           const key = `measure-entry-${block.id}-${i}`;
           const startKey = `${key}-start`;
@@ -109,7 +158,7 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
           const manualBreak = !measuring && (mode === 'new-page' || (i === 0 && sectionBreak && !keepTogether));
           const together = !measuring && fits(key, mode === 'together' || mode === 'new-page' ? bodyHeight - 2 : bodyHeight * 0.6);
           const bullet = (text: string, j: number) => {
-            const row = <View key={j} id={`${key}-bullet-${j}`} wrap={measuring || !fits(`${key}-bullet-${j}`)} style={{ flexDirection: 'row', marginTop: 3 }}><Text style={{ width: 11 }}>•</Text><Text orphans={2} widows={2} style={{ flex: 1 }}>{text}</Text></View>;
+            const row = <View key={j} id={`${key}-bullet-${j}`} wrap={measuring || !fits(`${key}-bullet-${j}`)} style={{ flexDirection: 'row', marginTop: m.bulletGap }}><Text style={{ width: 11 }}>•</Text><Text orphans={2} widows={2} style={{ flex: 1 }}>{text}</Text></View>;
             // Heading and first continued bullet move as one unit, so the
             // heading can never strand at the bottom of the previous page.
             // A very long bullet must remain splittable; don't put it in an
@@ -117,14 +166,14 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
             const canGroup = fits(`${key}-bullet-${j}`, bodyHeight - 40);
             return points.bullets[i]?.includes(j) && canGroup ? <View key={j} wrap={false}>{heading}{row}</View> : row;
           };
-          return <View key={key} id={key} break={manualBreak} wrap={!together} style={{ marginBottom: i === block.items.length - 1 ? Math.max(10, m.gap - 4) : 8 }}>
+          return <View key={key} id={key} break={manualBreak} wrap={!together} style={{ marginBottom: i === block.items.length - 1 ? Math.max(fit ? 7 : 10, m.gap - 4) : m.itemGap }}>
             <View id={startKey} wrap={measuring || !fits(startKey, points.items.includes(i) ? bodyHeight - 40 : bodyHeight - 2)}>
               {i === 0 && <Text minPresenceAhead={35} style={titleStyle}>{block.title}</Text>}
               {points.items.includes(i) && heading}
               <View minPresenceAhead={item.text || item.bullets?.length ? 32 : 0}>
                 {Boolean(item.title || item.date) && <View minPresenceAhead={20} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 14 }}>
                   <Text style={{ fontFamily: m.bold, flex: 1 }}>{item.title}</Text>
-                  {Boolean(item.date) && <Text style={{ fontSize: 9, color: '#526074', maxWidth: '38%' }}>{item.date}</Text>}
+                  {Boolean(item.date) && <Text style={{ fontSize: Math.min(9, Math.max(7.5, m.size - 1)), color: '#526074', maxWidth: '38%' }}>{item.date}</Text>}
                 </View>}
                 {Boolean(item.subtitle) && <Text style={{ color: '#526074', fontSize: m.size - 1, marginTop: 2 }}>{item.subtitle}</Text>}
               </View>

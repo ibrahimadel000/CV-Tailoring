@@ -36,7 +36,7 @@ export function FormSection({ title, children }: { title?: string; children: Rea
   return <div className={`form-section ${title ? 'form-section-labelled' : ''}`} role="group" aria-labelledby={title ? id : undefined}>{title && <h3 id={id}>{title}</h3>}{children}</div>;
 }
 export function DateRangeFields({ start, end, onStart, onEnd, currentLabel = 'Ongoing', endLabel = 'End date' }: { start?: string; end?: string; onStart: (value: string) => void; onEnd: (value: string) => void; currentLabel?: string; endLabel?: string }) {
-  const previousEnd = useRef(''); const ongoing = end === 'Present';
+  const previousEnd = useRef(''); const ongoing = /^(?:present|current|now|حتى الآن|حاليا|حالياً|الان|الآن)$/i.test((end || '').trim());
   return <div className="date-range-fields"><div className="form-grid"><Field label="Start date" value={start} onChange={onStart} placeholder="Jan 2023" autoComplete="off" /><Field label={endLabel} value={end} onChange={onEnd} placeholder="Jun 2025" autoComplete="off" disabled={ongoing} /></div><div className="date-current-row"><CheckField label={currentLabel} checked={ongoing} onChange={checked => { if (checked) { previousEnd.current = end || ''; onEnd('Present'); } else onEnd(previousEnd.current); }} /></div></div>;
 }
 const Editing = createContext<{ active: string | null; setActive: (id: string | null) => void } | null>(null);

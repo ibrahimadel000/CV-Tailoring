@@ -15,13 +15,15 @@ export function TailoredCopyNotice() {
   const heading = meta
     ? (meta.changes.length ? 'Tailored copy' : 'Reviewed copy')
     : 'Tailored copy';
-  const subtitle = meta
+  const rawTargetLine = profile.targetJob?.split(/\r?\n/).find(l => l.trim())?.trim() || 'Target role';
+  const fullSubtitle = meta
     ? `${meta.jobTitle || 'Target role'}${meta.company ? ` · ${meta.company}` : ''}`
-    : (profile.targetJob?.split(/\r?\n/)[0]?.trim().slice(0, 72) || 'Target role');
+    : rawTargetLine;
+  const subtitle = fullSubtitle.length > 72 ? `${fullSubtitle.slice(0, 72).trimEnd()}…` : fullSubtitle;
 
   return <div className="tailored-copy-notice">
     <Sparkles size={16} aria-hidden="true" />
-    <div><strong>{heading}</strong><span title={subtitle}>{subtitle}</span></div>
+    <div><strong>{heading}</strong><span title={fullSubtitle}>{subtitle}</span></div>
     {original && <button className="text-button" aria-label="Open original resume" onClick={() => open(original.profileId)}><ArrowLeft size={15} />Original</button>}
   </div>;
 }

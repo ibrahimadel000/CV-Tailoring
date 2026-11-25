@@ -61,5 +61,7 @@ export async function providerFailureMessage(response: Response, signal?: AbortS
   const safe = [...new Set(fields)].slice(0, 8);
   const note = safe.length ? ' Provider-reported details, not a verification of account usage.' : '';
   const hint = retry !== undefined ? ` Provider retry hint: ${retry}s (not a guarantee).` : '';
-  return `Google rejected the request (HTTP ${response.status}${safe.length ? '; ' + safe.join('; ') : ''}).${note}${hint} No automatic retry. Your resumes are unchanged.`;
+  const isProxyError = response.headers?.get?.('x-tailor-error-source') === 'proxy';
+  const actor = isProxyError ? 'The tailoring server' : 'Google';
+  return `${actor} rejected the request (HTTP ${response.status}${safe.length ? '; ' + safe.join('; ') : ''}).${note}${hint} No automatic retry. Your resumes are unchanged.`;
 }

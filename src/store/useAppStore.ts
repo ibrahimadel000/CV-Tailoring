@@ -5,6 +5,7 @@ import { createSampleProfile } from '@/mock/profile';
 import { cvProfileSchema, documentThemeSchema } from '@/types/schema';
 import type { DocumentTheme } from '@/types/schema';
 export type { DocumentTheme } from '@/types/schema';
+export type LockableTailorSection = 'summary' | 'experience' | 'projects' | 'skills';
 import type {
   CVProfile,
   ExperienceEntry,
@@ -29,7 +30,7 @@ function legacyTheme(value: unknown): DocumentTheme {
   if (!value || typeof value !== 'object') return theme;
   for (const key of Object.keys(documentThemeSchema.shape) as (keyof DocumentTheme)[]) {
     const parsed = documentThemeSchema.shape[key].safeParse((value as Record<string, unknown>)[key]);
-    if (parsed.success) Object.assign(theme, { [key]: parsed.data });
+    if (parsed.success && parsed.data !== undefined) Object.assign(theme, { [key]: parsed.data });
   }
   return theme;
 }
@@ -55,12 +56,14 @@ interface AppStore {
   updateProfileName: (id: string, name: string) => void;
   setDocumentTheme: (theme: Partial<DocumentTheme>) => void;
   deleteProfile: (id: string) => void;
+  importProfiles: (incoming: CVProfile[]) => void;
   applyTailoredResponse: (response: AITailoredResponse) => void;
 
   // Active Profile Editors
   updateResumeHeader: (updates: Partial<ResumeHeader>) => void;
   updateHeadline: (text: string) => void;
   updateSummary: (text: string) => void;
+  toggleSectionLock: (section: LockableTailorSection) => void;
   
   addCertification: () => void;
   updateCertification: (id: string, updates: Partial<CertificationEntry>) => void;
@@ -234,12 +237,29 @@ export const useAppStore = create<AppStore>((set, get) => {
       
       clonedProfile.documentTheme = { ...(source.documentTheme ?? get().documentTheme) };
       clonedProfile.profileId = uuidv4(); // Issue new ID
-      clonedProfile.profileName = newName || `${source.profileName} (Copy)`;
+      if (newName) {
+        clonedProfile.profileName = newName.slice(0, 100);
+      } else {
+        const base = source.profileName.replace(/\s*\(Copy(?:\s+\d+)?\)$/i, '').trim() || source.profileName;
+        let candidate = `${base} (Copy)`.slice(0, 100);
+        let n = 2;
+        while (profiles.some(pr => pr.profileName === candidate)) {
+          candidate = `${base} (Copy ${n++})`.slice(0, 100);
+        }
+        clonedProfile.profileName = candidate;
+      }
       clonedProfile.baseProfileId = sourceId;
       
       if (isTailored) {
         clonedProfile.targetJob = targetJob;
         clonedProfile.matchScore = matchScore;
+      } else {
+        delete clonedProfile.targetJob;
+        delete clonedProfile.matchScore;
+        delete clonedProfile.tailoring;
+        delete clonedProfile.compositionChanges;
+        delete clonedProfile.compositionReview;
+        delete clonedProfile.compositionSnapshot;
       }
 
       set((state) => ({
@@ -283,7 +303,20 @@ export const useAppStore = create<AppStore>((set, get) => {
           activeId = remaining.length > 0 ? remaining[remaining.length - 1].profileId : null;
         }
         return { profiles: remaining, activeProfileId: activeId,
-          documentTheme: { ...(remaining.find(p => p.profileId === activeId)?.documentTheme ?? state.documentTheme) } };
+          documentTheme: { ...(remaining.find(p => p.profileId === activeId)?.documentTheme ?? DEFAULT_DOCUMENT_THEME) } };
+      });
+    },
+
+    importProfiles: (incoming) => {
+      if (!incoming.length) return;
+      set((state) => {
+        const hydrated = incoming.map(p => ({ ...p, documentTheme: { ...(p.documentTheme ?? DEFAULT_DOCUMENT_THEME) } }));
+        const first = hydrated[0];
+        return {
+          profiles: [...state.profiles, ...hydrated],
+          activeProfileId: first.profileId,
+          documentTheme: { ...first.documentTheme! },
+        };
       });
     },
 
@@ -331,6 +364,11 @@ export const useAppStore = create<AppStore>((set, get) => {
       }));
     },
 
+    toggleSectionLock: (section) => {
+      updateActiveProfileData(p => ({
+        [section]: { ...p[section], isLocked: !p[section].isLocked },
+      }));
+    },
     updateSummary: (text) => {
       updateActiveProfileData(p => ({
         summary: { ...p.summary, data: text }
@@ -572,8 +610,17 @@ export const useAppStore = create<AppStore>((set, get) => {
       }
       const fallback = legacyTheme(storedTheme);
       if (Array.isArray(storedProfiles)) {
-        if (!storedProfiles.every(p => cvProfileSchema.safeParse(p).success)) throw new Error('A saved resume could not be validated.');
-        const profiles: CVProfile[] = storedProfiles.map(p => ({ ...p, documentTheme: { ...(p.documentTheme ?? fallback) } }));
+        const valid: CVProfile[] = [];
+        const invalid: unknown[] = [];
+        for (const item of storedProfiles) {
+          if (cvProfileSchema.safeParse(item).success) valid.push(item as CVProfile);
+          else invalid.push(item);
+        }
+        if (storedProfiles.length > 0 && valid.length === 0) throw new Error('A saved resume could not be validated.');
+        if (invalid.length > 0) {
+          await idbSetMany([['cv-tailor-profiles-quarantine-v2', invalid]]).catch(() => {});
+        }
+        const profiles: CVProfile[] = valid.map(p => ({ ...p, documentTheme: { ...(p.documentTheme ?? fallback) } }));
         const activeProfileId = profiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (profiles[0]?.profileId || null);
         set({ profiles, activeProfileId, documentTheme: { ...(profiles.find(p => p.profileId === activeProfileId)?.documentTheme ?? fallback) } });
       } else {

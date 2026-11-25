@@ -94,8 +94,49 @@ export function createCompositionRunner(repository: Repository, provider: Compos
         stripImportStagingSections(copy);
         copy.compositionChanges = changes;
         copy.compositionChanges.proposal = proposalComparison;
+        const bulletOriginMap: Record<string, string[]> = {};
+        for (const section of ['experience', 'projects'] as const) {
+          if (profile[section].isLocked) continue;
+          const prefix = section === 'experience' ? 'work' : 'project';
+          for (let i = 0; i < copy[section].data.length; i++) {
+            const entryKey = `${prefix}_${i + 1}`;
+            const draftEntry = result.draft[section].find(e => e.id === entryKey);
+            const origEntry = profile[section].data[i];
+            if (!draftEntry || !origEntry) continue;
+            const parts = section === 'projects' && draftEntry.overview.text ? [draftEntry.overview, ...draftEntry.bullets] : draftEntry.bullets;
+            copy[section].data[i].bullets.forEach((b, k) => {
+              const part = parts[k];
+              if (!part) return;
+              const origIds: string[] = [];
+              for (const sid of part.sourceIds) {
+                const m = /^((?:work|project)_\d+)_b(\d+)$/.exec(sid);
+                if (m && m[1] === entryKey) {
+                  const origB = origEntry.bullets[Number(m[2]) - 1];
+                  if (origB && !origIds.includes(origB.id)) origIds.push(origB.id);
+                }
+              }
+              const origIdSet = new Set(origEntry.bullets.map(ob => ob.id));
+              if (origIds.length || !origIdSet.has(b.id)) bulletOriginMap[b.id] = origIds;
+            });
+          }
+        }
+        copy.compositionSnapshot = {
+          summary: profile.summary.data,
+          experience: profile.experience.data.map(e => ({
+            id: e.id,
+            description: e.description ?? '',
+            bullets: e.bullets.map(b => ({ id: b.id, text: b.text })),
+          })),
+          projects: profile.projects.data.map(e => ({
+            id: e.id,
+            bullets: e.bullets.map(b => ({ id: b.id, text: b.text })),
+          })),
+          skills: profile.skills.data.map(s => ({ ...s })),
+          bulletOriginMap,
+        };
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;
-        copy.profileName = `${profile.profileName} — Tailored`;
+        const baseName = profile.profileName.replace(/\s*—\s*Tailored$/i, '').trim() || profile.profileName;
+        copy.profileName = `${baseName} — Tailored`;
         copy.targetJob = packet.job; copy.version = profile.version + 1; copy.lastConfirmed = '';
         const notes = [...new Set([...(profile.compositionReview?.notes ?? []),
           ...result.warnings.map(w => `${w.path}: ${w.message}`), ...result.normalizations.map(n => n.reason)])];

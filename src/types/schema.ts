@@ -267,6 +267,8 @@ export const documentThemeSchema = z.object({
   fontSize: z.enum(['small', 'medium', 'large']),
   lineSpacing: z.enum(['compact', 'normal', 'relaxed']),
   layoutStyle: z.enum(['modern', 'split', 'classic', 'minimal']),
+  compactCertifications: z.boolean().optional(),
+  fitOnePage: z.boolean().optional(),
 });
 export type DocumentTheme = z.infer<typeof documentThemeSchema>;
 
@@ -370,9 +372,27 @@ export const compositionChangesSchema = z.object({
 });
 export type CompositionChanges = z.infer<typeof compositionChangesSchema>;
 
+// Frozen before-tailoring snapshot of the source profile for stable word-level diff & undo.
+export const compositionSnapshotSchema = z.object({
+  summary: z.string(),
+  experience: z.array(z.object({
+    id: z.string(),
+    description: z.string().optional(),
+    bullets: z.array(z.object({ id: z.string(), text: z.string() })),
+  })),
+  projects: z.array(z.object({
+    id: z.string(),
+    bullets: z.array(z.object({ id: z.string(), text: z.string() })),
+  })),
+  skills: z.array(skillTagSchema),
+  bulletOriginMap: z.record(z.array(z.string())).optional(),
+});
+export type CompositionSnapshot = z.infer<typeof compositionSnapshotSchema>;
+
 export interface CVProfile {
   compositionReview?: CompositionReview;
   compositionChanges?: CompositionChanges;
+  compositionSnapshot?: CompositionSnapshot;
   supportingEvidence?: SupportingEvidence[];
   importedFrom?: ImportMetadata;
   tailoring?: TailoringMetadata;
@@ -400,6 +420,7 @@ export interface CVProfile {
 export const cvProfileSchema = z.object({
   compositionReview: compositionReviewSchema.optional(),
   compositionChanges: compositionChangesSchema.optional(),
+  compositionSnapshot: compositionSnapshotSchema.optional(),
   supportingEvidence: supportingEvidenceSchema.optional(),
   importedFrom: importMetadataSchema.optional(),
   tailoring: tailoringMetadataSchema.optional(),

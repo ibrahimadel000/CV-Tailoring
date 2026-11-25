@@ -13,6 +13,16 @@ export const COMPOSITION_MODELS = [
   { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
 ] as const;
 export type CompositionModel = typeof COMPOSITION_MODELS[number]['id'];
+export const TAILORING_STYLES = [
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'concise', label: 'Concise (1-page friendly)' },
+  { id: 'impact', label: 'Impact-focused' },
+] as const;
+export type TailoringStyle = typeof TAILORING_STYLES[number]['id'];
+const STYLE_GUIDANCE: Record<Exclude<TailoringStyle, 'balanced'>, string> = {
+  concise: 'STYLE PREFERENCE (Concise): Keep the summary to 2 tight sentences and trim redundant filler across bullets so every line stays short, scannable, and faithful to SOURCE.',
+  impact: 'STYLE PREFERENCE (Impact-focused): Lead each rewritten bullet with the strongest verified action and stated outcome from SOURCE, keeping all metrics, limits, and attribution strictly factual.',
+};
 export const COMPOSITION_TIMEOUT_MS = 90000;
 const MAX_RESPONSE_BYTES = 262144;
 export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Flash-Lite · experimental';
@@ -31,8 +41,9 @@ function addUsage(prev: TokenUsage, next: TokenUsage): TokenUsage {
   };
 }
 
-export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
+export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL, style: TailoringStyle = 'balanced'): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
+  if (!TAILORING_STYLES.some(option => option.id === style)) throw new TailorError('configuration', 'Unsupported tailoring style. Nothing was sent.');
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
   const connection = getTailorConnection();
   if (!connection.ready) throw new TailorError('configuration', 'AI is not connected. Configure VITE_TAILOR_API_URL=/api/tailor with a server-side GEMINI_API_KEY.');
@@ -47,6 +58,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
   const isSynthetic = !proxyEndpoint && /^synthetic-/i.test(key);
   const fallback = !isSynthetic ? LIVE_FALLBACKS.find(m => m !== model) : undefined;
   const candidates: CompositionModel[] = fallback ? [model, fallback] : [model];
+  const systemInstruction = style === 'balanced' ? singleDraftInstructions : `${singleDraftInstructions}\n\n${STYLE_GUIDANCE[style]}`;
   try {
     let body: any;
     for (let i = 0; i < candidates.length; i++) {
@@ -65,11 +77,11 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
             redirect: 'error',
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
-            body: JSON.stringify({ model: targetModel, systemInstruction: singleDraftInstructions, wire, generationConfig }),
+            body: JSON.stringify({ model: targetModel, systemInstruction, wire, generationConfig }),
           })
         : await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
             method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
-            body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
           });
       if (!response.ok) {
         if (!isSynthetic && response.status === 503 && i < candidates.length - 1 && !controller.signal.aborted) {
@@ -94,9 +106,12 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       const count = (k: string) => Number.isSafeInteger(u[k]) && u[k] >= 0 ? u[k] as number : undefined;
       usage = addUsage(usage, { input: count('promptTokenCount'), output: count('candidatesTokenCount'), thoughts: count('thoughtsTokenCount'), total: count('totalTokenCount') });
       if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-      const complete = Array.isArray(body?.candidates) && body.candidates.length === 1 && body.candidates[0]?.finishReason === 'STOP';
-      if (!complete && !isSynthetic && i < candidates.length - 1 && !controller.signal.aborted) continue;
-      if (!complete) throw new TailorError('incomplete', 'No completed response. No partial resume or automatic retry.');
+      const finishReason = typeof body?.candidates?.[0]?.finishReason === 'string' ? body.candidates[0].finishReason : '';
+      const complete = Array.isArray(body?.candidates) && body.candidates.length === 1 && finishReason === 'STOP';
+      if (!complete) {
+        const safeFinish = /^(?:MAX_TOKENS|SAFETY|RECITATION|OTHER|BLOCKLIST|PROHIBITED_CONTENT)$/.test(finishReason) ? ` (${finishReason})` : '';
+        throw new TailorError('incomplete', `No completed response${safeFinish}. No partial resume or automatic retry.`);
+      }
       break;
     }
     const parts: unknown = body?.candidates?.[0]?.content?.parts;
@@ -112,6 +127,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
     throw new TailorError(reason, timedOut ? 'Request timed out. No automatic retry.' : 'Request could not complete. No automatic retry.');
   } finally {
     clearTimeout(timer); signal.removeEventListener('abort', abort);
-    saveTailorUsage({ id: crypto.randomUUID(), at: new Date().toISOString(), model: resolvedModel, elapsedMs: Math.round(performance.now() - started), attempts: isSynthetic ? 1 : attempts, status, reason, ...usage });
+    const usageId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    saveTailorUsage({ id: usageId, at: new Date().toISOString(), model: resolvedModel, elapsedMs: Math.round(performance.now() - started), attempts: isSynthetic ? 1 : attempts, status, reason, ...usage });
   }
 }

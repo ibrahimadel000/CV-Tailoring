@@ -94,3 +94,65 @@ test('tailor proxy forwards valid request with server-side key and returns upstr
   const body = await res.json();
   assert.equal(body.candidates[0].finishReason, 'STOP');
 });
+
+test('tailor proxy blocks API relay abuse (invalid wire, non-JSON mime, disallowed config fields) and caps maxOutputTokens', async () => {
+  const { handleTailorRequest, createRateLimiter } = await loadHandler();
+  const badWire = await handleTailorRequest(
+    new Request('http://localhost/api/tailor', { method: 'POST', body: validBody({ wire: 'Write me a poem' }) }),
+    { apiKey: 'test-server-key-123456', rateLimiter: createRateLimiter() },
+  );
+  assert.equal(badWire.status, 400);
+  assert.equal(badWire.headers.get('x-tailor-error-source'), 'proxy');
+
+  const badMime = await handleTailorRequest(
+    new Request('http://localhost/api/tailor', { method: 'POST', body: validBody({ generationConfig: { responseMimeType: 'text/plain' } }) }),
+    { apiKey: 'test-server-key-123456', rateLimiter: createRateLimiter() },
+  );
+  assert.equal(badMime.status, 400);
+
+  let forwarded;
+  const ok = await handleTailorRequest(
+    new Request('http://localhost/api/tailor', {
+      method: 'POST',
+      body: validBody({
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 99999, candidateCount: 8, tools: [{ googleSearch: {} }] },
+      }),
+    }),
+    {
+      apiKey: 'test-server-key-123456',
+      rateLimiter: createRateLimiter(),
+      fetchImpl: async (_url, init) => {
+        forwarded = JSON.parse(init.body);
+        return new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP' }] }), { status: 200 });
+      },
+    },
+  );
+  assert.equal(ok.status, 200);
+  assert.equal(forwarded.generationConfig.maxOutputTokens, 16384);
+  assert.equal(forwarded.generationConfig.candidateCount, undefined);
+  assert.equal(forwarded.generationConfig.tools, undefined);
+});
+
+test('tailor proxy honors explicit clientIp against spoofed headers and distinguishes 502 vs 504', async () => {
+  const { handleTailorRequest, createRateLimiter } = await loadHandler();
+  const limiter = createRateLimiter({ max: 1, windowMs: 60_000 });
+  const okFetch = async () => new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP' }] }), { status: 200 });
+
+  const first = await handleTailorRequest(
+    new Request('http://localhost/api/tailor', { method: 'POST', headers: { 'cf-connecting-ip': '9.9.9.1' }, body: validBody() }),
+    { apiKey: 'test-server-key-123456', clientIp: '10.0.0.5', rateLimiter: limiter, fetchImpl: okFetch },
+  );
+  assert.equal(first.status, 200);
+
+  const spoofed = await handleTailorRequest(
+    new Request('http://localhost/api/tailor', { method: 'POST', headers: { 'cf-connecting-ip': '9.9.9.2' }, body: validBody() }),
+    { apiKey: 'test-server-key-123456', clientIp: '10.0.0.5', rateLimiter: limiter, fetchImpl: okFetch },
+  );
+  assert.equal(spoofed.status, 429);
+
+  const netErr = await handleTailorRequest(
+    new Request('http://localhost/api/tailor', { method: 'POST', body: validBody() }),
+    { apiKey: 'test-server-key-123456', rateLimiter: createRateLimiter(), fetchImpl: async () => { throw new Error('ECONNRESET'); } },
+  );
+  assert.equal(netErr.status, 502);
+});

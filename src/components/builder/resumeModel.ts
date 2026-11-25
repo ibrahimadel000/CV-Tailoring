@@ -37,17 +37,52 @@ export function plainText(value = ''): string {
     .replace(/(^|[^\p{L}\p{N}_])_(?!_)((?:[^_\r\n]|(?<=[\p{L}\p{N}])_(?=[\p{L}\p{N}]))+)_(?![\p{L}\p{N}_])/gu, '$1$2')
     .trim();
 }
+export function normalizeLinkUrl(raw: string, kind: 'web' | 'email' = 'web'): string | null {
+  const trimmed = plainText(raw || '').trim();
+  if (!trimmed) return null;
+  if (kind === 'email') {
+    const email = trimmed.replace(/^mailto:/i, '').trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? `mailto:${email}` : null;
+  }
+  if (/^(javascript|data|vbscript|file):/i.test(trimmed)) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname || !parsed.hostname.includes('.')) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 export function fullName(p: CVProfile): string {
   const h = p.resumeHeader.data;
-  const name = [h.firstName, h.lastName].filter(Boolean).join(' ').trim() || h.name.trim();
-  return [name, h.showSuffixName !== false ? h.suffixName : ''].filter(Boolean).join(', ');
+  const name = [h.firstName, h.lastName].map(x => plainText(x || '').trim()).filter(Boolean).join(' ').trim() || plainText(h.name || '').trim();
+  const suffix = h.showSuffixName !== false ? plainText(h.suffixName || '').trim() : '';
+  return [name, suffix].filter(Boolean).join(', ');
+}
+export function contactItems(p: CVProfile): { label: string; url: string | null }[] {
+  const h = p.resumeHeader.data;
+  const out: { label: string; url: string | null }[] = [];
+  const push = (val: string | undefined, show: boolean | undefined, kind: 'plain' | 'email' | 'web') => {
+    const label = plainText(val || '').trim();
+    if (!label || show === false) return;
+    out.push({ label, url: kind === 'plain' ? null : normalizeLinkUrl(label, kind) });
+  };
+  push(h.email, true, 'email');
+  push(h.phone, h.showPhone, 'plain');
+  push(h.location, h.showLocation, 'plain');
+  push(h.linkedin, h.showLinkedin, 'web');
+  push(h.github, h.showGithub, 'web');
+  push(h.portfolio, h.showPortfolio, 'web');
+  push(h.otherUrl, h.showOtherUrl, 'web');
+  return out;
 }
 export function contacts(p: CVProfile): string[] {
-  const h = p.resumeHeader.data;
-  return [h.email, h.showPhone !== false ? h.phone : '', h.showLocation !== false ? h.location : '', h.showLinkedin !== false ? h.linkedin : '', h.showGithub !== false ? h.github : '', h.showPortfolio !== false ? h.portfolio : '', h.showOtherUrl !== false ? h.otherUrl : ''].filter((s): s is string => Boolean(s?.trim()));
+  return contactItems(p).map(item => item.label);
 }
 export function headline(p: CVProfile): string {
-  return p.resumeHeader.data.useAsHeadline !== false ? (p.resumeHeader.data.desiredJobPosition ?? p.headline.data) : '';
+  return p.resumeHeader.data.useAsHeadline !== false ? plainText(p.resumeHeader.data.desiredJobPosition ?? p.headline.data).trim() : '';
 }
 export function sectionCount(p: CVProfile, id: SectionId): number {
   if (id === 'personal') return fullName(p) || p.resumeHeader.data.email ? 1 : 0;
@@ -77,7 +112,7 @@ export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   const experience = p.experience.data.filter(e => e.roleTitle.trim() || e.companyName.trim() || e.description?.trim() || e.bullets.some(b => b.text.trim()));
   if (experience.length) blocks.push({ id: 'experience', title: 'Experience', items: experience.map(e => ({ entryId: e.id, title: e.roleTitle, subtitle: [e.companyName, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
   const education = p.education.data.filter(e => e.degree.trim() || e.institution.trim() || e.description?.trim());
-  if (education.length) blocks.push({ id: 'education', title: 'Education', items: education.map(e => ({ entryId: e.id, title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – ') || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.join(' · ')].filter(Boolean).join('\n') })) });
+  if (education.length) blocks.push({ id: 'education', title: 'Education', items: education.map(e => ({ entryId: e.id, title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – ') || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.map(x => x.trim()).filter(Boolean).join(' · ')].filter(Boolean).join('\n') })) });
   const skills = displaySkillGroups(p.skills.data);
   if (skills.length) blocks.push({ id: 'skills', title: 'Skills', items: skills });
   const projects = p.projects.data.filter(e => e.name.trim() || e.bullets.some(b => b.text.trim()));
@@ -98,12 +133,28 @@ export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   return blocks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 }
 export function themeMetrics(theme: DocumentTheme) {
-  const size = { small: 10, medium: 11, large: 12 }[theme.fontSize];
-  const leading = { compact: 1.35, normal: 1.5, relaxed: 1.65 }[theme.lineSpacing];
+  const fit = Boolean(theme.fitOnePage);
+  const baseSize = { small: 10, medium: 11, large: 12 }[theme.fontSize];
+  const baseLeading = { compact: 1.35, normal: 1.5, relaxed: 1.65 }[theme.lineSpacing];
   const font = theme.fontFamily === 'serif' ? 'Times-Roman' : theme.fontFamily === 'mono' ? 'Courier' : 'Helvetica';
   const bold = font === 'Times-Roman' ? 'Times-Bold' : font === 'Courier' ? 'Courier-Bold' : 'Helvetica-Bold';
-  const gap = theme.layoutStyle === 'minimal' ? 12 : 18;
-  return { size, leading, font, bold, gap, margin: theme.layoutStyle === 'minimal' ? 36 : 42 };
+  const baseGap = theme.layoutStyle === 'minimal' ? 12 : 18;
+  const baseMargin = theme.layoutStyle === 'minimal' ? 36 : 42;
+  return {
+    size: fit ? Math.max(8.5, baseSize - 1.5) : baseSize,
+    leading: fit ? Math.max(1.2, Number((baseLeading - 0.2).toFixed(2))) : baseLeading,
+    font,
+    bold,
+    gap: fit ? Math.min(baseGap, 10) : baseGap,
+    margin: fit ? 26 : baseMargin,
+    itemGap: fit ? 5 : 8,
+    bulletGap: fit ? 1.5 : 3,
+    headerNameSize: fit ? 22 : 27,
+    headerHeadlineSize: fit ? 10.5 : 12,
+    headerContactSize: fit ? 8.5 : 9,
+    headerPadBottom: fit ? 7 : 11,
+    photoSize: fit ? 56 : 72,
+  };
 }
 
 export function hasUnsupportedPDFText(profile: CVProfile): boolean {
