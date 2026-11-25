@@ -4,6 +4,7 @@ import { getDocument, GlobalWorkerOptions, TextLayer, type PDFDocumentProxy, typ
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { CVProfile } from '@/types/schema';
 import { useAppStore, type DocumentTheme } from '@/store/useAppStore';
+import { autoOptimizeTheme } from '@/services/autoLayout';
 import { fullName, hasUnsupportedPDFText, resumeBlocks, type SectionId } from './resumeModel';
 import { ResumePaper } from './ResumePaper';
 import { useResumePDF } from './pdfPipeline';
@@ -141,10 +142,15 @@ export default function PaginatedPreview({ profile, theme, scale, section, visib
   const certCount = profile.certifications.data.filter(c => c.name.trim()).length;
   const canAutoFit = Boolean(!unsupported && !failed && current && loaded && loaded.pdf.numPages === 2 && (!theme.fitOnePage || (certCount >= 4 && !theme.compactCertifications)));
   const applyAutoFit = () => {
-    setDocumentTheme({
-      fitOnePage: true,
-      ...(certCount >= 4 ? { compactCertifications: true } : {}),
-    });
+    const optimized = autoOptimizeTheme(profile, theme);
+    if (optimized.changed) {
+      setDocumentTheme(optimized.theme);
+    } else {
+      setDocumentTheme({
+        fitOnePage: true,
+        ...(certCount >= 4 ? { compactCertifications: true } : {}),
+      });
+    }
   };
   return <>
     <div className={`pagination-status ${failed || unsupported ? 'pagination-warning' : ''}`} aria-live="polite" aria-atomic="true" data-pagination-current={current && !failed ? 'true' : 'false'}>

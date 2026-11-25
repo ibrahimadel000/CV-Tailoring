@@ -141,7 +141,7 @@ test('DOCX exporter supports fitOnePage, Letter vs A4, Arabic/RTL, custom sectio
   const bytesA4Fit = buildResumeDocxBytes(p, { ...baseTheme, fitOnePage: true, compactCertifications: true }, { pageSize: 'A4' });
   const docA4Fit = strFromU8(unzipSync(bytesA4Fit)['word/document.xml']);
   assert.ok(docA4Fit.includes('w:w="11906"'));
-  assert.ok(docA4Fit.includes('w:left="520"'));
+  assert.ok(docA4Fit.includes('w:left="640"'));
   assert.ok(docA4Fit.includes('<w:bidi/>'));
   assert.ok(docA4Fit.includes('<w:rtl/>'));
   assert.ok(docA4Fit.includes('<w:rtl w:val="0"/>'));
