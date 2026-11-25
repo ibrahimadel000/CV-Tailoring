@@ -6,8 +6,9 @@ import { CompositionError } from '@/services/resumeComposer/core';
 import { createStoreComposer } from '@/services/resumeComposer/store';
 import { requestComposition, COMPOSITION_MODEL, COMPOSITION_MODELS, COMPOSITION_PREVIEW_LABEL, type CompositionModel } from '@/services/resumeComposer/request';
 import { TailorError } from '@/services/tailorModel';
-import { getTailorConnection } from '@/services/tailorRequest';
+import { getTailorConnection } from '@/services/tailorConnection';
 import { summaryBoundaryNotice } from '@/services/resumeComposer/summaryBoundary';
+import { TailorDiffReview } from './TailorDiffReview';
 const entryChangeText = {
   empty: 'No entries',
   unchanged: 'Wording and order unchanged',
@@ -77,25 +78,8 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       {active?.compositionChanges && <details className="tailor-review" open>
         <summary>What changed during tailoring</summary>
         <p>This compares the copy with its source at the time it was made. Later edits are not included.</p>
-        <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'}.</p>
-        {currentSource && <details>
-          <summary>Compare current summaries</summary>
-          <p>This compares the current source and copy; either may have changed since tailoring. Edit the copy in the editor after reviewing.</p>
-          <p><strong>Current source summary</strong></p><p style={{ whiteSpace: 'pre-wrap' }}>{currentSource.summary.data || '(Empty)'}</p>
-          <p><strong>Current tailored summary</strong></p><p style={{ whiteSpace: 'pre-wrap' }}>{active.summary.data || '(Empty)'}</p>
-        </details>}
-        <p>Experience: {entryChangeText[active.compositionChanges.experience]}.</p>
-        <p>Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
-        {currentSource && <details>
-          <summary>Compare current experience and projects</summary>
-          <p>These are the current versions, not a saved before-and-after snapshot. Check actions, outcomes, qualifications and attribution; edit the tailored copy in the editor.</p>
-          {[{ label: 'Current source', profile: currentSource }, { label: 'Current tailored copy', profile: active }].map(({ label, profile }) => <section key={label} aria-label={label}>
-            <strong>{label}</strong>
-            {profile.experience.data.map(entry => <div key={entry.id}><p>{entry.roleTitle}{entry.companyName ? ` · ${entry.companyName}` : ''}</p>{entry.description && <p style={{ whiteSpace: 'pre-wrap' }}>{entry.description}</p>}<ul>{entry.bullets.map(b => <li key={b.id} style={{ whiteSpace: 'pre-wrap' }}>{b.text}</li>)}</ul></div>)}
-            {profile.projects.data.map(entry => <div key={entry.id}><p>{entry.name}</p><ul>{entry.bullets.map(b => <li key={b.id} style={{ whiteSpace: 'pre-wrap' }}>{b.text}</li>)}</ul></div>)}
-            {!profile.experience.data.length && !profile.projects.data.length && <p>No experience or project entries.</p>}
-          </section>)}
-        </details>}
+        <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'} · Experience: {entryChangeText[active.compositionChanges.experience]} · Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
+        {currentSource && <TailorDiffReview active={active} source={currentSource} />}
         {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry.</p>}
         <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>
         {active.compositionChanges.skills.reordered && <p>Selected skills were reordered.</p>}

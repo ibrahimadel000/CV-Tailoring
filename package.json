@@ -8,21 +8,18 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:browser:offline": "npm --prefix tests/browser test"
+    "test:browser:offline": "npm --prefix tests/browser test",
+    "server": "node server/index.mjs"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
     "@react-pdf/renderer": "^4.1.6",
-    "clsx": "^2.1.1",
     "diff": "^7.0.0",
-    "dompurify": "^3.2.3",
     "fflate": "0.8.3",
     "idb-keyval": "^6.2.1",
     "lucide-react": "^0.471.0",
     "pdfjs-dist": "^4.9.155",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^2.6.0",
     "uuid": "^11.0.5",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.24.1",
@@ -31,7 +28,6 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@types/diff": "^6.0.0",
-    "@types/dompurify": "^3.0.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/uuid": "^10.0.0",

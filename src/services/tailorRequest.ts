@@ -11,6 +11,8 @@ export type TailorUsageRecord = TokenUsage & {
 };
 const USAGE_KEY = 'cv-tailor-usage-v1';
 const DEVELOPMENT_KEY = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
+declare const __TAILOR_API_URL__: string | undefined;
+const PROXY_ENDPOINT = (typeof __TAILOR_API_URL__ === 'string' ? __TAILOR_API_URL__ : '').trim();
 export function saveTailorUsage(record: TailorUsageRecord) {
   // Metrics only: no resume, job text, prompts, API key or raw provider error.
   try {
@@ -33,9 +35,13 @@ export function readLatestTailorUsage(): TailorUsageRecord | null {
   } catch { return null; }
 }
 export function getTailorConnection() {
+  const endpoint = PROXY_ENDPOINT;
+  if (endpoint) {
+    return { ready: true, development: import.meta.env.DEV, model: TAILOR_MODEL, endpoint };
+  }
   const value = DEVELOPMENT_KEY;
   const usable = value.length > 15 && !/REPLACE|MISSING|YOUR[_ -]|PLACEHOLDER|^test$/i.test(value);
-  return { ready: usable, development: import.meta.env.DEV, model: TAILOR_MODEL };
+  return { ready: usable, development: import.meta.env.DEV, model: TAILOR_MODEL, endpoint: '' };
 }
 function tokenUsage(raw: unknown): TokenUsage {
   const data = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};

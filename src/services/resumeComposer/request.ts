@@ -3,7 +3,7 @@ import { providerFailureMessage } from './providerDiagnostics';
 import type { NaturalPacket } from './naturalDocument';
 import { singleDraftInstructions, prepareSingleDraftRequest } from './singleDraftRequest';
 import { TailorError } from '@/services/tailorModel';
-import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorRequest';
+import { getTailorConnection, saveTailorUsage, type TokenUsage } from '@/services/tailorConnection';
 
 export const COMPOSITION_MODEL = 'gemini-3.5-flash-lite';
 // Explicit, bounded development choices; active Gemini 3.x models only.
@@ -34,7 +34,9 @@ function addUsage(prev: TokenUsage, next: TokenUsage): TokenUsage {
 export async function requestComposition(packet: NaturalPacket, signal: AbortSignal, model: CompositionModel = COMPOSITION_MODEL): Promise<unknown> {
   if (!COMPOSITION_MODELS.some(option => option.id === model)) throw new TailorError('configuration', 'Unsupported model. Nothing was sent.');
   if (signal.aborted) throw new TailorError('cancelled', 'Cancelled. Nothing was sent.');
-  if (!getTailorConnection().ready) throw new TailorError('configuration', 'AI is not connected. Public deployment requires a secure server adapter.');
+  const connection = getTailorConnection();
+  if (!connection.ready) throw new TailorError('configuration', 'AI is not connected. Configure VITE_TAILOR_API_URL=/api/tailor with a server-side GEMINI_API_KEY.');
+  const proxyEndpoint = typeof (connection as { endpoint?: string }).endpoint === 'string' ? (connection as { endpoint?: string }).endpoint!.trim() : '';
   const { responseSchema: schema, wire } = prepareSingleDraftRequest(packet);
   if (wire.length > 180000) throw new TailorError('input', 'Source exceeds the request budget. Nothing was sent.');
   const controller = new AbortController(), started = performance.now();
@@ -42,7 +44,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
   let resolvedModel: CompositionModel = model;
   const abort = () => controller.abort(); signal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, COMPOSITION_TIMEOUT_MS);
-  const isSynthetic = /^synthetic-/i.test(key);
+  const isSynthetic = !proxyEndpoint && /^synthetic-/i.test(key);
   const fallback = !isSynthetic ? LIVE_FALLBACKS.find(m => m !== model) : undefined;
   const candidates: CompositionModel[] = fallback ? [model, fallback] : [model];
   try {
@@ -57,10 +59,18 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
           ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'medium' } }
           : { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'low' } };
       attempts++;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
-        method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
-      });
+      const response = proxyEndpoint
+        ? await fetch(proxyEndpoint, {
+            method: 'POST',
+            redirect: 'error',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({ model: targetModel, systemInstruction: singleDraftInstructions, wire, generationConfig }),
+          })
+        : await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`, {
+            method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: singleDraftInstructions }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
+          });
       if (!response.ok) {
         if (!isSynthetic && response.status === 503 && i < candidates.length - 1 && !controller.signal.aborted) {
           await response.body?.cancel().catch(() => {});

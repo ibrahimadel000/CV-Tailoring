@@ -27,13 +27,14 @@ PROFESSIONAL SUMMARY (summarySegments):
 EXPERIENCE & PROJECTS (entries):
 - Return every unlocked entry in guide.entryBulletIds once with {id, overview:{text,sourceIds}, bullets:[{text,sourceIds}]}.
 - Reorder bullets within each entry from highest relevance to JOB's core work to lowest relevance.
-- Actively strengthen verbose, passive, or generic bullets into crisp Action–Context–Result statements using direct, accurate verbs aligned with the target role's domain—while preserving every stated fact, number, outcome, limitation, and attribution.
+- Actively tighten verbose, padded, or generic bullets into crisp Action–Context–Result statements—cut filler words ("proactive", "structured", "ensuring seamless") and lead with the concrete action or stated result while preserving every fact, number, outcome, limitation, and attribution.
+- Fictional bullet tightening examples (never borrow example facts): "Cataloged rare manuscripts, ensuring seamless coordination between archival workflows and reading-room requests." → "Cataloged rare manuscripts to coordinate archival workflows with reading-room requests." "Streamlined document review workflows, reducing manual overhead and improving delivery timelines." → "Reduced manual overhead and improved delivery timelines by streamlining document review workflows."
 - Cite same-entry narrative IDs only on bullets (never skill IDs, headline, or entrymeta). Keep at least one bullet per nonempty entry. If overviewMode is empty, return {text:"", sourceIds:[]}.
 
 CURATED SKILLS (skillSelections):
-- Select a focused, role-relevant subset from SOURCE.skillIds (typically 8–15 of the strongest direct and adjacent skills for JOB; actively omit unrelated specialist skills rather than dumping the entire list).
+- Select a tight, role-relevant subset from SOURCE.skillIds (typically 8–14 of the strongest direct and adjacent skills for JOB; actively omit unrelated languages, mobile/desktop frameworks, or specialist skills that JOB does not ask for).
 - Order by relevance to JOB; category first occurrence controls display group order.
-- Categories: Languages (programming/markup/style languages), Tools (concrete products, databases, platforms, and frameworks such as MySQL, Firebase, Flutter, TailwindCSS), Technical (engineering concepts, business operations, workflow automation, project management, Agile/Scrum, technical documentation, strategic planning, system analysis), Soft (interpersonal/communication traits). Keep combined labels intact and select each equivalent skill once.
+- Categories: Languages (programming/markup/style languages), Tools (concrete products, databases, platforms, and frameworks such as MySQL, Firebase, Flutter, TailwindCSS), Technical (engineering concepts, RESTful APIs, system architecture, business operations, workflow automation, project management, Agile/Scrum, technical documentation, strategic planning, system analysis), Soft (interpersonal/communication traits). Keep combined labels intact and select each equivalent skill once.
 
 LOCKS & LIMITS:
 - Respect locks (summarySegments:[], skillSelections:[], omit locked entries). Keep identity, dates, education, certificates, and contact unchanged. Use SOURCE's language. Max 24 summary sentences (2400 chars), 24 IDs/passage, 40 bullets/entry, 200 skills. References enable review, not independent proof.`;
