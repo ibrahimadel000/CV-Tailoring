@@ -84,7 +84,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
             body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
           });
       if (!response.ok) {
-        if (!isSynthetic && response.status === 503 && i < candidates.length - 1 && !controller.signal.aborted) {
+        if (!isSynthetic && (response.status === 503 || response.status === 504) && i < candidates.length - 1 && !controller.signal.aborted) {
           await response.body?.cancel().catch(() => {});
           continue;
         }
