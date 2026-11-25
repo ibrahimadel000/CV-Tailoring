@@ -28,8 +28,8 @@ const MAX_RESPONSE_BYTES = 262144;
 export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Flash-Lite · experimental';
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
-// Live failover on transient 503 only (at most 1 fallback; never route through deprecated models).
-const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+// Live failover on transient 503/504 (at most 1 fallback to fast Flash-Lite; never deprecated models).
+const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 
 function addUsage(prev: TokenUsage, next: TokenUsage): TokenUsage {
   const sum = (a?: number, b?: number) => (a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0));

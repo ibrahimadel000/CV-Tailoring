@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRateLimiter, handleTailorRequest, isConfiguredApiKey } from './tailorHandler.mjs';
+import { ALLOWED_MODELS, createRateLimiter, handleTailorRequest, isConfiguredApiKey } from './tailorHandler.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -104,6 +104,11 @@ const server = http.createServer(async (req, res) => {
       body: req.method === 'POST' ? bodyBuf : undefined,
       signal: abortController.signal,
     });
+    const startedAt = Date.now();
+    let reqModel = '-';
+    if (req.method === 'POST' && bodyBuf.length) {
+      try { const parsed = JSON.parse(bodyBuf.toString('utf8')); if (typeof parsed?.model === 'string') reqModel = ALLOWED_MODELS.has(parsed.model) ? parsed.model : 'invalid'; } catch {}
+    }
     const webRes = await handleTailorRequest(webReq, {
       apiKey: process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '',
       accessToken: process.env.TAILOR_ACCESS_TOKEN || '',
@@ -111,6 +116,7 @@ const server = http.createServer(async (req, res) => {
       clientIp: process.env.TRUST_PROXY === '1' ? undefined : (req.socket?.remoteAddress || 'local'),
       rateLimiter,
     });
+    console.log(`[tailor] ${req.method} model=${reqModel} status=${webRes.status} elapsed=${Date.now() - startedAt}ms`);
     const outHeaders = {};
     webRes.headers.forEach((v, k) => { outHeaders[k] = v; });
     res.writeHead(webRes.status, outHeaders);
