@@ -11,7 +11,7 @@ const MAX_BODY_BYTES = 220 * 1024;
 const MAX_SYSTEM_INSTRUCTION_CHARS = 12_000;
 const MAX_WIRE_CHARS = 180_000;
 const MAX_UPSTREAM_BYTES = 512 * 1024;
-const UPSTREAM_TIMEOUT_MS = 42_000;
+const UPSTREAM_TIMEOUT_MS = 25_000;
 
 export function isConfiguredApiKey(apiKey) {
   const trimmed = String(apiKey || '').trim();
