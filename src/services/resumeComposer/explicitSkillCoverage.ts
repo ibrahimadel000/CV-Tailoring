@@ -36,7 +36,7 @@ function distinctivePhrases(text: string): string[] {
  return [...new Set(phrases)];
 }
 function distinctiveTokens(text: string) {
- return [...new Set((text.match(TOKEN) || []).filter(t => t.length >= 3 && (t.match(/[A-Z]/g) || []).length >= 2 && !EXCLUDE.has(t.toUpperCase())).map(lower))];
+ return [...new Set((text.match(TOKEN) || []).filter(t => ((t.length >= 3 && (t.match(/[A-Z]/g) || []).length >= 2) || /^[A-Za-z][A-Za-z0-9]*[+#]+$/.test(t)) && !EXCLUDE.has(t.toUpperCase())).map(lower))];
 }
 export function explicitSkillCoverage(profile: CVProfile, source: Source, job: string, selected: readonly Selection[]): Addition[] {
  if (source.locks.skills || !job.trim()) return [];

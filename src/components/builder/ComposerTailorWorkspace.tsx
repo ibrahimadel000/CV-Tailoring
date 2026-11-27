@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, Upload, Loader2, X, Lock, Unlock } from 'lucide-react';
+import { Sparkles, Upload, Loader2, X, Lock, Unlock, Download, SlidersHorizontal } from 'lucide-react';
 import { useAppStore, type LockableTailorSection } from '@/store/useAppStore';
 import type { ImportMetadata } from '@/types/schema';
 import { CompositionError } from '@/services/resumeComposer/core';
@@ -10,6 +10,7 @@ import { getTailorConnection } from '@/services/tailorConnection';
 import { summaryBoundaryNotice } from '@/services/resumeComposer/summaryBoundary';
 import { TailorDiffReview } from './TailorDiffReview';
 import { JobMatchBreakdown } from './JobMatchBreakdown';
+import { formatReviewNote } from './reviewCopy';
 const entryChangeText = {
   empty: 'No entries',
   unchanged: 'Wording and order unchanged',
@@ -23,7 +24,7 @@ const QUICK_LOCK_SECTIONS: { id: LockableTailorSection; label: string }[] = [
   { id: 'projects', label: 'Projects' },
   { id: 'skills', label: 'Skills' },
 ];
-export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
+export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewImport, onExport, onJumpToSection }: { onCreated: (profileId: string, notice: string, reviewNotes: string[]) => void; onExport?: () => void; onJumpToSection?: (section: 'experience' | 'skills') => void; onEditOriginal: () => void; onImport: () => void; onReviewImport: (data: ImportMetadata) => void }) {
   const profiles = useAppStore(s => s.profiles), activeId = useAppStore(s => s.activeProfileId), setActive = useAppStore(s => s.setActiveProfile), toggleSectionLock = useAppStore(s => s.toggleSectionLock);
   const active = profiles.find(p => p.profileId === activeId);
   const currentSource = active?.baseProfileId ? profiles.find(p => p.profileId === active.baseProfileId) : undefined;
@@ -89,43 +90,70 @@ export function TailorWorkspace({ onCreated, onEditOriginal, onImport, onReviewI
       }
     } finally { if (controller.current === task) { controller.current = undefined; if (alive.current) setBusy(false); } }
   }
+  const lockedCount = active ? QUICK_LOCK_SECTIONS.filter(({ id }) => active[id].isLocked).length : 0;
+  const styleLabel = TAILORING_STYLES.find(o => o.id === style)?.label ?? 'Balanced';
+  const optionsSummary = [
+    style !== 'balanced' ? styleLabel : '',
+    lockedCount > 0 ? `${lockedCount} locked` : '',
+    model !== COMPOSITION_MODEL ? modelLabel : '',
+  ].filter(Boolean).join(' · ');
+
   return <aside className="tailor-pane" aria-labelledby="tailor-heading" aria-busy={busy}>
-    <header className="tailor-heading"><span className="tailor-mark"><Sparkles size={20} /></span><div><h2 id="tailor-heading">CV Tailor</h2><p>A focused resume from your real content.</p></div></header>
+    <header className="tailor-heading"><span className="tailor-mark"><Sparkles size={20} /></span><div><h2 id="tailor-heading">CV Tailor</h2><p>Creates a tailored copy grounded in your real experience.</p></div></header>
     <div className="tailor-scroll" role="region" aria-label="CV tailoring inputs" tabIndex={0}>
-      <div className="tailor-feedback" role="note"><strong>{previewLabel}</strong><p>Creates a tailored copy grounded in your real experience. Review every claim before exporting.</p></div>
       {message && <div className="tailor-feedback" role="status"><p>{message}</p></div>}
-      {active?.compositionChanges && <details className="tailor-review" open>
-        <summary>What changed during tailoring</summary>
-        <p>This compares the copy with its source at the time it was made. Later edits are not included.</p>
-        <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Wording changed' : 'Unchanged'} · Experience: {entryChangeText[active.compositionChanges.experience]} · Projects: {entryChangeText[active.compositionChanges.projects]}.</p>
-        {(active.compositionSnapshot || currentSource) && <TailorDiffReview active={active} source={currentSource} />}
-        {active.compositionChanges.proposal && <p>Before local checks, the AI proposed {active.compositionChanges.proposal.proposed} work/project bullet lines; {active.compositionChanges.proposal.different} did not exactly match a source passage in the same entry.</p>}
-        <p>Skills: {active.compositionChanges.skills.retained} retained; {active.compositionChanges.skills.excluded.length} not selected for this copy{active.compositionChanges.skills.added ? `; ${active.compositionChanges.skills.added} added` : ''}.</p>
-        {active.compositionChanges.skills.reordered && <p>Selected skills were reordered.</p>}
-        {active.compositionChanges.skills.regrouped && <p>Some selected skills were moved to different groups.</p>}
-        {active.compositionChanges.skills.excluded.length > 0 && <details>
-          <summary>Skills not selected for this copy</summary>
-          <ul>{active.compositionChanges.skills.excluded.map((skill, i) => <li key={i}>{skill.name}{skill.level ? ` — ${skill.level}` : ''}</li>)}</ul>
-          <p>These remain in the source resume.</p>
-        </details>}
-      </details>}
-      <div className="tailor-source"><div className="tailor-source-heading"><label htmlFor="composer-source">Source resume</label><button className="text-button" disabled={busy} onClick={onImport}><Upload size={15} />Import CV</button></div>
+
+      <div className="tailor-source">
+        <div className="tailor-source-heading">
+          <label htmlFor="composer-source">Resume</label>
+          <button type="button" className="text-button" disabled={busy} onClick={onImport}><Upload size={14} />Import CV</button>
+        </div>
         <select id="composer-source" value={activeId ?? ''} disabled={busy} onChange={e => { setActive(e.target.value); setMessage(''); setNotes([]); }}>{profiles.map(p => <option key={p.profileId} value={p.profileId}>{p.profileName}</option>)}</select>
-        <p>Uses the currently selected resume, including your edits. Creates a separate copy; your original, identity, dates, design and locked sections stay unchanged.</p>
-        <button className="text-button" disabled={busy} onClick={onEditOriginal}>Open source editor</button>
-        {active?.importedFrom && <button className="text-button" disabled={busy} onClick={() => onReviewImport(active.importedFrom!)}>Review imported content</button>}
+        {active?.importedFrom && <button type="button" className="text-button" disabled={busy} onClick={() => onReviewImport(active.importedFrom!)}>Review imported content</button>}
       </div>
-      <div className="tailor-job"><label htmlFor="composer-model">AI model</label><select id="composer-model" disabled={busy} value={model} onChange={e => setModel(e.target.value as CompositionModel)}>{COMPOSITION_MODELS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select><p>Gemini 3.5 Flash-Lite is recommended for fast (~6–10s) sharp tailoring; switch to 3.8 Flash anytime for heavier rewrites. Transient 503/504 stalls fail over once automatically.</p></div>
-      <div className="tailor-job"><label htmlFor="composer-style">Tailoring style</label><select id="composer-style" disabled={busy} value={style} onChange={e => setStyle(e.target.value as TailoringStyle)}>{TAILORING_STYLES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select><p>Balanced keeps the standard prompt; Concise tightens for 1-page resumes; Impact-focused leads with verified actions and outcomes.</p></div>
-      {active && <div className="tailor-locks" role="group" aria-label="Quick section locks"><span className="tailor-locks-label">Lock sections (keep unchanged)</span><div className="tailor-lock-list">{QUICK_LOCK_SECTIONS.map(({ id, label }) => { const locked = active[id].isLocked; return <button key={id} type="button" className={`tailor-lock-chip ${locked ? 'is-locked' : ''}`} aria-pressed={locked} disabled={busy} onClick={() => toggleSectionLock(id)}>{locked ? <Lock size={13} /> : <Unlock size={13} />}{label}</button>; })}</div>{allLocked && <p className="tailor-locks-warning">All four sections are locked. Unlock at least one section to tailor.</p>}</div>}
-      <div className="tailor-job"><label htmlFor="composer-job">Job description</label><textarea id="composer-job" dir="auto" value={job} disabled={busy} maxLength={32000} placeholder="Paste the full job description…" onChange={e => setJob(e.target.value)} /><p>{job.length.toLocaleString()} / 32,000 characters. Minimum 40.</p></div>
-      {active && (job.trim().length >= 40 || (job.trim().length === 0 && active.targetJob)) && <JobMatchBreakdown profile={active} job={job.trim().length >= 40 ? job : (active.targetJob || '')} />}
-      {!!displayNotes.length && <details className="tailor-review"><summary>Content review notes · {displayNotes.length}</summary><p>Review these highlighted notes in the editor before exporting.</p>{displayNotes.map((n, i) => <p key={i}>{n}</p>)}</details>}
+
+      <div className="tailor-job">
+        <label htmlFor="composer-job">Job description</label>
+        <textarea id="composer-job" dir="auto" value={job} disabled={busy} maxLength={32000} placeholder="Paste the job description here…" onChange={e => setJob(e.target.value)} />
+        <p>{job.trim().length < 40 ? `Paste at least 40 characters (${job.trim().length}/40)` : `${job.length.toLocaleString()} characters`}</p>
+      </div>
+
+      <details className="tailor-review">
+        <summary><SlidersHorizontal size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />Options{optionsSummary ? ` · ${optionsSummary}` : ''}</summary>
+        <div className="tailor-job" style={{ marginTop: 10 }}>
+          <label htmlFor="composer-style">Tailoring style</label>
+          <select id="composer-style" disabled={busy} value={style} onChange={e => setStyle(e.target.value as TailoringStyle)}>{TAILORING_STYLES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select>
+        </div>
+        {active && <div className="tailor-locks" role="group" aria-label="Quick section locks" style={{ marginTop: 10 }}><span className="tailor-locks-label">Keep unchanged</span><div className="tailor-lock-list">{QUICK_LOCK_SECTIONS.map(({ id, label }) => { const locked = active[id].isLocked; return <button key={id} type="button" className={`tailor-lock-chip ${locked ? 'is-locked' : ''}`} aria-pressed={locked} disabled={busy} onClick={() => toggleSectionLock(id)}>{locked ? <Lock size={13} /> : <Unlock size={13} />}{label}</button>; })}</div>{allLocked && <p className="tailor-locks-warning">Unlock at least one section to tailor.</p>}</div>}
+        <div className="tailor-job" style={{ marginTop: 10 }}>
+          <label htmlFor="composer-model">AI model</label>
+          <select id="composer-model" disabled={busy} value={model} onChange={e => setModel(e.target.value as CompositionModel)}>{COMPOSITION_MODELS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <button type="button" className="text-button" disabled={busy} onClick={onEditOriginal}>Open source editor</button>
+        </div>
+      </details>
+
+      {active?.compositionChanges && <details className="tailor-review" open>
+        <summary>What changed</summary>
+        <p>Summary: {active.compositionChanges.summary === 'changed' ? 'Tailored' : 'Unchanged'} · Experience: {entryChangeText[active.compositionChanges.experience]} · Skills: {active.compositionChanges.skills.retained} focused.</p>
+        {(active.compositionSnapshot || currentSource) && <TailorDiffReview active={active} source={currentSource} />}
+        {active.compositionChanges.skills.excluded.length > 0 && <details>
+          <summary>Excluded skills ({active.compositionChanges.skills.excluded.length})</summary>
+          <ul>{active.compositionChanges.skills.excluded.map((skill, i) => <li key={i}>{skill.name}{skill.level ? ` — ${skill.level}` : ''}</li>)}</ul>
+        </details>}
+        {onExport && <div style={{ marginTop: 10 }}><button type="button" className="primary-button" onClick={onExport}><Download size={15} />Export PDF / Word (.docx)</button></div>}
+      </details>}
+
+      {active && (job.trim().length >= 40 || (job.trim().length === 0 && active.targetJob)) && <JobMatchBreakdown profile={active} job={job.trim().length >= 40 ? job : (active.targetJob || '')} baseline={currentSource} onJumpToSection={onJumpToSection} />}
+
+      {!!displayNotes.length && <details className="tailor-review"><summary>Review notes · {displayNotes.length}</summary>{displayNotes.map((n, i) => <p key={i}>{formatReviewNote(n, active)}</p>)}</details>}
     </div>
-    <footer className="tailor-footer"><div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`}><span />{busy ? `Writing your tailored copy… (${elapsedSec}s)` : connection.ready ? previewLabel : 'AI server/setup required'}</div>
+    <footer className="tailor-footer">
+      <div className={`tailor-connection ${connection.ready ? 'is-ready' : ''}`} title={previewLabel}><span />{busy ? `Tailoring your CV… (${elapsedSec}s)` : connection.ready ? 'AI ready' : 'AI setup required'}</div>
       {busy ? <button className="secondary-button" onClick={cancelTailor}><X size={16} />Cancel tailoring</button> : <button className="primary-button" disabled={!connection.ready || !active || allLocked || job.trim().length < 40} onClick={() => void tailor()}><Sparkles size={16} />Tailor CV</button>}
-      {busy && <p><Loader2 size={14} className="spin" />Request in progress ({elapsedSec}s). Click Cancel to stop.</p>}
-      <p>Tailor CV sends professional resume content and this job to Google. Contact fields, photos and private-note sections are excluded. Review your tailored copy before exporting.</p>
+      {busy && <p><Loader2 size={14} className="spin" />Tailoring in progress ({elapsedSec}s)…</p>}
+      <p>Your original CV stays untouched; contact details and photos are never sent to AI.</p>
     </footer>
   </aside>;
 }

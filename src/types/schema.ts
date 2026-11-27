@@ -24,6 +24,7 @@ export interface ExperienceEntry {
   endDate: string;
   description?: string;
   bullets: BulletPoint[];
+  hidden?: boolean;
 }
 
 export const experienceEntrySchema = z.object({
@@ -35,6 +36,7 @@ export const experienceEntrySchema = z.object({
   endDate: z.string(),
   description: z.string().optional(),
   bullets: z.array(bulletPointSchema),
+  hidden: z.boolean().optional(),
 });
 
 export interface EducationEntry {
@@ -48,6 +50,7 @@ export interface EducationEntry {
   graduationDate?: string;
   gpa?: string;
   honors?: string[];
+  hidden?: boolean;
 }
 
 export const educationEntrySchema = z.object({
@@ -61,6 +64,7 @@ export const educationEntrySchema = z.object({
   graduationDate: z.string().optional(),
   gpa: z.string().optional(),
   honors: z.array(z.string()).optional(),
+  hidden: z.boolean().optional(),
 });
 
 export interface ResumeHeader {
@@ -120,6 +124,7 @@ export interface CertificationEntry {
   name: string;
   issuer: string;
   date: string;
+  hidden?: boolean;
 }
 
 export const certificationEntrySchema = z.object({
@@ -127,6 +132,7 @@ export const certificationEntrySchema = z.object({
   name: z.string(),
   issuer: z.string(),
   date: z.string(),
+  hidden: z.boolean().optional(),
 });
 
 export interface ProjectEntry {
@@ -135,6 +141,7 @@ export interface ProjectEntry {
   role?: string;
   url?: string;
   bullets: BulletPoint[];
+  hidden?: boolean;
 }
 
 export const projectEntrySchema = z.object({
@@ -143,6 +150,7 @@ export const projectEntrySchema = z.object({
   role: z.string().optional(),
   url: z.string().optional(),
   bullets: z.array(bulletPointSchema),
+  hidden: z.boolean().optional(),
 });
 
 export interface SkillTag {
@@ -165,6 +173,7 @@ export interface SectionBlock<T> {
   id: string;
   title: string;
   isLocked: boolean;
+  hidden?: boolean;
   data: T;
 }
 
@@ -173,6 +182,7 @@ export const summarySectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   isLocked: z.boolean(),
+  hidden: z.boolean().optional(),
   data: z.string(),
 });
 
@@ -194,6 +204,7 @@ export const certificationsSectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   isLocked: z.boolean(),
+  hidden: z.boolean().optional(),
   data: z.array(certificationEntrySchema),
 });
 
@@ -201,6 +212,7 @@ export const experienceSectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   isLocked: z.boolean(),
+  hidden: z.boolean().optional(),
   data: z.array(experienceEntrySchema),
 });
 
@@ -208,6 +220,7 @@ export const skillsSectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   isLocked: z.boolean(),
+  hidden: z.boolean().optional(),
   data: z.array(skillTagSchema),
 });
 
@@ -215,6 +228,7 @@ export const educationSectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   isLocked: z.boolean(),
+  hidden: z.boolean().optional(),
   data: z.array(educationEntrySchema),
 });
 
@@ -222,6 +236,7 @@ export const projectsSectionSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   isLocked: z.boolean(),
+  hidden: z.boolean().optional(),
   data: z.array(projectEntrySchema),
 });
 
@@ -234,10 +249,11 @@ export interface CustomExperienceEntry {
   startDate: string;
   endDate: string;
   description: string;
+  hidden?: boolean;
 }
 const customExperienceEntrySchema = z.object({
   id: z.string().uuid(), title: z.string(), organization: z.string(),
-  location: z.string().optional(), startDate: z.string(), endDate: z.string(), description: z.string(),
+  location: z.string().optional(), startDate: z.string(), endDate: z.string(), description: z.string(), hidden: z.boolean().optional(),
 });
 export interface CustomResumeSection {
   id: string;
@@ -245,6 +261,7 @@ export interface CustomResumeSection {
   paragraphs: string[];
   kind?: CustomSectionKind;
   entries?: CustomExperienceEntry[];
+  hidden?: boolean;
 }
 export const customResumeSectionSchema = z.object({
   id: z.string().uuid(),
@@ -252,6 +269,7 @@ export const customResumeSectionSchema = z.object({
   paragraphs: z.array(z.string()),
   kind: z.enum(['text', 'experience', 'list', 'skills']).optional(),
   entries: z.array(customExperienceEntrySchema).optional(),
+  hidden: z.boolean().optional(),
 });
 
 // ── CV Profile (A Single Document Version) ──
@@ -266,10 +284,11 @@ export const documentThemeSchema = z.object({
   fontFamily: z.enum(['sans', 'serif', 'mono']),
   fontSize: z.enum(['small', 'medium', 'large']),
   lineSpacing: z.enum(['compact', 'normal', 'relaxed']),
-  layoutStyle: z.enum(['modern', 'split', 'classic', 'minimal']),
+  layoutStyle: z.enum(['modern', 'split', 'classic', 'minimal', 'technical', 'executive']),
   compactCertifications: z.boolean().optional(),
   fitOnePage: z.boolean().optional(),
   pageSize: z.enum(['A4', 'Letter']).optional(),
+  pageMargins: z.enum(['narrow', 'normal', 'wide']).optional(),
 });
 export type DocumentTheme = z.infer<typeof documentThemeSchema>;
 
@@ -335,7 +354,8 @@ export const tailoringMetadataSchema = z.object({
 export type TailoringMetadata = z.infer<typeof tailoringMetadataSchema>;
 
 export const importMetadataSchema = z.object({
-  fileName: z.string().max(240), format: z.enum(['pdf', 'docx']),
+  fileName: z.string().max(240), format: z.enum(['pdf', 'docx', 'txt', 'md', 'image']),
+  method: z.enum(['local', 'ai']).optional(),
   importedAt: z.string(), sourceText: z.string().max(100000),
   warnings: z.array(z.string()), pages: z.number().int().positive().optional(),
 });
@@ -375,6 +395,7 @@ export type CompositionChanges = z.infer<typeof compositionChangesSchema>;
 
 // Frozen before-tailoring snapshot of the source profile for stable word-level diff & undo.
 export const compositionSnapshotSchema = z.object({
+  headline: z.string().optional(),
   summary: z.string(),
   experience: z.array(z.object({
     id: z.string(),
@@ -386,6 +407,8 @@ export const compositionSnapshotSchema = z.object({
     bullets: z.array(z.object({ id: z.string(), text: z.string() })),
   })),
   skills: z.array(skillTagSchema),
+  certificationOrder: z.array(z.string()).optional(),
+  projectOrder: z.array(z.string()).optional(),
   bulletOriginMap: z.record(z.array(z.string())).optional(),
 });
 export type CompositionSnapshot = z.infer<typeof compositionSnapshotSchema>;

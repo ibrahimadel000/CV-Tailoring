@@ -1,3 +1,4 @@
+import { balanceTailoredTheme } from '../autoLayout';
 import { rejectedDiagnostics, type RejectedDiagnostics } from './rejectedDiagnostics';
 import { v4 as uuid } from 'uuid';
 import type { CVProfile } from '@/types/schema';
@@ -81,7 +82,7 @@ export function saveContent(id: string, choices: Choices) {
   next.profileId = uuid(); next.baseProfileId = source.profileId;
   next.profileName = `${source.profileName} — Tailored`.slice(0, 100); next.targetJob = p.job;
   next.version = source.version + 1; next.lastConfirmed = ''; delete next.matchScore;
-  next.documentTheme = clone(source.documentTheme ?? DEFAULT_DOCUMENT_THEME);
+  next.documentTheme = balanceTailoredTheme(source, next, clone(source.documentTheme ?? DEFAULT_DOCUMENT_THEME));
   const kept = new Set(choices.entries);
   const omitted = [...result.draft.experience, ...result.draft.projects].filter(e => kept.has(e.id)).flatMap(e => e.omitted.map(x => x.sourceId));
   if (choices.skills) omitted.push(...result.draft.omittedSkills.map(x => x.sourceId));

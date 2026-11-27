@@ -25,7 +25,23 @@ const SENTENCE_START_VERBS = new Set(('built worked maintained developed created
   'engineered streamlined aligned conducted collaborated integrated coordinated facilitated established reduced accelerated organized ' +
   'automated documented optimized standardized trained partnered executed prepared analyzed resolved authored monitored tracked ' +
   'configured migrated deployed tested validated drafted produced shaped reviewed guided assisted contributed expanded strengthened ' +
-  'transformed unified consolidated architected simplified modernized prioritized enabled drove').split(' '));
+  'transformed unified consolidated architected simplified modernized prioritized enabled drove ' +
+  'scaled cut boosted launched shipped eliminated revamped overhauled pioneered championed ' +
+  'rebuilt upgraded secured shortened slashed restructured orchestrated remediated sped ' +
+  'refactored tuned hardened debugged instrumented provisioned containerized benchmarked rewrote redesigned ' +
+  're-architected re-engineered enhanced refined increased raised lifted grew saved halved doubled lowered ' +
+  'minimized maximized mitigated prevented protected fixed patched stabilized unblocked decoupled extracted ' +
+  'indexed cached parallelized processed parsed generated rendered exposed connected synced synchronized ' +
+  'modeled prototyped evaluated assessed investigated profiled diagnosed troubleshot audited enforced verified ' +
+  'published presented mentored coached onboarded compiled curated cataloged ' +
+  'co-developed co-built co-authored co-designed co-engineered co-implemented ' +
+  'negotiated reconciled forecasted budgeted closed sourced recruited taught instructed advised counseled ' +
+  'treated administered inspected procured scheduled booked promoted pitched retained converted filed ' +
+  'complied mediated represented allocated balanced billed invoiced calculated disbursed reported ' +
+  'prospected renewed upsold acquired cultivated exceeded surpassed segmented positioned targeted ' +
+  'amplified nurtured activated branded triaged screened charted discharged dispensed rehabilitated ' +
+  'dispatched routed fabricated assembled calibrated installed repaired surveyed hired interviewed ' +
+  'lectured tutored graded enrolled educated').split(' '));
 
 const WRITTEN_NUMBERS: Record<string, string> = {
   zero: '0', one: '1', two: '2', three: '3', four: '4', five: '5',
@@ -52,8 +68,10 @@ function covered(corpus: string, term: string): boolean {
   const t = normalized(term);
   if (contains(corpus, t)) return true;
   if (t.endsWith('ies') && contains(corpus, t.slice(0, -3) + 'y')) return true;
+  if (t.endsWith('y') && contains(corpus, t.slice(0, -1) + 'ies')) return true;
+  if (t.endsWith('es') && contains(corpus, t.slice(0, -2))) return true;
   if (t.endsWith('s') && contains(corpus, t.slice(0, -1))) return true;
-  if (!t.endsWith('s') && contains(corpus, t + 's')) return true;
+  if (!t.endsWith('s') && (contains(corpus, t + 's') || contains(corpus, t + 'es'))) return true;
   return false;
 }
 
@@ -110,7 +128,7 @@ export function analyzeTerms(text: string, support: readonly string[], index: re
     const gap = previousEnd < 0 ? '' : text.slice(previousEnd, at);
     const sentenceInitial = isSentenceInitial(at, i);
     const eligible = isCapitalized(word) && !isIgnoredWord(word, sentenceInitial);
-    if (!eligible || (phrase.length && (SENTENCE_START.test(gap) || /[,;()\[\]"“”]/u.test(gap)))) flushPhrase();
+    if (!eligible || (phrase.length && (SENTENCE_START.test(gap) || /[,;()\[\]"“”—–]/u.test(gap)))) flushPhrase();
     if (eligible) phrase.push(i);
     previousEnd = at + word.length;
   }
@@ -121,10 +139,13 @@ export function analyzeTerms(text: string, support: readonly string[], index: re
     const sentenceInitial = isSentenceInitial(at, i);
     if (phraseMembers.has(i) || /^\d+$/.test(word) || isIgnoredWord(word, sentenceInitial)) continue;
     const internal = /[.+#/]/.test(word.slice(1, -1)) || /[+#]$/.test(word);
-    const acronym = /^\p{Lu}[\p{Lu}\p{N}&]*$/u.test(word) && word.replace(/\P{Lu}/gu, '').length >= 2;
+    const acronym = (/^\p{Lu}[\p{Lu}\p{N}&]*$/u.test(word) && word.replace(/\P{Lu}/gu, '').length >= 2) || /^[A-Z]\d+[a-z]?$/.test(word);
     const camel = /^.\P{Lu}*\p{Lu}/u.test(word);
     const capitalizedWord = isCapitalized(word) && word.length >= 3 && !sentenceInitial;
-    if ((internal && word.length >= 2) || acronym || camel || capitalizedWord) add(word);
+    const slashPartsCovered = word.includes('/') && !/[.+#]/.test(word) && word.split('/').filter(Boolean).length >= 2 && word.split('/').filter(Boolean).every(part => part.length >= 2 && covered(corpus, part));
+    const hyphenCompoundMatch = /^(.+)-(?:based|driven|backed|powered|hosted|native|first|centric|ready|compatible|focused|level|side|specific|related)$/i.exec(word);
+    const hyphenCompoundCovered = Boolean(hyphenCompoundMatch && covered(corpus, hyphenCompoundMatch[1]));
+    if (!slashPartsCovered && !hyphenCompoundCovered && ((internal && word.length >= 2) || acronym || camel || capitalizedWord)) add(word);
   }
   return { unsupported: [...found.values()], splitPhrases };
 }

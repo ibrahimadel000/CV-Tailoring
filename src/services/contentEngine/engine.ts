@@ -1,3 +1,4 @@
+import { formatDateRange } from '@/components/builder/resumeModel';
 import {z} from 'zod';
 import type {CVProfile} from '@/types/schema';
 import {originalSkillContext} from './skillContext';
@@ -44,7 +45,7 @@ export function projectSource(p:CVProfile):Source{
  const facts:Source['evidence']=[],add=(id:string,kind:Source['evidence'][number]['kind'],value:string,parent='')=>{if(value.trim())facts.push({id,kind,parent,text:value.trim()});return value.trim()?id:'';};
  add('headline','headline',p.resumeHeader.data.desiredJobPosition||p.headline.data);
  const summaryId=add('summary','summary',p.summary.data);
- const experience=p.experience.data.map((e,i)=>{const id=`work_${i+1}`,overviewId=add(id+'_overview','role',e.description||'',id);return{id,title:e.roleTitle,organization:e.companyName,dates:[e.startDate,e.endDate].filter(Boolean).join(' – '),overviewId,bulletIds:e.bullets.map((b,j)=>add(id+'_b'+(j+1),'achievement',b.text,id)).filter(Boolean)};});
+ const experience=p.experience.data.map((e,i)=>{const id=`work_${i+1}`,overviewId=add(id+'_overview','role',e.description||'',id);return{id,title:e.roleTitle,organization:e.companyName,dates:formatDateRange(e.startDate, e.endDate),overviewId,bulletIds:e.bullets.map((b,j)=>add(id+'_b'+(j+1),'achievement',b.text,id)).filter(Boolean)};});
  const projects=p.projects.data.map((e,i)=>{const id=`project_${i+1}`;return{id,title:e.name,organization:e.role||'',dates:'',overviewId:'',bulletIds:e.bullets.map((b,j)=>add(id+'_b'+(j+1),'achievement',b.text,id)).filter(Boolean)};});
  const skillIds=p.skills.data.map((s,i)=>add('skill_'+(i+1),'skill',[s.name,s.level].filter(Boolean).join(' — '))).filter(Boolean);
  // Profile categories are importer/editor classifications, NOT original source headings.

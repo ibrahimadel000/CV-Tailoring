@@ -158,6 +158,45 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
     updateProject(projectId, { bullets: computeRestoredOrder(proj.bullets, originalBullets) });
   };
 
+  const revertHeadline = () => {
+    if (snapshot?.headline === undefined || active.headline.isLocked || active.resumeHeader.isLocked) return;
+    useAppStore.setState(state => ({
+      profiles: state.profiles.map(p => p.profileId !== active.profileId ? p : {
+        ...p,
+        headline: { ...p.headline, data: snapshot.headline! },
+        resumeHeader: { ...p.resumeHeader, data: { ...p.resumeHeader.data, desiredJobPosition: snapshot.headline! } },
+      }),
+    }));
+  };
+
+  const restoreCertificationOrder = () => {
+    if (!snapshot?.certificationOrder?.length || active.certifications.isLocked) return;
+    const idx = new Map(snapshot.certificationOrder.map((id, i) => [id, i]));
+    useAppStore.setState(state => ({
+      profiles: state.profiles.map(p => p.profileId !== active.profileId ? p : {
+        ...p,
+        certifications: {
+          ...p.certifications,
+          data: [...p.certifications.data].sort((a, b) => (idx.get(a.id) ?? 9999) - (idx.get(b.id) ?? 9999)),
+        },
+      }),
+    }));
+  };
+
+  const restoreProjectListOrder = () => {
+    if (!snapshot?.projectOrder?.length || projectsLocked) return;
+    const idx = new Map(snapshot.projectOrder.map((id, i) => [id, i]));
+    useAppStore.setState(state => ({
+      profiles: state.profiles.map(p => p.profileId !== active.profileId ? p : {
+        ...p,
+        projects: {
+          ...p.projects,
+          data: [...p.projects.data].sort((a, b) => (idx.get(a.id) ?? 9999) - (idx.get(b.id) ?? 9999)),
+        },
+      }),
+    }));
+  };
+
   const revertAll = () => {
     useAppStore.setState(state => ({
       profiles: state.profiles.map(p => {
@@ -165,8 +204,22 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
         const baseExpById = new Map(baselineExperience.map(e => [e.id, e]));
         const baseProjById = new Map(baselineProjects.map(pr => [pr.id, pr]));
         const mappedTailoredIds = new Set(Object.keys(originMap));
+        const restoreByOrder = <T extends { id: string }>(items: T[], order?: string[]) => {
+          if (!order?.length) return items;
+          const idx = new Map(order.map((id, i) => [id, i]));
+          return [...items].sort((a, b) => (idx.get(a.id) ?? 9999) - (idx.get(b.id) ?? 9999));
+        };
+        const shouldRestoreHeadline = snapshot?.headline !== undefined && !p.headline.isLocked && !p.resumeHeader.isLocked;
         return {
           ...p,
+          headline: shouldRestoreHeadline ? { ...p.headline, data: snapshot.headline! } : p.headline,
+          resumeHeader: shouldRestoreHeadline
+            ? { ...p.resumeHeader, data: { ...p.resumeHeader.data, desiredJobPosition: snapshot.headline! } }
+            : p.resumeHeader,
+          certifications: p.certifications.isLocked ? p.certifications : {
+            ...p.certifications,
+            data: restoreByOrder(p.certifications.data, snapshot?.certificationOrder),
+          },
           summary: p.summary.isLocked ? p.summary : { ...p.summary, data: baselineSummary },
           experience: p.experience.isLocked ? p.experience : {
             ...p.experience,
@@ -192,7 +245,7 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
           },
           projects: p.projects.isLocked ? p.projects : {
             ...p.projects,
-            data: p.projects.data.map(proj => {
+            data: restoreByOrder(p.projects.data, snapshot?.projectOrder).map(proj => {
               const origProj = baseProjById.get(proj.id);
               if (!origProj) return proj;
               const origIds = new Set(origProj.bullets.map(ob => ob.id));
@@ -256,7 +309,21 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
     !skillsLocked &&
     JSON.stringify(active.skills.data.map(s => `${s.id}:${s.category}`)) !==
       JSON.stringify(baselineSkills.map(s => `${s.id}:${s.category}`));
-  const hasRevertibleChanges = (!summaryLocked && summaryChanged) || expHasDiff || projHasDiff || skillsHaveDiff;
+  const currentHeadline = (active.resumeHeader.data.desiredJobPosition?.trim() || active.headline.data || '').trim();
+  const headlineChanged = snapshot?.headline !== undefined && !active.headline.isLocked && !active.resumeHeader.isLocked && currentHeadline !== snapshot.headline.trim();
+  const certOrderChanged = Boolean(
+    snapshot?.certificationOrder?.length &&
+    !active.certifications.isLocked &&
+    active.certifications.data.map(c => c.id).join(',') !==
+      snapshot.certificationOrder.filter(id => active.certifications.data.some(c => c.id === id)).join(','),
+  );
+  const projOrderChanged = Boolean(
+    snapshot?.projectOrder?.length &&
+    !projectsLocked &&
+    active.projects.data.map(pr => pr.id).join(',') !==
+      snapshot.projectOrder.filter(id => active.projects.data.some(pr => pr.id === id)).join(','),
+  );
+  const hasRevertibleChanges = headlineChanged || (!summaryLocked && summaryChanged) || expHasDiff || projHasDiff || projOrderChanged || certOrderChanged || skillsHaveDiff;
 
   return (
     <div className="tailor-diff-review">
@@ -268,6 +335,42 @@ export function TailorDiffReview({ active, source }: { active: CVProfile; source
           <RotateCcw size={13} /> Revert all
         </button>
       </div>
+
+      {headlineChanged && snapshot?.headline !== undefined && (
+        <div className="diff-card">
+          <div className="diff-header">
+            <strong>Top Headline</strong>
+            <button type="button" className="text-button diff-action" onClick={revertHeadline}>
+              <RotateCcw size={13} /> Revert headline
+            </button>
+          </div>
+          <p className="diff-body">
+            <WordDiff before={snapshot.headline} after={currentHeadline} />
+          </p>
+        </div>
+      )}
+
+      {certOrderChanged && (
+        <div className="diff-card">
+          <div className="diff-header">
+            <strong>Certifications · sorted by job relevance</strong>
+            <button type="button" className="text-button diff-action" onClick={restoreCertificationOrder}>
+              <RotateCcw size={13} /> Restore order
+            </button>
+          </div>
+        </div>
+      )}
+
+      {projOrderChanged && (
+        <div className="diff-card">
+          <div className="diff-header">
+            <strong>Projects · sorted by job relevance</strong>
+            <button type="button" className="text-button diff-action" onClick={restoreProjectListOrder}>
+              <RotateCcw size={13} /> Restore order
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="diff-card">
         <div className="diff-header">

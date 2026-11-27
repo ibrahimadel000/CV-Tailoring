@@ -131,7 +131,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .preview-caption span:last-child { color: #5e6b7f; }
 .scaled-paper { margin: 0 auto; position: relative; box-shadow: 0 3px 8px #1723370b, 0 20px 45px #1723370b; background: #fff; }
 .resume-paper { width: 794px; min-height: 1123px; background: #fff; color: #243044; overflow-wrap: anywhere; }
-.paper-edit { font-family: inherit; font-size: inherit; color: inherit; background: transparent; padding: 0; border: 0; display: block; text-align: left; border-radius: 0; }
+.paper-edit { font-family: inherit; font-size: inherit; color: inherit; background: transparent; padding: 0; border: 0; display: block; text-align: start; border-radius: 0; }
 .paper-edit:hover { background: #2557a707; }
 .paper-header { width: 100%; padding-bottom: 21px; }
 .paper-header h1 { font-size: 36px; line-height: 1.2; color: #172337; font-weight: 700; margin: 0; letter-spacing: -.5px; }
@@ -139,11 +139,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .paper-contacts { font-size: 12px; color: #526074; margin: 11px 0 0; line-height: 1.6; white-space: pre-wrap; }
 .paper-section-title { text-transform: uppercase; letter-spacing: 1.6px; font-size: 13.33px; font-weight: 700; margin-bottom: 10.67px; min-height: 22px; }
 .paper-item-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
-.paper-item-heading strong { flex: 1; min-width: 0; }
-.paper-item-heading > span { font-size: 12px; color: #526074; max-width: 38%; }
+.paper-item-heading strong { flex: 1; min-width: 0; color: #172337; }
+.paper-item-heading > span { font-size: 12px; color: #526074; max-width: 38%; text-align: end; }
 .paper-subtitle { font-size: .91em; color: #526074; margin: 3px 0 0; }
 .paper-body { margin: 0; white-space: pre-wrap; }
-.paper-item ul { margin: 5px 0 0; padding: 0 0 0 15px; list-style: disc; }
+.paper-item ul { margin: 5px 0 0; padding: 0; padding-inline-start: 15px; list-style: disc; }
 .paper-item li { margin-top: 5px; padding-left: 0; }
 .paper-placeholder { margin-top: 64px; color: #8c98a8; max-width: 455px; }
 .paper-placeholder > span { font-size: 11px; letter-spacing: 2px; }
@@ -1039,3 +1039,184 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 /* Phase 4.3: DOCX export button */
 .export-docx { width: 100%; margin: 0 0 10px; justify-content: center; }
+
+/* Phase 14 — In-browser ATS Text & Checks tab inside PDF preview modal */
+.pdf-inspect-shell { display: flex; flex-direction: column; height: calc(100% - 108px); min-height: 360px; }
+.pdf-inspect-shell .actual-pdf { flex: 1; height: 100%; min-height: 300px; }
+.pdf-inspect-tabs { display: flex; align-items: center; gap: 6px; padding: 0 24px 10px; border-bottom: 1px solid #e4e8ef; flex-shrink: 0; }
+.pdf-inspect-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: #5b6b82; font-size: 12px; font-weight: 500; cursor: pointer; }
+.pdf-inspect-tab:hover { background: #f2f5fa; color: #1d2937; }
+.pdf-inspect-tab.active { background: #edf3fc; border-color: #c8daf5; color: #1d4e9e; font-weight: 600; }
+.ats-tab-pill { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: #e8f5ee; color: #186a3b; }
+.ats-tab-pill.mostly { background: #fff4e5; color: #8c5308; }
+.ats-tab-pill.hard { background: #fdecec; color: #a12626; }
+.ats-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 14px 24px 20px; gap: 14px; overflow: hidden; }
+.ats-summary-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; background: #f8faff; border: 1px solid #e4e8ef; border-radius: 8px; font-size: 12px; }
+.ats-verdict { font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #e8f5ee; color: #186a3b; }
+.ats-verdict.mostly { background: #fff4e5; color: #8c5308; }
+.ats-verdict.hard { background: #fdecec; color: #a12626; }
+.ats-stats { color: #5b6b82; }
+.ats-copy-btn { margin-left: auto; font-size: 12px; }
+.ats-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.25fr); gap: 16px; overflow: hidden; }
+.ats-checks-col, .ats-text-col { display: flex; flex-direction: column; min-height: 0; }
+.ats-checks-col h4, .ats-text-col h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #5b6b82; }
+.ats-checks-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.ats-check-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border-radius: 8px; border: 1px solid #e4e8ef; background: #fff; font-size: 12px; line-height: 1.45; }
+.ats-check-item strong { display: block; color: #1d2937; font-size: 12px; }
+.ats-check-item p { margin: 2px 0 0; color: #5b6b82; }
+.ats-check-icon { flex-shrink: 0; margin-top: 1px; color: #1d7a46; }
+.ats-check-item.warning { border-color: #f3d7a8; background: #fffaf0; }
+.ats-check-item.warning .ats-check-icon { color: #b4690e; }
+.ats-check-item.blocker { border-color: #f4b8b8; background: #fff5f5; }
+.ats-check-item.blocker .ats-check-icon { color: #c02a2a; }
+.ats-text-box { flex: 1; min-height: 0; margin: 0; padding: 12px 14px; border: 1px solid #e4e8ef; border-radius: 8px; background: #fbfcfe; color: #1d2937; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; overflow-y: auto; }
+@media (max-width: 760px) { .ats-grid { grid-template-columns: 1fr; overflow-y: auto; } .ats-text-box { min-height: 220px; } .pdf-inspect-tabs, .ats-panel { padding-left: 12px; padding-right: 12px; } }
+
+/* Phase 15 — Header Undo/Redo, Undo Toast button, and Multi-Tab Conflict actions */
+.history-controls { display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; }
+.history-controls .icon-button { color: #5b6b82; min-width: 32px; min-height: 32px; }
+.history-controls .icon-button:disabled { opacity: 0.35; cursor: not-allowed; }
+.toast-undo-button { border: 1px solid #4c6b9a; background: #263a59; color: #fff; border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 4px; }
+.toast-undo-button:hover { background: #314b73; }
+.storage-warning { align-items: center; flex-wrap: wrap; }
+.storage-warning-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.storage-warning-actions .secondary-button, .storage-warning-actions .text-button { font-size: 12px; padding: 4px 10px; min-height: 28px; }
+
+.library-undo-banner { display: flex; align-items: center; gap: 10px; margin: 0 24px 12px; padding: 9px 12px; border-radius: 8px; background: #172337; color: #fff; font-size: 13px; }
+.library-undo-banner > span { flex: 1; }
+.library-undo-banner .icon-button { color: #cad7eb; }
+
+/* Phase 16 — Calm, subtle line-pinned readability hints in SectionEditor */
+.readability-hints { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; padding-left: 18px; }
+.readability-hints.no-indent { padding-left: 0; margin-top: 6px; }
+.readability-hint { font-size: 11.5px; line-height: 1.45; color: #8c5a16; display: flex; align-items: baseline; gap: 5px; }
+.readability-hint::before { content: '•'; color: #c48426; font-weight: 700; }
+
+/* Phase 17 — Template filter chips & ATS-safe badge */
+.template-header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.template-header-row .design-label { margin: 0; }
+.template-filter-chips { display: inline-flex; align-items: center; gap: 4px; }
+.template-filter-chip { border: 1px solid #d9e1ec; background: #fff; color: #5b6b82; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 500; cursor: pointer; }
+.template-filter-chip:hover { background: #f2f5fa; color: #1d2937; }
+.template-filter-chip.active { background: #edf3fc; border-color: #c8daf5; color: #1d4e9e; font-weight: 600; }
+.template-ats-badge { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #e8f5ee; color: #186a3b; font-size: 10px; font-weight: 600; vertical-align: middle; }
+
+/* Phase 18 — Cross-format parity in HTML ResumePaper */
+.paper-item li::marker { color: var(--bullet-color, #243044); }
+.paper-link { color: #526074; text-decoration: none; }
+.paper-link:hover { text-decoration: underline; }
+
+/* Phase 19 — Technical & Executive template thumbnails and layout helpers */
+.mini-technical { gap: 2px; padding-top: 6px; }
+.mini-technical b { width: 52%; height: 3px; }
+.mini-executive { align-items: center; }
+.mini-executive b { width: 74%; }
+.mini-executive em { width: 100%; height: 1px; }
+.paper-split-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.paper-split-header .paper-contacts { margin-top: 0; text-align: end; max-width: 46%; }
+.paper-framed-contacts { border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; padding: 5px 0; margin-top: 8px; text-align: center; }
+
+/* Phase 20: Visibility toggles & bullet reordering */
+.clean-builder .section-is-hidden .section-accordion-toggle strong,
+.clean-builder .section-is-hidden .section-accordion-toggle small {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.clean-builder .entry-is-hidden {
+  opacity: 0.68;
+  border-style: dashed;
+}
+.clean-builder .entry-is-hidden .entry-toggle strong {
+  text-decoration: line-through;
+}
+.clean-builder .entry-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.clean-builder .entry-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clean-builder .hidden-pill {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-inline-start: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.14);
+}
+.clean-builder .section-visibility-btn,
+.clean-builder .entry-visibility-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.clean-builder .section-visibility-btn:hover:not(:disabled),
+.clean-builder .entry-visibility-btn:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+.clean-builder .section-visibility-btn[aria-pressed="true"],
+.clean-builder .entry-visibility-btn[aria-pressed="true"] {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+.clean-builder .section-visibility-btn:disabled,
+.clean-builder .entry-visibility-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.clean-builder .bullet-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.clean-builder .bullet-row .bullet-move-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+.clean-builder .bullet-row .bullet-move-btn:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+.clean-builder .bullet-row .bullet-move-btn:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+.paper-header-col { flex: 1; min-width: 0; }
+.paper-split-header > .paper-edit { min-width: 0; }

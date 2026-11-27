@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, GripVertical, LockKeyhole, Plus } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, GripVertical, LockKeyhole, Plus } from 'lucide-react';
 import { v4 as uuid } from 'uuid';
 import type { CVProfile, CustomSectionKind } from '@/types/schema';
 import { useAppStore } from '@/store/useAppStore';
@@ -52,13 +52,43 @@ export function SectionWorkspace({ profile, expanded, onExpand, onSelect }: { pr
     useAppStore.setState(state => ({ profiles: state.profiles.map(p => p.profileId === profile.profileId ? { ...p, customSections: p.customSections?.filter(s => `custom:${s.id}` !== id), sectionOrder: p.sectionOrder?.filter(x => x !== id) } : p) }));
     setRemoving(null); if (expanded === id) onExpand(null); onSelect('personal'); setNotice('Custom section removed.');
   };
+  const isSectionHidden = (id: SectionId): boolean => {
+    if (id === 'personal') return false;
+    if (id.startsWith('custom:')) { const cs = profile.customSections?.find(s => `custom:${s.id}` === id); return Boolean(cs?.hidden || cs?.title.trim().toLowerCase() === 'imported details'); }
+    return Boolean(profile[id as Exclude<BuiltInSectionId, 'personal'>].hidden);
+  };
+  const isImportedNotes = (id: SectionId): boolean => {
+    if (!id.startsWith('custom:')) return false;
+    const cs = profile.customSections?.find(s => `custom:${s.id}` === id);
+    return Boolean(cs && cs.title.trim().toLowerCase() === 'imported details');
+  };
+  const isSectionLocked = (id: SectionId): boolean => {
+    if (id === 'personal' || id.startsWith('custom:')) return false;
+    return Boolean(profile[id as Exclude<BuiltInSectionId, 'personal'>].isLocked);
+  };
+  const toggleSectionHidden = (id: SectionId, title: string) => {
+    if (id === 'personal' || isSectionLocked(id) || isImportedNotes(id)) return;
+    const nextHidden = !isSectionHidden(id);
+    useAppStore.setState(state => ({
+      profiles: state.profiles.map(p => {
+        if (p.profileId !== profile.profileId) return p;
+        if (id.startsWith('custom:')) {
+          return { ...p, customSections: p.customSections?.map(s => (`custom:${s.id}` === id ? { ...s, hidden: nextHidden } : s)) };
+        }
+        const key = id as Exclude<BuiltInSectionId, 'personal'>;
+        return { ...p, [key]: { ...p[key], hidden: nextHidden } } as CVProfile;
+      }),
+    }));
+    setNotice(nextHidden ? `${title} hidden from resume.` : `${title} shown on resume.`);
+  };
   return <div className="section-workspace" ref={root}>
     <p id={sort.helpId} className="sr-only">Drag the handle to a new position. Or focus it and use Up, Down, Home or End. Personal details stay first.</p>
     <div className={`section-accordion-list ${sort.drag ? 'is-sorting' : ''}`}>
-      {displayList.map(item => { const isOpen = expanded === item.id; const count = sectionCount(profile, item.id); const custom = item.id.startsWith('custom:'); const panelId = `section-panel-${item.id.replace(':', '-')}`; return <div key={item.id} className={`section-sort-slot ${sort.drag?.id === item.id ? 'is-drag-slot' : ''}`} data-section-card={item.id} style={sort.slotStyle(item.id)}><div className={`section-accordion ${isOpen ? 'is-open' : ''} ${sort.drag?.id === item.id ? 'is-live-dragging' : ''} ${sort.drag?.id === item.id && sort.drag.settling ? 'is-settling' : ''}`} style={sort.cardStyle(item.id)}>
+      {displayList.map(item => { const isOpen = expanded === item.id; const count = sectionCount(profile, item.id); const custom = item.id.startsWith('custom:'); const hidden = isSectionHidden(item.id); const locked = isSectionLocked(item.id); const importedNotes = isImportedNotes(item.id); const panelId = `section-panel-${item.id.replace(':', '-')}`; return <div key={item.id} className={`section-sort-slot ${sort.drag?.id === item.id ? 'is-drag-slot' : ''}`} data-section-card={item.id} style={sort.slotStyle(item.id)}><div className={`section-accordion ${isOpen ? 'is-open' : ''} ${hidden ? 'section-is-hidden' : ''} ${sort.drag?.id === item.id ? 'is-live-dragging' : ''} ${sort.drag?.id === item.id && sort.drag.settling ? 'is-settling' : ''}`} style={sort.cardStyle(item.id)}>
         <div className="section-accordion-heading" data-sort-id={item.id}>
           {item.id === 'personal' ? <span className="section-fixed" title="Personal details always stay first"><LockKeyhole size={15} /></span> : <button {...sort.handleProps(item.id, item.title)}><GripVertical size={18} /></button>}
-          <button className="section-accordion-toggle" aria-expanded={isOpen} aria-controls={panelId} onClick={() => open(item.id)}><span><strong>{item.title}</strong><small>{profile.pageLayout?.sections?.[item.id] === 'new-page' ? 'Manual page break · ' : ''}{item.id === 'personal' ? 'Name, contact details & links' : custom ? `${count} ${count === 1 ? 'item' : 'items'}` : count ? `${count} ${count === 1 ? 'item' : 'items'}` : 'Not added yet'}</small></span><ChevronDown size={17} className="accordion-chevron" /></button>
+          <button className="section-accordion-toggle" aria-expanded={isOpen} aria-controls={panelId} onClick={() => open(item.id)}><span><strong>{item.title}{hidden && <span className="hidden-pill">Hidden</span>}</strong><small>{hidden ? 'Hidden from export · ' : ''}{profile.pageLayout?.sections?.[item.id] === 'new-page' ? 'Manual page break · ' : ''}{item.id === 'personal' ? 'Name, contact details & links' : custom ? `${count} ${count === 1 ? 'item' : 'items'}` : count ? `${count} ${count === 1 ? 'item' : 'items'}` : 'Not added yet'}</small></span><ChevronDown size={17} className="accordion-chevron" /></button>
+          {item.id !== 'personal' && <button type="button" className="icon-button section-visibility-btn" disabled={locked || importedNotes} aria-label={importedNotes ? 'Imported details stay hidden until renamed' : locked ? `${item.title} section is locked` : hidden ? `Show ${item.title} section on resume` : `Hide ${item.title} section from resume`} aria-pressed={hidden} title={importedNotes ? 'Unmapped import notes stay hidden until renamed' : locked ? 'Unlock this section to change visibility' : hidden ? 'Hidden from resume (click to show)' : 'Hide section from resume without deleting'} onClick={() => toggleSectionHidden(item.id, item.title)}>{hidden ? <EyeOff size={15} /> : <Eye size={15} />}</button>}
         </div>
         {isOpen && <div id={panelId} className="section-accordion-body">{!custom && <p className="accordion-description">{item.description}</p>}
           {removing === item.id && <div className="section-delete-confirm"><p>Delete this section and all its content?</p><button className="secondary-button" onClick={() => setRemoving(null)}>Keep it</button><button className="danger-button" onClick={() => remove(item.id)}>Delete section</button></div>}

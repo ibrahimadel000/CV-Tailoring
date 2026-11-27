@@ -1,3 +1,4 @@
+import { balanceTailoredTheme } from '../autoLayout';
 import { useAppStore } from '@/store/useAppStore';
 import { createCompositionRunner, type ComposeProvider, type Repository } from './workflow';
 export const composerRepository: Repository = {
@@ -8,7 +9,10 @@ export const composerRepository: Repository = {
       const active = state.profiles.find(p => p.profileId === state.activeProfileId);
       if (JSON.stringify(active) !== snapshot || state.profiles.some(p => p.profileId === copy.profileId)) return state;
       committed = true;
-      return { profiles: [...state.profiles, copy], activeProfileId: copy.profileId, documentTheme: { ...(copy.documentTheme ?? state.documentTheme) } };
+      const baseTheme = { ...(copy.documentTheme ?? state.documentTheme) };
+      const balancedTheme = active ? balanceTailoredTheme(active, copy, baseTheme) : baseTheme;
+      const balancedCopy = { ...copy, documentTheme: balancedTheme };
+      return { profiles: [...state.profiles, balancedCopy], activeProfileId: balancedCopy.profileId, documentTheme: { ...balancedTheme } };
     });
     return committed;
   },

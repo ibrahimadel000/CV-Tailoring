@@ -14,7 +14,7 @@ import { projectGoogleSchema } from './providerContract';
 import type { SkillNormalization } from './skillSelection';
 import { applySummaryBoundary, summaryRemovalMessage } from './summaryBoundary';
 import { renderSummaryCapabilities, SUMMARY_CAPABILITY_MAX } from './summaryCapabilities';
-import { guardNaturalDocument } from './claimGuard';
+import { guardNaturalDocument, CONCEPTUAL_SKILL } from './claimGuard';
 import { explicitSkillCoverage } from './explicitSkillCoverage';
 import { shortenedSourceEcho, reorderedSourceEcho, editorialOverlap, editorialNovelWords } from './terms';
 
@@ -158,9 +158,8 @@ function compileCandidate(profile: CVProfile, data: NaturalDocument, job: string
     }
   }
   renderSummaryCapabilities(source, doc.summaryCapabilityIds, normalized.selected.map(s => s.id));
-  const conceptualSkill = /^(?:business operations|workflow automation|project management|strategic planning|technical documentation|system analysis|cross[-\s]?functional collaboration|process improvement|agile\s*\/\s*scrum|stakeholder management|problem solving)$/i;
   const boundary = applySummaryBoundary(source.evidence, profile.skills.data.flatMap((skill, i) =>
-    source.skillIds.includes(`skill_${i + 1}`) && !conceptualSkill.test(skill.name.trim())
+    source.skillIds.includes(`skill_${i + 1}`) && !CONCEPTUAL_SKILL.test(skill.name.trim())
       ? [{ id: `skill_${i + 1}`, name: skill.name }]
       : []), doc.summarySegments);
   const warnings: { path: string; message: string }[] = [...guarded.notes.map(n => ({ path: n.path, message: n.message })), ...warningsForCategory];

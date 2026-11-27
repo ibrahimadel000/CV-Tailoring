@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:browser:offline": "npm --prefix tests/browser test",
-    "server": "node server/index.mjs"
+    "server": "node server/index.mjs",
+    "dev:all": "node scripts/dev-all.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",

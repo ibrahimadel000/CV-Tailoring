@@ -97,33 +97,50 @@ export function essentials(p: CVProfile) {
   return [
     { label: 'Your name', done: Boolean(fullName(p)) },
     { label: 'Contact email', done: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.resumeHeader.data.email) },
-    { label: 'A short summary', done: Boolean(p.summary.data.trim()) },
-    { label: 'Experience or education', done: p.experience.data.some(e => Boolean(e.roleTitle.trim() && e.companyName.trim())) || p.education.data.some(e => Boolean(e.degree.trim() && e.institution.trim())) },
-    { label: 'Relevant skills', done: p.skills.data.some(s => Boolean(s.name.trim())) },
+    { label: 'A short summary', done: !p.summary.hidden && Boolean(p.summary.data.trim()) },
+    { label: 'Experience or education', done: (!p.experience.hidden && p.experience.data.some(e => !e.hidden && Boolean(e.roleTitle.trim() && e.companyName.trim()))) || (!p.education.hidden && p.education.data.some(e => !e.hidden && Boolean(e.degree.trim() && e.institution.trim()))) },
+    { label: 'Relevant skills', done: !p.skills.hidden && p.skills.data.some(s => Boolean(s.name.trim())) },
   ];
 }
 export function displaySkillGroups(skills:SkillTag[]) {
   return orderedSkillGroups(skills).map(group=>({title:group.title,text:group.items.map(s=>[s.name.trim(),s.level?.trim()].filter(Boolean).join(' — ')).join(' · ')}));
 }
-export interface ResumeBlock { id: SectionId; title: string; items: { entryId?: string; title?: string; subtitle?: string; date?: string; text?: string; bullets?: string[] }[] }
+export function formatDateRange(start?: string, end?: string): string {
+  const s = (start || '').trim();
+  const e = (end || '').trim();
+  if (s && e && s.toLowerCase() === e.toLowerCase()) return s;
+  return [s, e].filter(Boolean).join(' – ');
+}
+export interface ResumeBlock { id: SectionId; title: string; items: { entryId?: string; title?: string; subtitle?: string; url?: string; urlLabel?: string; date?: string; text?: string; bullets?: string[] }[] }
 export function resumeBlocks(p: CVProfile): ResumeBlock[] {
   const blocks: ResumeBlock[] = [];
-  if (plainText(p.summary.data)) blocks.push({ id: 'summary', title: 'Profile', items: [{ text: plainText(p.summary.data) }] });
-  const experience = p.experience.data.filter(e => e.roleTitle.trim() || e.companyName.trim() || e.description?.trim() || e.bullets.some(b => b.text.trim()));
-  if (experience.length) blocks.push({ id: 'experience', title: 'Experience', items: experience.map(e => ({ entryId: e.id, title: e.roleTitle, subtitle: [e.companyName, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
-  const education = p.education.data.filter(e => e.degree.trim() || e.institution.trim() || e.description?.trim());
-  if (education.length) blocks.push({ id: 'education', title: 'Education', items: education.map(e => ({ entryId: e.id, title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – ') || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.map(x => x.trim()).filter(Boolean).join(' · ')].filter(Boolean).join('\n') })) });
-  const skills = displaySkillGroups(p.skills.data);
-  if (skills.length) blocks.push({ id: 'skills', title: 'Skills', items: skills });
-  const projects = p.projects.data.filter(e => e.name.trim() || e.bullets.some(b => b.text.trim()));
-  if (projects.length) blocks.push({ id: 'projects', title: 'Projects', items: projects.map(e => ({ entryId: e.id, title: e.name, subtitle: [e.role, e.url].filter(Boolean).join(' · '), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
-  const certs = p.certifications.data.filter(e => e.name.trim());
-  if (certs.length) blocks.push({ id: 'certifications', title: 'Certifications', items: certs.map(e => ({ entryId: e.id, title: e.name, subtitle: e.issuer, date: e.date })) });
+  if (!p.summary.hidden && plainText(p.summary.data)) blocks.push({ id: 'summary', title: plainText(p.summary.title).trim() || 'Profile', items: [{ text: plainText(p.summary.data) }] });
+  const experience = p.experience.hidden ? [] : p.experience.data.filter(e => !e.hidden && (e.roleTitle.trim() || e.companyName.trim() || e.description?.trim() || e.bullets.some(b => b.text.trim())));
+  if (experience.length) blocks.push({ id: 'experience', title: plainText(p.experience.title).trim() || 'Experience', items: experience.map(e => ({ entryId: e.id, title: e.roleTitle, subtitle: [e.companyName, e.city].filter(Boolean).join(' · '), date: formatDateRange(e.startDate, e.endDate), text: plainText(e.description), bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean) })) });
+  const education = p.education.hidden ? [] : p.education.data.filter(e => !e.hidden && (e.degree.trim() || e.institution.trim() || e.description?.trim()));
+  if (education.length) blocks.push({ id: 'education', title: plainText(p.education.title).trim() || 'Education', items: education.map(e => ({ entryId: e.id, title: e.degree, subtitle: [e.institution, e.city].filter(Boolean).join(' · '), date: formatDateRange(e.startDate, e.endDate) || e.graduationDate, text: [plainText(e.description), e.gpa ? `GPA: ${e.gpa}` : '', e.honors?.map(x => x.trim()).filter(Boolean).join(' · ')].filter(Boolean).join('\n') })) });
+  const skills = p.skills.hidden ? [] : displaySkillGroups(p.skills.data);
+  if (skills.length) blocks.push({ id: 'skills', title: plainText(p.skills.title).trim() || 'Skills', items: skills });
+  const projects = p.projects.hidden ? [] : p.projects.data.filter(e => !e.hidden && (e.name.trim() || e.bullets.some(b => b.text.trim())));
+  if (projects.length) blocks.push({ id: 'projects', title: plainText(p.projects.title).trim() || 'Projects', items: projects.map(e => {
+    const rawUrl = plainText(e.url || '').trim();
+    const parsedUrl = rawUrl ? normalizeLinkUrl(rawUrl, 'web') : null;
+    return {
+      entryId: e.id,
+      title: e.name,
+      subtitle: plainText(e.role || '').trim() || undefined,
+      url: parsedUrl ?? undefined,
+      urlLabel: rawUrl || undefined,
+      bullets: e.bullets.map(b => plainText(b.text)).filter(Boolean),
+    };
+  }) });
+  const certs = p.certifications.hidden ? [] : p.certifications.data.filter(e => !e.hidden && e.name.trim());
+  if (certs.length) blocks.push({ id: 'certifications', title: plainText(p.certifications.title).trim() || 'Certifications', items: certs.map(e => ({ entryId: e.id, title: e.name, subtitle: e.issuer, date: e.date })) });
   for (const custom of p.customSections || []) {
-    if (custom.title.trim().toLowerCase() === 'imported details') continue;
+    if (custom.hidden || custom.title.trim().toLowerCase() === 'imported details') continue;
     const paragraphs = custom.paragraphs.map(x => plainText(x)).filter(Boolean);
     const items: ResumeBlock['items'] = custom.kind === 'experience'
-      ? (custom.entries || []).filter(e => e.title.trim() || e.organization.trim() || e.description.trim()).map(e => ({ entryId: e.id, title: plainText(e.title), subtitle: [plainText(e.organization), plainText(e.location)].filter(Boolean).join(' · '), date: [e.startDate, e.endDate].filter(Boolean).join(' – '), text: plainText(e.description) }))
+      ? (custom.entries || []).filter(e => !e.hidden && (e.title.trim() || e.organization.trim() || e.description.trim())).map(e => ({ entryId: e.id, title: plainText(e.title), subtitle: [plainText(e.organization), plainText(e.location)].filter(Boolean).join(' · '), date: formatDateRange(e.startDate, e.endDate), text: plainText(e.description) }))
       : custom.kind === 'list' ? (paragraphs.length ? [{ bullets: paragraphs }] : [])
       : custom.kind === 'skills' ? (paragraphs.length ? [{ text: paragraphs.join(' · ') }] : [])
       : paragraphs.map(text => ({ text }));
@@ -141,30 +158,40 @@ export function themeMetrics(theme: DocumentTheme) {
   const italic = font === 'Times-Roman' ? 'Times-Italic' : font === 'Courier' ? 'Courier-Oblique' : 'Helvetica-Oblique';
   const isClassic = theme.layoutStyle === 'classic';
   const isMinimal = theme.layoutStyle === 'minimal';
+  const isTechnical = theme.layoutStyle === 'technical';
+  const isExecutive = theme.layoutStyle === 'executive';
   const isLetter = theme.pageSize === 'Letter';
-  const baseGap = isMinimal ? 12 : 18;
-  const baseMargin = isMinimal ? 36 : 42;
+  const baseGap = isMinimal || isTechnical ? 12 : 18;
+  const defaultMargin = isMinimal || isTechnical ? 36 : isExecutive ? 44 : 42;
+  const baseMargin = theme.pageMargins === 'narrow' ? 32 : theme.pageMargins === 'wide' ? 52 : defaultMargin;
+  const bodySize = fit ? Math.max(9.5, baseSize - 1) : baseSize;
+  const sectionTitleSize = Math.max(fit ? 9.5 : 10, Number((bodySize + 0.5).toFixed(1)));
   return {
-    size: fit ? Math.max(9.5, baseSize - 1) : baseSize,
+    size: bodySize,
+    sectionTitleSize,
     leading: fit ? Math.max(1.28, Number((baseLeading - 0.15).toFixed(2))) : baseLeading,
     font,
     bold,
     italic,
     gap: fit ? Math.min(baseGap, 12) : baseGap,
-    margin: fit ? 32 : baseMargin,
-    itemGap: fit ? 6 : 8,
+    margin: fit ? Math.min(baseMargin, 32) : baseMargin,
+    itemGap: fit ? 6 : (isTechnical ? 6.5 : 8),
     bulletGap: fit ? 2 : 3,
-    headerNameSize: fit ? 24 : 27,
-    headerHeadlineSize: fit ? 11 : 12,
+    headerNameSize: fit ? 24 : (isTechnical ? 24 : 27),
+    headerHeadlineSize: fit ? 11 : (isTechnical ? 11 : 12),
     headerContactSize: fit ? 8.75 : 9,
-    headerPadBottom: fit ? 8 : 11,
-    photoSize: fit ? 60 : 72,
+    headerPadBottom: fit ? 8 : (isTechnical ? 8 : 11),
+    photoSize: fit ? (isTechnical ? 48 : 60) : (isTechnical ? 56 : 72),
     pageWidthPt: isLetter ? 612 : 595.28,
     pageHeightPt: isLetter ? 792 : 841.89,
-    sectionRuleColor: isClassic ? theme.accentColor : isMinimal ? 'transparent' : '#CBD5E1',
+    sectionRuleColor: isClassic || isExecutive || isTechnical ? theme.accentColor : isMinimal ? 'transparent' : '#CBD5E1',
     sectionBgColor: isMinimal ? '#F1F5F9' : 'transparent',
-    subtitleItalic: isClassic,
-    bulletColor: !isClassic && !isMinimal ? theme.accentColor : '#243044',
+    subtitleItalic: isClassic || isExecutive,
+    bulletColor: !isClassic && !isMinimal && !isExecutive ? theme.accentColor : '#243044',
+    centeredHeader: isClassic || isExecutive,
+    splitHeader: isTechnical,
+    framedContactBar: isExecutive,
+    singleLineEntryHeader: isTechnical,
   };
 }
 
@@ -181,4 +208,25 @@ export function orderedSections(profile: CVProfile) {
     const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
   })];
+}
+
+/**
+ * Prevent awkward mid-word syllable breaks in exported PDFs while allowing
+ * long URLs, bare domains, emails, and oversized tokens to wrap cleanly.
+ * Lookbehind-free for full Safari compatibility.
+ */
+export function splitLongTokenForPDF(word: string): string[] {
+  if (word.length <= 24) return [word];
+  const looksUrlOrEmail = /:\/\/|\/|@|\.(com|org|net|io|dev|edu|gov|co|ai|app)\b/i.test(word);
+  if (!looksUrlOrEmail && word.length <= 36) return [word];
+  const rawParts = word.match(/[^/._?&=:@-]+[/._?&=:@-]*|[/._?&=:@-]+/g) ?? [word];
+  const out: string[] = [];
+  for (const part of rawParts) {
+    if (part.length <= 36) {
+      out.push(part);
+    } else {
+      for (let i = 0; i < part.length; i += 20) out.push(part.slice(i, i + 20));
+    }
+  }
+  return out.length ? out : [word];
 }

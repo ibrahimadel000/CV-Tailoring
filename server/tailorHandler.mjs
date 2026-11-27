@@ -11,7 +11,42 @@ const MAX_BODY_BYTES = 220 * 1024;
 const MAX_SYSTEM_INSTRUCTION_CHARS = 12_000;
 const MAX_WIRE_CHARS = 180_000;
 const MAX_UPSTREAM_BYTES = 512 * 1024;
-const UPSTREAM_TIMEOUT_MS = 25_000;
+const TOTAL_BUDGET_MS = 52_000;
+const MODEL_TIMEOUT_MS = {
+  'gemini-3.5-flash-lite': 26_000,
+  'gemini-3.6-flash': 25_000,
+  'gemini-3.8-flash': 28_000,
+};
+const FALLBACK_BY_MODEL = {
+  'gemini-3.5-flash-lite': ['gemini-3.8-flash'],
+  'gemini-3.6-flash': ['gemini-3.5-flash-lite', 'gemini-3.8-flash'],
+  'gemini-3.8-flash': ['gemini-3.5-flash-lite'],
+};
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRY_SAME_MODEL_STATUSES = new Set([500, 502, 503, 504]);
+
+// Prompt-injection delimiting & invisible-char neutralization (adapted from Reactive Resume data-block.ts, MIT).
+const HIDDEN_INJECTION_CHARS = /[\u00AD\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
+
+export function stripHiddenInjectionChars(value) {
+  if (typeof value === 'string') return value.replace(HIDDEN_INJECTION_CHARS, '');
+  if (Array.isArray(value)) return value.map(stripHiddenInjectionChars);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = stripHiddenInjectionChars(v);
+    return out;
+  }
+  return value;
+}
+
+export function wrapUntrustedDataBlock(name, text) {
+  const safeName = String(name || 'DATA').replace(/[^A-Z0-9_]/gi, '_').toUpperCase();
+  const safeText = String(text ?? '')
+    .replace(HIDDEN_INJECTION_CHARS, '')
+    .replace(/<<</g, '‹‹‹')
+    .replace(/>>>/g, '›››');
+  return `<<<${safeName}_START>>>\n${safeText}\n<<<${safeName}_END>>>`;
+}
 
 export function isConfiguredApiKey(apiKey) {
   const trimmed = String(apiKey || '').trim();
@@ -52,7 +87,32 @@ export function createRateLimiter({ max = 15, windowMs = 10 * 60 * 1000 } = {}) 
   };
 }
 
+export function createCircuitBreaker({ threshold = 3, cooldownMs = 30_000 } = {}) {
+  const state = new Map();
+  return {
+    isOpen(model, now = Date.now()) {
+      const entry = state.get(model);
+      if (!entry) return false;
+      if (entry.openUntil > now) return true;
+      if (entry.openUntil > 0) {
+        state.delete(model);
+      }
+      return false;
+    },
+    recordSuccess(model) {
+      state.delete(model);
+    },
+    recordFailure(model, now = Date.now()) {
+      const prev = state.get(model) || { failures: 0, openUntil: 0 };
+      const failures = prev.failures + 1;
+      const openUntil = failures >= threshold ? now + cooldownMs : 0;
+      state.set(model, { failures, openUntil });
+    },
+  };
+}
+
 const defaultRateLimiter = createRateLimiter();
+const defaultCircuitBreaker = createCircuitBreaker();
 
 function corsHeaders(allowedOrigin) {
   if (!allowedOrigin) return {};
@@ -60,6 +120,7 @@ function corsHeaders(allowedOrigin) {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Expose-Headers': 'X-Tailor-Resolved-Model, X-Tailor-Attempts, X-Tailor-Error-Source, Retry-After',
     'Vary': 'Origin',
   };
 }
@@ -82,6 +143,38 @@ function fallbackClientIp(request) {
   const xff = request.headers.get('x-forwarded-for');
   if (xff) return xff.split(',')[0].trim();
   return 'local';
+}
+
+function parseRetryAfterMs(value, now = Date.now()) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) * 1000;
+  }
+  const ts = Date.parse(trimmed);
+  if (Number.isFinite(ts)) {
+    return Math.max(0, ts - now);
+  }
+  return null;
+}
+
+function abortableSleep(ms, signal, sleepImpl) {
+  if (ms <= 0) return Promise.resolve();
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  if (sleepImpl) {
+    return sleepImpl(ms, signal);
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 async function readBoundedText(response, maxBytes) {
@@ -119,6 +212,17 @@ async function readBoundedText(response, maxBytes) {
   return new TextDecoder().decode(combined);
 }
 
+function buildModelOrder(requestedModel, circuitBreaker, now) {
+  const candidates = [requestedModel, ...(FALLBACK_BY_MODEL[requestedModel] || [])];
+  const healthy = [];
+  const open = [];
+  for (const m of candidates) {
+    if (circuitBreaker.isOpen(m, now)) open.push(m);
+    else healthy.push(m);
+  }
+  return [...healthy, ...open];
+}
+
 export async function handleTailorRequest(request, options = {}) {
   const {
     apiKey = '',
@@ -127,7 +231,12 @@ export async function handleTailorRequest(request, options = {}) {
     clientIp: explicitClientIp,
     fetchImpl = fetch,
     rateLimiter = defaultRateLimiter,
-    timeoutMs = UPSTREAM_TIMEOUT_MS,
+    circuitBreaker = defaultCircuitBreaker,
+    timeoutMs,
+    totalBudgetMs = TOTAL_BUDGET_MS,
+    retryDelayMs = 800,
+    sleepImpl,
+    nowImpl = () => Date.now(),
   } = options;
 
   const cors = corsHeaders(allowedOrigin);
@@ -224,9 +333,11 @@ export async function handleTailorRequest(request, options = {}) {
   }
   const rawMaxTokens = Number(generationConfig.maxOutputTokens);
   const maxOutputTokens = Number.isFinite(rawMaxTokens) ? Math.min(Math.max(Math.trunc(rawMaxTokens), 256), 16384) : 8192;
+  const hasValidTemp = typeof generationConfig.temperature === 'number' && Number.isFinite(generationConfig.temperature);
   const sanitizedConfig = {
     responseMimeType: 'application/json',
     maxOutputTokens,
+    ...(hasValidTemp ? { temperature: Math.min(Math.max(generationConfig.temperature, 0), 1) } : {}),
     ...(generationConfig.responseSchema && typeof generationConfig.responseSchema === 'object' && !Array.isArray(generationConfig.responseSchema)
       ? { responseSchema: generationConfig.responseSchema }
       : {}),
@@ -237,61 +348,187 @@ export async function handleTailorRequest(request, options = {}) {
       : {}),
   };
 
-  const upstreamController = new AbortController();
-  let timedOut = false;
-  const onClientAbort = () => upstreamController.abort();
-  if (request.signal) {
-    if (request.signal.aborted) {
-      return jsonResponse({ error: { code: 499, status: 'CANCELLED', message: 'Client cancelled.' } }, 499, cors);
-    }
-    request.signal.addEventListener('abort', onClientAbort, { once: true });
+  if (request.signal?.aborted) {
+    return jsonResponse({ error: { code: 499, status: 'CANCELLED', message: 'Client cancelled.' } }, 499, cors);
   }
-  const timer = setTimeout(() => {
-    timedOut = true;
-    upstreamController.abort();
-  }, timeoutMs);
 
-  try {
-    const upstream = await fetchImpl(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        redirect: 'error',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': trimmedKey,
-        },
-        signal: upstreamController.signal,
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: 'user', parts: [{ text: wire }] }],
-          generationConfig: sanitizedConfig,
-        }),
-      },
-    );
+  const hardenedWire = JSON.stringify({
+    ...parsedWire,
+    source: stripHiddenInjectionChars(parsedWire.source),
+    job: wrapUntrustedDataBlock('JOB_DESCRIPTION', parsedWire.job),
+  });
 
-    const responseText = await readBoundedText(upstream, MAX_UPSTREAM_BYTES);
+  const upstreamBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents: [{ role: 'user', parts: [{ text: hardenedWire }] }],
+    generationConfig: sanitizedConfig,
+  });
+
+  const startedAt = nowImpl();
+  const modelOrder = buildModelOrder(model, circuitBreaker, startedAt);
+  let attempts = 0;
+  let lastHttpFailure = null;
+  let lastErrorKind = null; // 'timeout' | 'network'
+  let lastModel = modelOrder[0];
+
+  outer: for (let mIdx = 0; mIdx < modelOrder.length; mIdx++) {
+    const targetModel = modelOrder[mIdx];
+    // Allow 1 fast same-model retry on the first healthy model for transient 5xx/network blips.
+    const maxTriesForModel = mIdx === 0 && !circuitBreaker.isOpen(targetModel, startedAt) ? 2 : 1;
+
+    for (let tryNum = 0; tryNum < maxTriesForModel; tryNum++) {
+      if (request.signal?.aborted) {
+        return jsonResponse({ error: { code: 499, status: 'CANCELLED', message: 'Client cancelled.' } }, 499, cors);
+      }
+
+      const remainingBudget = totalBudgetMs - (nowImpl() - startedAt);
+      if (remainingBudget <= 500) {
+        if (!lastHttpFailure && !lastErrorKind) lastErrorKind = 'timeout';
+        break outer;
+      }
+
+      const defaultModelTimeout = MODEL_TIMEOUT_MS[targetModel] ?? 20_000;
+      const attemptTimeout = Math.min(timeoutMs ?? defaultModelTimeout, remainingBudget);
+
+      const upstreamController = new AbortController();
+      let timedOut = false;
+      const onClientAbort = () => upstreamController.abort();
+      request.signal?.addEventListener('abort', onClientAbort, { once: true });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        upstreamController.abort();
+      }, attemptTimeout);
+
+      attempts++;
+      lastModel = targetModel;
+      let sleepMs = 0;
+      let moveToNextModel = false;
+
+      try {
+        const upstream = await fetchImpl(
+          `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent`,
+          {
+            method: 'POST',
+            redirect: 'error',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': trimmedKey,
+            },
+            signal: upstreamController.signal,
+            body: upstreamBody,
+          },
+        );
+
+        const responseText = await readBoundedText(upstream, MAX_UPSTREAM_BYTES);
+        const retryAfter = upstream.headers?.get?.('retry-after') || '';
+        const contentType = upstream.headers?.get?.('content-type') || 'application/json; charset=utf-8';
+
+        if (upstream.ok) {
+          circuitBreaker.recordSuccess(targetModel);
+          const headers = {
+            'Content-Type': contentType,
+            'Cache-Control': 'no-store',
+            'X-Tailor-Resolved-Model': targetModel,
+            'X-Tailor-Attempts': String(attempts),
+            ...cors,
+          };
+          if (retryAfter) headers['Retry-After'] = retryAfter;
+          return new Response(responseText, { status: upstream.status, headers });
+        }
+
+        // Non-transient client/auth errors (400, 401, 403, 404, etc.) — never retry.
+        if (!TRANSIENT_STATUSES.has(upstream.status)) {
+          const headers = {
+            'Content-Type': contentType,
+            'Cache-Control': 'no-store',
+            'X-Tailor-Resolved-Model': targetModel,
+            'X-Tailor-Attempts': String(attempts),
+            ...cors,
+          };
+          if (retryAfter) headers['Retry-After'] = retryAfter;
+          return new Response(responseText, { status: upstream.status, headers });
+        }
+
+        const failureNow = nowImpl();
+        circuitBreaker.recordFailure(targetModel, failureNow);
+        lastHttpFailure = { status: upstream.status, text: responseText, contentType, retryAfter, model: targetModel };
+        lastErrorKind = null;
+
+        // On 429 (quota/rate limit), skip same-model retry and move straight to fallback model.
+        if (!RETRY_SAME_MODEL_STATUSES.has(upstream.status)) {
+          moveToNextModel = true;
+        } else if (tryNum + 1 < maxTriesForModel) {
+          const parsedRetryAfter = parseRetryAfterMs(retryAfter, failureNow);
+          if (parsedRetryAfter !== null && parsedRetryAfter > 4_000) {
+            moveToNextModel = true; // Retry-After too long; fail over to next model immediately.
+          } else {
+            const jitter = retryDelayMs > 0 ? Math.floor(Math.random() * 400) : 0;
+            const delay = parsedRetryAfter !== null ? Math.min(parsedRetryAfter, 4_000) : retryDelayMs + jitter;
+            const budgetAfterDelay = totalBudgetMs - (failureNow - startedAt) - delay;
+            if (budgetAfterDelay <= 1_500) moveToNextModel = true;
+            else sleepMs = delay;
+          }
+        }
+      } catch (err) {
+        if (request.signal?.aborted) {
+          return jsonResponse({ error: { code: 499, status: 'CANCELLED', message: 'Client cancelled.' } }, 499, cors);
+        }
+        if (err?.message === 'UPSTREAM_OVERSIZED') {
+          return jsonResponse({ error: { code: 502, status: 'INTERNAL', message: 'Upstream response exceeded size limit.' } }, 502, {
+            'X-Tailor-Resolved-Model': targetModel,
+            'X-Tailor-Attempts': String(attempts),
+            ...cors,
+          });
+        }
+        const failureNow = nowImpl();
+        circuitBreaker.recordFailure(targetModel, failureNow);
+        if (timedOut) {
+          lastErrorKind = 'timeout';
+          lastHttpFailure = null;
+          // On a timeout, move straight to the next model instead of burning another timeout on the same model.
+          moveToNextModel = true;
+        } else {
+          lastErrorKind = 'network';
+          lastHttpFailure = null;
+          if (tryNum + 1 < maxTriesForModel && retryDelayMs > 0) {
+            const budgetAfterDelay = totalBudgetMs - (failureNow - startedAt) - retryDelayMs;
+            if (budgetAfterDelay <= 1_500) moveToNextModel = true;
+            else sleepMs = retryDelayMs;
+          }
+        }
+      } finally {
+        clearTimeout(timer);
+        request.signal?.removeEventListener('abort', onClientAbort);
+      }
+
+      if (moveToNextModel) break;
+      if (sleepMs > 0) {
+        try {
+          await abortableSleep(sleepMs, request.signal, sleepImpl);
+        } catch {
+          return jsonResponse({ error: { code: 499, status: 'CANCELLED', message: 'Client cancelled.' } }, 499, cors);
+        }
+      }
+    }
+  }
+
+  const telemetryHeaders = {
+    'X-Tailor-Resolved-Model': lastModel,
+    'X-Tailor-Attempts': String(attempts),
+    ...cors,
+  };
+
+  if (lastHttpFailure) {
     const headers = {
-      'Content-Type': upstream.headers?.get?.('content-type') || 'application/json; charset=utf-8',
+      'Content-Type': lastHttpFailure.contentType,
       'Cache-Control': 'no-store',
-      ...cors,
+      ...telemetryHeaders,
     };
-    const retryAfter = upstream.headers?.get?.('retry-after');
-    if (retryAfter) headers['Retry-After'] = retryAfter;
-    return new Response(responseText, { status: upstream.status, headers });
-  } catch (err) {
-    if (request.signal?.aborted) {
-      return jsonResponse({ error: { code: 499, status: 'CANCELLED', message: 'Client cancelled.' } }, 499, cors);
-    }
-    if (err?.message === 'UPSTREAM_OVERSIZED') {
-      return jsonResponse({ error: { code: 502, status: 'INTERNAL', message: 'Upstream response exceeded size limit.' } }, 502, cors);
-    }
-    if (timedOut) {
-      return jsonResponse({ error: { code: 504, status: 'DEADLINE_EXCEEDED', message: 'Upstream provider request timed out.' } }, 504, cors);
-    }
-    return jsonResponse({ error: { code: 502, status: 'UNAVAILABLE', message: 'Upstream provider request failed.' } }, 502, cors);
-  } finally {
-    clearTimeout(timer);
-    request.signal?.removeEventListener('abort', onClientAbort);
+    if (lastHttpFailure.retryAfter) headers['Retry-After'] = lastHttpFailure.retryAfter;
+    return new Response(lastHttpFailure.text, { status: lastHttpFailure.status, headers });
   }
+  if (lastErrorKind === 'timeout') {
+    return jsonResponse({ error: { code: 504, status: 'DEADLINE_EXCEEDED', message: 'Upstream provider request timed out.' } }, 504, telemetryHeaders);
+  }
+  return jsonResponse({ error: { code: 502, status: 'UNAVAILABLE', message: 'Upstream provider request failed.' } }, 502, telemetryHeaders);
 }

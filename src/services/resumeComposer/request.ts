@@ -29,7 +29,7 @@ export const COMPOSITION_PREVIEW_LABEL = 'Single-draft preview · Gemini 3.5 Fla
 // Development adapter only. Public builds need a server; no client production key.
 const key = import.meta.env.DEV ? (import.meta.env.VITE_GEMINI_API_KEY ?? '').trim() : '';
 // Live failover on transient 503/504 (at most 1 fallback to fast Flash-Lite; never deprecated models).
-const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+const LIVE_FALLBACKS: CompositionModel[] = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
 
 function addUsage(prev: TokenUsage, next: TokenUsage): TokenUsage {
   const sum = (a?: number, b?: number) => (a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0));
@@ -56,7 +56,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
   const abort = () => controller.abort(); signal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, COMPOSITION_TIMEOUT_MS);
   const isSynthetic = !proxyEndpoint && /^synthetic-/i.test(key);
-  const fallback = !isSynthetic ? LIVE_FALLBACKS.find(m => m !== model) : undefined;
+  const fallback = !isSynthetic && !proxyEndpoint ? LIVE_FALLBACKS.find(m => m !== model) : undefined;
   const candidates: CompositionModel[] = fallback ? [model, fallback] : [model];
   const systemInstruction = style === 'balanced' ? singleDraftInstructions : `${singleDraftInstructions}\n\n${STYLE_GUIDANCE[style]}`;
   try {
@@ -67,9 +67,7 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
       resolvedModel = targetModel;
       const generationConfig = isSynthetic
         ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'medium' } }
-        : targetModel === COMPOSITION_MODEL
-          ? { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'medium' } }
-          : { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384, thinkingConfig: { thinkingLevel: 'low' } };
+        : { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 8192, temperature: 0.2, thinkingConfig: { thinkingLevel: 'low' } };
       attempts++;
       const response = proxyEndpoint
         ? await fetch(proxyEndpoint, {
@@ -83,6 +81,12 @@ export async function requestComposition(packet: NaturalPacket, signal: AbortSig
             method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: controller.signal,
             body: JSON.stringify({ systemInstruction: { parts: [{ text: systemInstruction }] }, contents: [{ role: 'user', parts: [{ text: wire }] }], generationConfig }),
           });
+      if (proxyEndpoint) {
+        const hdrModel = response.headers?.get?.('x-tailor-resolved-model') || '';
+        if (COMPOSITION_MODELS.some(option => option.id === hdrModel)) resolvedModel = hdrModel as CompositionModel;
+        const hdrAttempts = Number(response.headers?.get?.('x-tailor-attempts') || '');
+        if (Number.isSafeInteger(hdrAttempts) && hdrAttempts >= 1) attempts = hdrAttempts;
+      }
       if (!response.ok) {
         if (!isSynthetic && (response.status === 503 || response.status === 504) && i < candidates.length - 1 && !controller.signal.aborted) {
           await response.body?.cancel().catch(() => {});

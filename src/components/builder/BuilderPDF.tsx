@@ -1,12 +1,13 @@
 import { Fragment } from 'react';
 import { Document, Font, Image, Link, Page, Text, View } from '@react-pdf/renderer';
 
-// Prevent awkward mid-word syllable breaks (e.g. 'collab-oration') in exported PDFs.
-Font.registerHyphenationCallback(word => [word]);
 import type { CVProfile } from '@/types/schema';
 import type { DocumentTheme } from '@/store/useAppStore';
 import { visiblePhoto } from './photoModel';
-import { contactItems, fullName, headline, resumeBlocks, themeMetrics } from './resumeModel';
+import { contactItems, fullName, headline, resumeBlocks, splitLongTokenForPDF, themeMetrics } from './resumeModel';
+
+// Prevent awkward mid-word breaks while wrapping long URLs/emails cleanly.
+Font.registerHyphenationCallback(splitLongTokenForPDF);
 
 // A first, naturally wrapped render measures the real font/layout heights and the
 // page on which every entry and bullet starts. Never disable wrapping on a guessed
@@ -73,8 +74,10 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
   onMeasure?: (node: PDFLayoutNode) => void;
 }) {
   const m = themeMetrics(theme);
-  const classic = theme.layoutStyle === 'classic';
+  const centered = m.centeredHeader;
   const photo = visiblePhoto(profile);
+  const headerContacts = contactItems(profile);
+  const hasFramedContacts = m.framedContactBar && headerContacts.length > 0;
   const bodyHeight = m.pageHeightPt - m.margin * 2;
   const fits = (key: string, limit = bodyHeight - 2) => Boolean(measurements?.heights[key] && measurements.heights[key] <= limit);
   const measuring = !measurements;
@@ -82,7 +85,7 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
   const fit = Boolean(theme.fitOnePage);
   const titleStyle = {
     fontFamily: m.bold,
-    fontSize: fit ? 9 : 10,
+    fontSize: m.sectionTitleSize,
     letterSpacing: 0.7,
     textTransform: 'uppercase' as const,
     color: theme.accentColor,
@@ -93,15 +96,36 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
   };
   return <Document title={profile.profileName} author={fullName(profile)} onRender={onMeasure ? result => { const data = (result as unknown as { _INTERNAL__LAYOUT__DATA_?: PDFLayoutNode })._INTERNAL__LAYOUT__DATA_; if (data) onMeasure(data); } : undefined}>
     <Page size={theme.pageSize === 'Letter' ? 'LETTER' : 'A4'} style={{ padding: m.margin, fontFamily: m.font, fontSize: m.size, color: '#243044', lineHeight: m.leading }}>
-      <View id="measure-header" style={{ paddingBottom: m.headerPadBottom, marginBottom: Math.max(fit ? 7 : 10, m.gap - 4), borderBottomWidth: classic ? 1 : 2, borderBottomColor: theme.accentColor }}>
-        <View style={{ flexDirection: photo && !classic ? 'row' : 'column', alignItems: photo && !classic ? 'center' : 'stretch', gap: photo ? (fit ? 12 : 16) : 0 }}>
-          {photo && <Image src={photo.source} style={{ width: m.photoSize, height: m.photoSize, borderRadius: photo.shape === 'circle' ? m.photoSize / 2 : 6, alignSelf: classic ? 'center' : 'flex-start' }} />}
-          <View style={photo && !classic ? { flex: 1 } : {}}>
-            <Text style={{ fontSize: m.headerNameSize, lineHeight: 1.25, fontFamily: m.bold, color: '#172337', textAlign: classic ? 'center' : 'left' }}>{fullName(profile) || 'Your name'}</Text>
-            {Boolean(headline(profile)) && <Text style={{ fontSize: m.headerHeadlineSize, lineHeight: 1.4, color: theme.accentColor, marginTop: fit ? 3 : 5, textAlign: classic ? 'center' : 'left' }}>{headline(profile)}</Text>}
-            {contactItems(profile).length > 0 && <Text style={{ marginTop: fit ? 5 : 8, fontSize: m.headerContactSize, lineHeight: 1.45, color: '#526074', textAlign: classic ? 'center' : 'left' }}>{contactItems(profile).map((c, idx) => <Text key={idx}>{idx > 0 ? '  ·  ' : ''}{c.url ? <Link src={c.url} style={{ color: '#526074', textDecoration: 'none' }}>{c.label}</Link> : c.label}</Text>)}</Text>}
+      <View id="measure-header" style={{ paddingBottom: hasFramedContacts ? 4 : m.headerPadBottom, marginBottom: Math.max(fit ? 7 : 10, m.gap - 4), ...(hasFramedContacts ? {} : { borderBottomWidth: centered ? 1 : m.splitHeader ? 1.5 : 2, borderBottomColor: theme.accentColor }) }}>
+        {m.splitHeader ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 }}>
+            <View style={{ flexDirection: photo ? 'row' : 'column', alignItems: photo ? 'center' : 'flex-start', gap: photo ? 10 : 0, flex: 1 }}>
+              {photo && <Image src={photo.source} style={{ width: m.photoSize, height: m.photoSize, borderRadius: photo.shape === 'circle' ? m.photoSize / 2 : 5 }} />}
+              <View style={photo ? { flex: 1 } : {}}>
+                <Text style={{ fontSize: m.headerNameSize, lineHeight: 1.2, fontFamily: m.bold, color: '#172337', textAlign: 'left' }}>{fullName(profile) || 'Your name'}</Text>
+                {Boolean(headline(profile)) && <Text style={{ fontSize: m.headerHeadlineSize, lineHeight: 1.35, color: theme.accentColor, marginTop: 2, textAlign: 'left' }}>{headline(profile)}</Text>}
+              </View>
+            </View>
+            {contactItems(profile).length > 0 && (
+              <Text style={{ maxWidth: photo && headerContacts.length >= 4 ? '38%' : '46%', fontSize: m.headerContactSize, lineHeight: 1.45, color: '#526074', textAlign: 'right' }}>
+                {contactItems(profile).map((c, idx) => <Text key={idx}>{idx > 0 ? '  ·  ' : ''}{c.url ? <Link src={c.url} style={{ color: '#526074', textDecoration: 'none' }}>{c.label}</Link> : c.label}</Text>)}
+              </Text>
+            )}
           </View>
-        </View>
+        ) : (
+          <View style={{ flexDirection: photo && !centered ? 'row' : 'column', alignItems: photo && !centered ? 'center' : 'stretch', gap: photo ? (fit ? 12 : 16) : 0 }}>
+            {photo && <Image src={photo.source} style={{ width: m.photoSize, height: m.photoSize, borderRadius: photo.shape === 'circle' ? m.photoSize / 2 : 6, alignSelf: centered ? 'center' : 'flex-start' }} />}
+            <View style={photo && !centered ? { flex: 1 } : {}}>
+              <Text style={{ fontSize: m.headerNameSize, lineHeight: 1.25, fontFamily: m.bold, color: '#172337', textAlign: centered ? 'center' : 'left' }}>{fullName(profile) || 'Your name'}</Text>
+              {Boolean(headline(profile)) && <Text style={{ fontSize: m.headerHeadlineSize, lineHeight: 1.4, color: theme.accentColor, marginTop: fit ? 3 : 5, textAlign: centered ? 'center' : 'left' }}>{headline(profile)}</Text>}
+              {contactItems(profile).length > 0 && (
+                <View style={m.framedContactBar ? { marginTop: fit ? 5 : 8, paddingVertical: 4, borderTopWidth: 0.75, borderBottomWidth: 0.75, borderColor: '#CBD5E1' } : { marginTop: fit ? 5 : 8 }}>
+                  <Text style={{ fontSize: m.headerContactSize, lineHeight: 1.45, color: '#526074', textAlign: centered ? 'center' : 'left' }}>{contactItems(profile).map((c, idx) => <Text key={idx}>{idx > 0 ? '  ·  ' : ''}{c.url ? <Link src={c.url} style={{ color: '#526074', textDecoration: 'none' }}>{c.label}</Link> : c.label}</Text>)}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
       </View>
       {resumeBlocks(profile).map(block => {
         const blockKey = `measure-block-${block.id}`;
@@ -109,9 +133,9 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
         // An explicit per-entry page break is a deliberate split: never override it.
         const manualEntryBreak = block.items.some(item => item.entryId && profile.pageLayout?.entries?.[item.entryId] === 'new-page');
         const blockHeight = measurements?.heights[blockKey];
-        // A section that fits on one page is never straddled: it moves whole to
-        // the next page instead of leaving one orphaned entry behind.
-        const keepTogether = !measuring && !manualEntryBreak && blockHeight !== undefined && blockHeight <= bodyHeight - 2;
+        // Keep compact sections (<= 42% of page height) intact while letting
+        // longer multi-entry sections flow cleanly across pages with (continued) headings.
+        const keepTogether = !measuring && !manualEntryBreak && blockHeight !== undefined && blockHeight <= bodyHeight * 0.42;
         const points = continued[block.id] ?? { items: [] as number[], bullets: {} as Record<number, number[]> };
         const heading = <Text minPresenceAhead={28} style={titleStyle}>{`${block.title} (continued)`}</Text>;
         if (block.id === 'certifications' && Boolean(theme.compactCertifications)) {
@@ -192,7 +216,7 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
           const startKey = `${key}-start`;
           const mode = item.entryId ? profile.pageLayout?.entries?.[item.entryId] || 'auto' : 'auto';
           const manualBreak = !measuring && (mode === 'new-page' || (i === 0 && sectionBreak && !keepTogether));
-          const together = !measuring && fits(key, mode === 'together' || mode === 'new-page' ? bodyHeight - 2 : bodyHeight * 0.6);
+          const together = !measuring && fits(key, mode === 'together' || mode === 'new-page' ? bodyHeight - 2 : bodyHeight * 0.35);
           const bullet = (text: string, j: number) => {
             const row = <View key={j} id={`${key}-bullet-${j}`} wrap={measuring || !fits(`${key}-bullet-${j}`)} style={{ flexDirection: 'row', marginTop: m.bulletGap }}><Text style={{ width: 11, color: m.bulletColor }}>•</Text><Text orphans={2} widows={2} style={{ flex: 1 }}>{text}</Text></View>;
             // Heading and first continued bullet move as one unit, so the
@@ -208,10 +232,24 @@ export function BuilderPDF({ profile, theme, measurements, continuations, onMeas
               {points.items.includes(i) && heading}
               <View minPresenceAhead={item.text || item.bullets?.length ? 32 : 0}>
                 {Boolean(item.title || item.date) && <View minPresenceAhead={20} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 14 }}>
-                  <Text style={{ fontFamily: m.bold, flex: 1 }}>{item.title}</Text>
-                  {Boolean(item.date) && <Text style={{ fontSize: Math.min(9, Math.max(7.5, m.size - 1)), color: '#526074', maxWidth: '38%' }}>{item.date}</Text>}
+                  <Text style={{ fontFamily: m.bold, color: '#172337', flex: 1 }}>
+                    {item.title}
+                    {m.singleLineEntryHeader && Boolean(item.title && (item.subtitle || item.urlLabel)) && (
+                      <Text style={{ fontFamily: m.font, color: '#526074', fontSize: m.size - 0.5 }}>
+                        {' — '}
+                        {item.subtitle || ''}
+                        {Boolean(item.subtitle && item.urlLabel) && ' · '}
+                        {item.url ? <Link src={item.url} style={{ color: '#526074', textDecoration: 'none' }}>{item.urlLabel}</Link> : (item.urlLabel || '')}
+                      </Text>
+                    )}
+                  </Text>
+                  {Boolean(item.date) && <Text style={{ fontSize: Math.min(9, Math.max(7.5, m.size - 1)), color: '#526074', maxWidth: '38%', textAlign: 'right' }}>{item.date}</Text>}
                 </View>}
-                {Boolean(item.subtitle) && <Text style={{ color: '#526074', fontSize: m.size - 1, marginTop: 2, ...(m.subtitleItalic ? { fontFamily: m.italic } : {}) }}>{item.subtitle}</Text>}
+                {Boolean(item.subtitle || item.urlLabel) && !(m.singleLineEntryHeader && item.title) && <Text style={{ color: '#526074', fontSize: m.size - 1, marginTop: 2, ...(m.subtitleItalic ? { fontFamily: m.italic } : {}) }}>
+                  {item.subtitle || ''}
+                  {Boolean(item.subtitle && item.urlLabel) && ' · '}
+                  {item.url ? <Link src={item.url} style={{ color: '#526074', textDecoration: 'none' }}>{item.urlLabel}</Link> : (item.urlLabel || '')}
+                </Text>}
               </View>
               {Boolean(item.text) && <Text orphans={3} widows={2} style={{ marginTop: item.title ? 5 : 0 }}>{item.text}</Text>}
               {Boolean(item.bullets?.length) && bullet(item.bullets![0], 0)}

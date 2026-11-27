@@ -1,3 +1,4 @@
+import { balanceTailoredTheme } from './autoLayout';
 import { v4 as uuid } from 'uuid';
 import { applyDraftAdditions } from '@/services/composer/applyDraft';
 import { tailoringMetadataSchema } from '@/types/schema';
@@ -76,7 +77,7 @@ export function confirmTailoredReview(reviewId:string,selection:ReviewSelection)
   next.profileId=uuid();next.baseProfileId=source.profileId;
   next.profileName=`${source.profileName} — ${review.result.patch.jobTitle||'Reviewed'}`.slice(0,100);
   next.targetJob=review.job;delete next.matchScore;next.version=source.version+1;next.lastConfirmed='';
-  next.documentTheme={...(source.documentTheme??DEFAULT_DOCUMENT_THEME)};
+  next.documentTheme=balanceTailoredTheme(source,next,{...(source.documentTheme??DEFAULT_DOCUMENT_THEME)});
   next.tailoring={sourceProfileId:source.profileId,requestKey:review.requestKey,jobTitle:review.result.patch.jobTitle,company:review.result.patch.company,
     createdAt:new Date().toISOString(),model:TAILOR_MODEL,contentPlan:review.result.contentPlan,warnings:review.result.warnings,
     missingRequirements:review.result.requirements.filter(r=>r.status==='not_found').map(r=>r.requirement),requirements:review.result.requirements.slice(0,6).map(r=>({...r,evidence:r.evidence.slice(0,4)})),jobAssessment:review.jobAssessment,

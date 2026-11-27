@@ -219,13 +219,17 @@ function findGutter(spans: readonly TextSpan[], page: RawPage): ColumnGutter | n
 	if (spans.length < 12 || page.width <= 0 || page.height <= 0) return null;
 
 	const binCount = Math.max(1, Math.ceil(page.width / HISTOGRAM_BIN_PT));
-	const occupied = new Array<boolean>(binCount).fill(false);
+	const binRowCounts = new Array<number>(binCount).fill(0);
+	const uniqueRowSet = new Set<number>();
 
 	for (const span of spans) {
+		uniqueRowSet.add(Math.round(span.y / ROW_BIN_PT));
 		const from = Math.max(0, Math.floor(span.x / HISTOGRAM_BIN_PT));
 		const to = Math.min(binCount - 1, Math.floor((span.x + span.width) / HISTOGRAM_BIN_PT));
-		for (let bin = from; bin <= to; bin += 1) occupied[bin] = true;
+		for (let bin = from; bin <= to; bin += 1) binRowCounts[bin] += 1;
 	}
+	// Tolerate a small number of full-width rows (e.g. a footer or summary banner) crossing a real column gutter
+	const maxValleyCrossings = uniqueRowSet.size >= 12 ? Math.max(1, Math.floor(uniqueRowSet.size * 0.10)) : 0;
 
 	const textLeft = Math.min(...spans.map((span) => span.x));
 	const textRight = Math.max(...spans.map((span) => span.x + span.width));
@@ -239,7 +243,7 @@ function findGutter(spans: readonly TextSpan[], page: RawPage): ColumnGutter | n
 	let runStart: number | null = null;
 
 	for (let bin = Math.max(0, searchFrom); bin <= Math.min(binCount - 1, searchTo); bin += 1) {
-		if (!occupied[bin]) {
+		if (binRowCounts[bin] <= maxValleyCrossings) {
 			runStart ??= bin;
 			continue;
 		}

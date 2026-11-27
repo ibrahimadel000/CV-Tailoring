@@ -4,6 +4,15 @@ import { professionalContent, CompositionError } from './core';
 import { compileNaturalComposition, naturalDocumentSchema, prepareNaturalComposition, type NaturalPacket } from './naturalDocument';
 import { summaryBoundaryNotice } from './summaryBoundary';
 import { summarizeChanges, summarizeProposal } from './changeSummary';
+import {
+  deriveTailoredHeadline,
+  ensureJobMatchedSkills,
+  enrichSummaryWithToolkit,
+  sortCertificationsByRelevance,
+  sortProjectsByRelevance,
+  deduplicateRoleOverviews,
+  polishTailoredCopyPunctuation,
+} from './postTailorPolish';
 
 // Adapter owns the network boundary. This core has no API key, fetch or automatic retry.
 export type ComposeProvider = (packet: NaturalPacket, signal: AbortSignal) => Promise<unknown>;
@@ -120,7 +129,35 @@ export function createCompositionRunner(repository: Repository, provider: Compos
             });
           }
         }
+        const originalHeadline = (profile.resumeHeader.data.desiredJobPosition?.trim() || profile.headline.data || '').trim();
+        const originalCertOrder = profile.certifications.data.map(c => c.id);
+        const originalProjectOrder = profile.projects.data.map(e => e.id);
+
+        // Apply deterministic, reversible Phase 11A polish (truthful headline specialization,
+        // guaranteed JD-matched skill retention, toolkit summary enrichment, relevance-first ordering).
+        ensureJobMatchedSkills(profile, copy, packet.job);
+        const tailoredHeadline = deriveTailoredHeadline(profile, copy, packet.job);
+        if (tailoredHeadline) {
+          copy.headline.data = tailoredHeadline;
+          copy.resumeHeader.data.desiredJobPosition = tailoredHeadline;
+        }
+        enrichSummaryWithToolkit(profile, copy, packet.job);
+        polishTailoredCopyPunctuation(profile, copy);
+        deduplicateRoleOverviews(profile, copy);
+        if (!profile.certifications.isLocked && copy.certifications.data.length >= 2) {
+          const certSort = sortCertificationsByRelevance(copy.certifications.data, packet.job);
+          if (certSort.reordered) copy.certifications.data = certSort.sorted;
+        }
+        if (!profile.projects.isLocked && copy.projects.data.length >= 2) {
+          const projSort = sortProjectsByRelevance(copy.projects.data, packet.job);
+          if (projSort.reordered) copy.projects.data = projSort.sorted;
+        }
+        // Recompute compositionChanges after deterministic polish so Diff & Impact reflect final copy.
+        copy.compositionChanges = summarizeChanges(profile, copy);
+        copy.compositionChanges.proposal = proposalComparison;
+
         copy.compositionSnapshot = {
+          headline: originalHeadline,
           summary: profile.summary.data,
           experience: profile.experience.data.map(e => ({
             id: e.id,
@@ -132,6 +169,8 @@ export function createCompositionRunner(repository: Repository, provider: Compos
             bullets: e.bullets.map(b => ({ id: b.id, text: b.text })),
           })),
           skills: profile.skills.data.map(s => ({ ...s })),
+          certificationOrder: originalCertOrder,
+          projectOrder: originalProjectOrder,
           bulletOriginMap,
         };
         copy.profileId = uuid(); copy.baseProfileId = profile.profileId;

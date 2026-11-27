@@ -16,13 +16,30 @@ const normalized = (text: string) => text.normalize('NFKC').toLowerCase().replac
 const tokenCharacter = /[\p{L}\p{N}\p{M}_+#]/u;
 
 /** Literal names only, with Unicode token boundaries; no aliases or skill taxonomy. */
-export function containsSkillName(text: string, name: string): boolean {
-  const value = normalized(text), needle = normalized(name);
-  if (!needle) return false;
+function hasBoundedMatch(value: string, needle: string): boolean {
   for (let at = value.indexOf(needle); at !== -1; at = value.indexOf(needle, at + 1)) {
     const before = Array.from(value.slice(0, at)).pop() || '';
     const after = Array.from(value.slice(at + needle.length))[0] || '';
     if (!tokenCharacter.test(before) && !tokenCharacter.test(after)) return true;
+  }
+  return false;
+}
+
+export function containsSkillName(text: string, name: string): boolean {
+  const value = normalized(text), needle = normalized(name);
+  if (!needle) return false;
+  if (hasBoundedMatch(value, needle)) return true;
+  const allowPluralFold = needle.includes(' ') || /\b[A-Z]{2,}s?\b/.test(name.trim());
+  if (allowPluralFold && needle.length >= 3) {
+    if (needle.endsWith('ies') && hasBoundedMatch(value, `${needle.slice(0, -3)}y`)) return true;
+    if (needle.endsWith('y') && hasBoundedMatch(value, `${needle.slice(0, -1)}ies`)) return true;
+    if (needle.endsWith('s') && !needle.endsWith('ss') && hasBoundedMatch(value, needle.slice(0, -1))) return true;
+    if (!needle.endsWith('s') && hasBoundedMatch(value, `${needle}s`)) return true;
+  }
+  if (needle.includes(' ') || needle.includes('-')) {
+    const spacedValue = value.replace(/[\-\u2010-\u2015]+/gu, ' ').replace(/\s+/gu, ' ');
+    const spacedNeedle = needle.replace(/[\-\u2010-\u2015]+/gu, ' ').replace(/\s+/gu, ' ');
+    if (hasBoundedMatch(spacedValue, spacedNeedle)) return true;
   }
   return false;
 }

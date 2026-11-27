@@ -3,6 +3,16 @@ import { get as idbGet, setMany as idbSetMany } from 'idb-keyval';
 import { v4 as uuidv4 } from 'uuid';
 import { createSampleProfile } from '@/mock/profile';
 import { cvProfileSchema, documentThemeSchema } from '@/types/schema';
+import {
+  clearProfileHistory,
+  createHistoryState,
+  getHistoryFlags,
+  inferCoalesceKey,
+  recordProfileEdit,
+  redoProfileEdit,
+  undoProfileEdit,
+  type HistoryState,
+} from './history';
 import type { DocumentTheme } from '@/types/schema';
 export type { DocumentTheme } from '@/types/schema';
 export type LockableTailorSection = 'summary' | 'experience' | 'projects' | 'skills';
@@ -45,6 +55,14 @@ interface AppStore {
   extensionToken: string | null;
   isLoading: boolean;
   error: string | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  lastDeletedProfile: { profile: CVProfile; index: number } | null;
+
+  undo: () => boolean;
+  redo: () => boolean;
+  restoreDeletedProfile: (expectedProfileId?: string) => boolean;
+  clearDeletedProfile: () => void;
 
   setJobDescription: (jd: string) => void;
 
@@ -97,7 +115,7 @@ interface AppStore {
   setError: (error: string | null) => void;
 
   // Persistence
-  loadFromStorage: () => Promise<void>;
+  loadFromStorage: () => Promise<boolean>;
   saveToStorage: () => Promise<void>;
 }
 
@@ -174,9 +192,64 @@ function createEmptyBullet(): BulletPoint {
 const STORAGE_KEY_PROFILES = 'cv-tailor-profiles-v2';
 const STORAGE_KEY_ACTIVE_ID = 'cv-tailor-active-id-v2';
 
+// ── History State (in-memory only, never persisted to IndexedDB) ──
+let historyState: HistoryState = createHistoryState();
+let isHistoryReplay = false;
+let isHydrating = false;
+
 // ── Store ──
 
-export const useAppStore = create<AppStore>((set, get) => {
+export const useAppStore = create<AppStore>((rawSet, get, api) => {
+  const applyHistoryToPatch = (prev: AppStore, partial: Partial<AppStore> | AppStore): Partial<AppStore> | AppStore => {
+    if (isHistoryReplay || isHydrating || !partial || typeof partial !== 'object') return partial;
+    const nextProfiles = 'profiles' in partial && partial.profiles !== undefined ? partial.profiles : prev.profiles;
+    const nextActiveId = 'activeProfileId' in partial && partial.activeProfileId !== undefined ? partial.activeProfileId : prev.activeProfileId;
+    const nextDeleted = 'lastDeletedProfile' in partial ? partial.lastDeletedProfile : prev.lastDeletedProfile;
+
+    let historyChanged = false;
+    if (nextProfiles !== prev.profiles && nextActiveId && nextActiveId === prev.activeProfileId) {
+      const prevProfile = prev.profiles.find(p => p.profileId === nextActiveId);
+      const nextProfile = nextProfiles.find(p => p.profileId === nextActiveId);
+      if (prevProfile && nextProfile && prevProfile !== nextProfile) {
+        historyState = recordProfileEdit(historyState, prevProfile, nextProfile, {
+          now: Date.now(),
+          coalesceKey: inferCoalesceKey(prevProfile, nextProfile),
+        });
+        historyChanged = true;
+      }
+    }
+
+    if (prev.lastDeletedProfile && prev.lastDeletedProfile !== nextDeleted) {
+      const oldId = prev.lastDeletedProfile.profile.profileId;
+      if (!nextProfiles.some(p => p.profileId === oldId)) {
+        historyState = clearProfileHistory(historyState, oldId);
+      }
+    }
+
+    if (historyChanged || nextActiveId !== prev.activeProfileId) {
+      const flags = getHistoryFlags(historyState, nextActiveId);
+      return { ...partial, canUndo: flags.canUndo, canRedo: flags.canRedo };
+    }
+    return partial;
+  };
+
+  const wrappedSet: typeof rawSet = (partial, replace) => {
+    if (typeof partial === 'function') {
+      return rawSet((state) => {
+        const result = partial(state);
+        if (result === state) return state;
+        return applyHistoryToPatch(state, result) as AppStore;
+      }, replace as never);
+    }
+    const prev = get();
+    const nextPartial = applyHistoryToPatch(prev, partial);
+    return rawSet(nextPartial, replace as never);
+  };
+
+  // Intercept external useAppStore.setState(...) calls so direct mutations (SectionEditor, drag-and-drop, etc.)
+  // also record undo history atomically in a single notification pass.
+  api.setState = wrappedSet;
+  const set = wrappedSet;
   
   const updateActiveProfileData = (updater: (profile: CVProfile) => Partial<CVProfile>) => {
     const { profiles, activeProfileId } = get();
@@ -205,6 +278,101 @@ export const useAppStore = create<AppStore>((set, get) => {
     extensionToken: null,
     isLoading: false,
     error: null,
+    canUndo: false,
+    canRedo: false,
+    lastDeletedProfile: null,
+
+    undo: () => {
+      const state = get();
+      const activeId = state.activeProfileId;
+      if (!activeId) return false;
+      const current = state.profiles.find(p => p.profileId === activeId);
+      if (!current) return false;
+      const { history, restored } = undoProfileEdit(historyState, current);
+      if (!restored) return false;
+      historyState = history;
+      const flags = getHistoryFlags(historyState, activeId);
+      isHistoryReplay = true;
+      try {
+        set({
+          profiles: state.profiles.map(p => (p.profileId === activeId ? restored : p)),
+          documentTheme: { ...(restored.documentTheme ?? state.documentTheme) },
+          canUndo: flags.canUndo,
+          canRedo: flags.canRedo,
+        });
+      } finally {
+        isHistoryReplay = false;
+      }
+      return true;
+    },
+
+    redo: () => {
+      const state = get();
+      const activeId = state.activeProfileId;
+      if (!activeId) return false;
+      const current = state.profiles.find(p => p.profileId === activeId);
+      if (!current) return false;
+      const { history, restored } = redoProfileEdit(historyState, current);
+      if (!restored) return false;
+      historyState = history;
+      const flags = getHistoryFlags(historyState, activeId);
+      isHistoryReplay = true;
+      try {
+        set({
+          profiles: state.profiles.map(p => (p.profileId === activeId ? restored : p)),
+          documentTheme: { ...(restored.documentTheme ?? state.documentTheme) },
+          canUndo: flags.canUndo,
+          canRedo: flags.canRedo,
+        });
+      } finally {
+        isHistoryReplay = false;
+      }
+      return true;
+    },
+
+    restoreDeletedProfile: (expectedProfileId) => {
+      const state = get();
+      const deleted = state.lastDeletedProfile;
+      if (!deleted) return false;
+      if (expectedProfileId && deleted.profile.profileId !== expectedProfileId) return false;
+      if (state.profiles.some(p => p.profileId === deleted.profile.profileId)) {
+        set({ lastDeletedProfile: null });
+        return false;
+      }
+      const nextProfiles = [...state.profiles];
+      const insertAt = Math.max(0, Math.min(deleted.index, nextProfiles.length));
+      nextProfiles.splice(insertAt, 0, deleted.profile);
+      const flags = getHistoryFlags(historyState, deleted.profile.profileId);
+      isHistoryReplay = true;
+      try {
+        set({
+          profiles: nextProfiles,
+          activeProfileId: deleted.profile.profileId,
+          documentTheme: { ...(deleted.profile.documentTheme ?? DEFAULT_DOCUMENT_THEME) },
+          lastDeletedProfile: null,
+          canUndo: flags.canUndo,
+          canRedo: flags.canRedo,
+        });
+      } finally {
+        isHistoryReplay = false;
+      }
+      return true;
+    },
+
+    clearDeletedProfile: () => {
+      const state = get();
+      if (!state.lastDeletedProfile) return;
+      const oldId = state.lastDeletedProfile.profile.profileId;
+      if (!state.profiles.some(p => p.profileId === oldId)) {
+        historyState = clearProfileHistory(historyState, oldId);
+      }
+      isHistoryReplay = true;
+      try {
+        set({ lastDeletedProfile: null });
+      } finally {
+        isHistoryReplay = false;
+      }
+    },
 
     // Profile Management
     createProfile: (name = 'My Main CV') => {
@@ -285,9 +453,14 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     setDocumentTheme: (theme) => {
       set(state => {
-        if (!state.profiles.some(p => p.profileId === state.activeProfileId)) return state;
+        const active = state.profiles.find(p => p.profileId === state.activeProfileId);
+        if (!active) return state;
         const parsed = documentThemeSchema.safeParse({ ...state.documentTheme, ...theme });
         if (!parsed.success) return state;
+        const keys = Object.keys(parsed.data) as (keyof DocumentTheme)[];
+        const themeChanged = keys.some(k => parsed.data[k] !== state.documentTheme[k]);
+        const activeThemeChanged = !active.documentTheme || keys.some(k => parsed.data[k] !== active.documentTheme?.[k]);
+        if (!themeChanged && !activeThemeChanged) return state;
         return {
           documentTheme: parsed.data,
           profiles: state.profiles.map(p => ({ ...p, documentTheme: p.profileId === state.activeProfileId ? { ...parsed.data } : p.documentTheme ?? { ...state.documentTheme } })),
@@ -297,13 +470,20 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     deleteProfile: (id) => {
       set((state) => {
+        const index = state.profiles.findIndex(p => p.profileId === id);
+        if (index === -1) return state;
+        const removed = state.profiles[index];
         const remaining = state.profiles.filter(p => p.profileId !== id);
         let activeId = state.activeProfileId;
         if (activeId === id) {
           activeId = remaining.length > 0 ? remaining[remaining.length - 1].profileId : null;
         }
-        return { profiles: remaining, activeProfileId: activeId,
-          documentTheme: { ...(remaining.find(p => p.profileId === activeId)?.documentTheme ?? DEFAULT_DOCUMENT_THEME) } };
+        return {
+          profiles: remaining,
+          activeProfileId: activeId,
+          documentTheme: { ...(remaining.find(p => p.profileId === activeId)?.documentTheme ?? DEFAULT_DOCUMENT_THEME) },
+          lastDeletedProfile: { profile: removed, index },
+        };
       });
     },
 
@@ -620,11 +800,41 @@ export const useAppStore = create<AppStore>((set, get) => {
         if (invalid.length > 0) {
           await idbSetMany([['cv-tailor-profiles-quarantine-v2', invalid]]).catch(() => {});
         }
+        const migratedTheme = valid.some(p => !p.documentTheme);
         const profiles: CVProfile[] = valid.map(p => ({ ...p, documentTheme: { ...(p.documentTheme ?? fallback) } }));
         const activeProfileId = profiles.some(p => p.profileId === storedActiveId) ? storedActiveId : (profiles[0]?.profileId || null);
-        set({ profiles, activeProfileId, documentTheme: { ...(profiles.find(p => p.profileId === activeProfileId)?.documentTheme ?? fallback) } });
+        historyState = createHistoryState();
+        isHydrating = true;
+        try {
+          set({
+            profiles,
+            activeProfileId,
+            documentTheme: { ...(profiles.find(p => p.profileId === activeProfileId)?.documentTheme ?? fallback) },
+            canUndo: false,
+            canRedo: false,
+            lastDeletedProfile: null,
+          });
+        } finally {
+          isHydrating = false;
+        }
+        return invalid.length > 0 || migratedTheme;
       } else {
-        get().createProfile('My first resume');
+        const first = createEmptyProfile('My first resume');
+        historyState = createHistoryState();
+        isHydrating = true;
+        try {
+          set({
+            profiles: [first],
+            activeProfileId: first.profileId,
+            documentTheme: { ...first.documentTheme! },
+            canUndo: false,
+            canRedo: false,
+            lastDeletedProfile: null,
+          });
+        } finally {
+          isHydrating = false;
+        }
+        return true;
       }
     },
 
@@ -639,3 +849,4 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
   };
 });
+

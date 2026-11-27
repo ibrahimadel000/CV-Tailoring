@@ -25,7 +25,7 @@ const list = (terms: readonly string[]) => terms.slice(0, 3).map(t => `“${t}�
 
 // Conceptual/process skills that represent general work methods rather than concrete software tools;
 // allow natural phrasing of these in summaries/bullets without triggering literal skill-collision reverts.
-const CONCEPTUAL_SKILL = /^(?:business operations|workflow automation|project management|strategic planning|technical documentation|system analysis|cross[-\s]?functional collaboration|process improvement|agile\s*\/\s*scrum|stakeholder management|problem solving)$/i;
+export const CONCEPTUAL_SKILL = /^(?:workflow\s+automation|process\s+automation|process\s+improvement|business\s+operations|strategic\s+planning|project\s+management|technical\s+documentation|system\s+analysis|system\s+architecture|system\s+design|software\s+design|software\s+engineering|software\s+development|web\s+development|backend\s+development|frontend\s+development|full[-\s]?stack\s+development|api\s+design|api\s+development|database\s+management|database\s+design|data\s+modeling|performance\s+optimization|unit\s+testing|automated\s+testing|debugging|troubleshooting|version\s+control|documentation|clean\s+code|problem\s+solving(?:\s*[&/]\s*algorithm\s+design)?|cross[-\s]?functional\s+collaboration|collaboration|teamwork|agile(?:\s*\/\s*scrum)?|scrum|stakeholder\s+management|code\s+review|onboarding|communication|time\s+management|financial\s+modeling|financial\s+reporting|financial\s+analysis|budgeting|forecasting|risk\s+management|variance\s+analysis|account\s+reconciliation|content\s+strategy|campaign\s+management|market\s+research|social\s+media\s+marketing|digital\s+marketing|brand\s+strategy|brand\s+management|lead\s+generation|demand\s+generation|marketing\s+strategy|email\s+marketing|content\s+marketing|patient\s+care|care\s+coordination|clinical\s+documentation|patient\s+education|case\s+management|client\s+relations|client\s+management|account\s+management|contract\s+negotiation|sales\s+strategy|pipeline\s+management|customer\s+retention|customer\s+success|business\s+development|supply\s+chain\s+management|inventory\s+management|quality\s+control|vendor\s+management|procurement|logistics\s+management|operations\s+management|production\s+planning|continuous\s+improvement|regulatory\s+compliance|curriculum\s+design|curriculum\s+development|instructional\s+design|lesson\s+planning|classroom\s+management|talent\s+acquisition|employee\s+relations|performance\s+management|workforce\s+planning|conflict\s+resolution)$/i;
 
 export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax: number, refsMax: number) {
   const notes: GuardNote[] = [];
@@ -35,7 +35,7 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
     .map(f => f.text.split(' — ')[0])
     .filter(name => !CONCEPTUAL_SKILL.test(name.trim()));
   const index: Term[] = buildTermIndex(skillNames);
-  const narrative = source.evidence.filter(f => f.kind === 'achievement' || f.kind === 'role');
+  const narrative = source.evidence.filter(f => f.kind === 'achievement' || f.kind === 'role' || f.kind === 'project');
 
   let summarySegments: Paragraph[] = [];
   const summarySegmentIndices: number[] = [];
@@ -52,7 +52,7 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
         continue;
       }
       const cited = ids.map(id => facts.get(id)!);
-      if (copiedPassage(text, narrative)) {
+      if (copiedPassage(text, narrative) || copiedPassage(text, summarySegments.map((seg, k) => ({ id: `summary_${k}`, text: seg.text })))) {
         notes.push({ path: `summarySegments.${i}`, kind: 'removed', message: 'Removed a summary sentence that repeats one experience/project passage instead of introducing your background.' });
         continue;
       }
@@ -221,6 +221,28 @@ export function guardNaturalDocument(source: Source, doc: GuardInput, summaryMax
       if (seen.has(s.id)) { notes.push({ path: 'skillSelections', kind: 'ignored', message: 'Ignored a repeated selection of the same skill.' }); return false; }
       seen.add(s.id); return true;
     });
+  }
+  // Remove any summary segment that echoes a finalized AI-rewritten bullet/overview verbatim.
+  if (!source.locks.summary && summarySegments.length && entries.length) {
+    const rewrittenNarrative = entries.flatMap((e, ei) => [
+      ...(e.overview.text ? [{ id: `rw_${ei}_o`, text: e.overview.text }] : []),
+      ...e.bullets.map((b, bi) => ({ id: `rw_${ei}_b${bi}`, text: b.text })),
+    ]);
+    if (rewrittenNarrative.length) {
+      const keptSegs: Paragraph[] = [];
+      const keptIdx: number[] = [];
+      for (let k = 0; k < summarySegments.length; k++) {
+        if (copiedPassage(summarySegments[k].text, rewrittenNarrative)) {
+          notes.push({ path: `summarySegments.${summarySegmentIndices[k]}`, kind: 'removed', message: 'Removed a summary sentence that repeats a tailored experience/project bullet.' });
+        } else {
+          keptSegs.push(summarySegments[k]);
+          keptIdx.push(summarySegmentIndices[k]);
+        }
+      }
+      summarySegments = keptSegs;
+      summarySegmentIndices.length = 0;
+      summarySegmentIndices.push(...keptIdx);
+    }
   }
   return { doc: { summarySegments, entries, skillSelections, summaryCapabilityIds: [] as string[] }, notes, summarySegmentIndices };
 }

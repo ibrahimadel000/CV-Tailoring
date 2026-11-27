@@ -25,9 +25,22 @@ function regionText(lines: readonly TextLine[], width: number): string {
   return result.join('\n').trim();
 }
 function convincing(g: ColumnGutter | null): g is ColumnGutter {
-  return !!g && g.coverage >= 0.85 && g.splitRatio >= 0.25;
+  return !!g && g.coverage >= 0.78 && g.splitRatio >= 0.12;
 }
-const substantive = (spans: readonly TextSpan[]) => new Set(spans.filter(s => (s.text.match(/\p{L}/gu) || []).length >= 12 && !/^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Present|Expected)\b/i.test(s.text)).map(s => Math.round(s.y / 6))).size >= 3;
+const substantive = (spans: readonly TextSpan[]) => {
+  const byRow = new Map<number, string>();
+  for (const s of spans) {
+    const row = Math.round(s.y / 6);
+    byRow.set(row, `${byRow.get(row) ?? ''} ${s.text}`.trim());
+  }
+  let validRows = 0;
+  for (const line of byRow.values()) {
+    if ((line.match(/\p{L}/gu) || []).length >= 8 && !/^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Present|Expected)\b/i.test(line)) {
+      validRows += 1;
+    }
+  }
+  return validRows >= 3;
+};
 
 /** Persistent gutters, not a large gap on a single date row, establish columns.
  * Geometric clustering/gutter detection is the MIT Reactive Resume implementation.

@@ -5,13 +5,13 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { CVProfile } from '@/types/schema';
 import { useAppStore, type DocumentTheme } from '@/store/useAppStore';
 import { autoOptimizeTheme } from '@/services/autoLayout';
-import { fullName, hasUnsupportedPDFText, resumeBlocks, type SectionId } from './resumeModel';
+import { fullName, hasUnsupportedPDFText, resumeBlocks, themeMetrics, type SectionId } from './resumeModel';
 import { ResumePaper } from './ResumePaper';
 import { useResumePDF } from './pdfPipeline';
 GlobalWorkerOptions.workerSrc = workerUrl;
 const WIDTH = 794;
 type Anchor = { id: SectionId; title: string; page: number; top: number; left: number };
-type Loaded = { pdf: PDFDocumentProxy; key: string; height: number; anchors: Anchor[] };
+type Loaded = { pdf: PDFDocumentProxy; key: string; height: number; anchors: Anchor[]; lastPageFillRatio: number; lastPageLines: number };
 
 function PDFPage({ document, number, scale, anchors, root, onEdit }: { document: Loaded; number: number; scale: number; anchors: Anchor[]; root: HTMLDivElement | null; onEdit: (id: SectionId) => void }) {
   const node = useRef<HTMLDivElement>(null);
@@ -65,7 +65,7 @@ function Unpaginated({ profile, theme, scale, onEdit }: { profile: CVProfile; th
   useLayoutEffect(() => { if (!ref.current) return; const observer = new ResizeObserver(() => { if (ref.current?.scrollHeight) setHeight(ref.current.scrollHeight); }); observer.observe(ref.current); return () => observer.disconnect(); }, []);
   return <div className="scaled-paper unpaginated-paper" style={{ width: WIDTH * scale, height: height * scale }}><div ref={ref} style={{ width: WIDTH, transform: `scale(${scale})`, transformOrigin: 'top left' }}><ResumePaper profile={profile} theme={theme} onEdit={onEdit} /></div></div>;
 }
-export default function PaginatedPreview({ profile, theme, scale, section, visible, onWidth, onEdit }: { profile: CVProfile; theme: DocumentTheme; scale: number; section: SectionId; visible: boolean; onWidth: (width: number) => void; onEdit: (id: SectionId) => void }) {
+export default function PaginatedPreview({ profile, theme, scale, section, visible, onWidth, onEdit, onWheelZoom }: { profile: CVProfile; theme: DocumentTheme; scale: number; section: SectionId; visible: boolean; onWidth: (width: number) => void; onEdit: (id: SectionId) => void; onWheelZoom?: (delta: number) => void }) {
   const unsupported = hasUnsupportedPDFText(profile);
   const result = useResumePDF(profile, theme, !unsupported);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -80,6 +80,18 @@ export default function PaginatedPreview({ profile, theme, scale, section, visib
     const measure = () => { if (element.clientWidth > 0) onWidth(element.clientWidth); };
     measure(); const observer = new ResizeObserver(measure); observer.observe(element); return () => observer.disconnect();
   }, [onWidth]);
+  useEffect(() => {
+    const element = stage.current;
+    if (!element || !onWheelZoom) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.deltaY === 0) return;
+      e.preventDefault();
+      const step = Math.abs(e.deltaY) < 20 ? -e.deltaY * 0.01 : e.deltaY < 0 ? 0.1 : -0.1;
+      onWheelZoom(step);
+    };
+    element.addEventListener('wheel', handleWheel, { passive: false });
+    return () => element.removeEventListener('wheel', handleWheel);
+  }, [onWheelZoom]);
   useEffect(() => {
     if (!result.blob || unsupported) return;
     let live = true; let task: ReturnType<typeof getDocument> | undefined; let published = false;
@@ -117,8 +129,26 @@ export default function PaginatedPreview({ profile, theme, scale, section, visib
           }
         }
       }
+      const lastPage = pdf.numPages === 1 ? first : await pdf.getPage(pdf.numPages);
+      const lastViewport = lastPage.getViewport({ scale: 1 });
+      const lastContent = await lastPage.getTextContent();
+      const lastItems = lastContent.items.filter(item => 'str' in item && item.str.trim());
+      let minY = lastViewport.height;
+      const distinctYs = new Set<number>();
+      for (const item of lastItems) {
+        if (!('transform' in item)) continue;
+        const y = item.transform[5];
+        if (y < minY) minY = y;
+        distinctYs.add(Math.round(y / 6));
+      }
+      const marginPt = themeMetrics(theme).margin;
+      const printableH = Math.max(1, lastViewport.height - marginPt * 2);
+      const lastPageFillRatio = lastItems.length
+        ? Math.max(0, Math.min(1, (lastViewport.height - minY - marginPt) / printableH))
+        : 0;
+      const lastPageLines = distinctYs.size;
       if (!live) { await task.destroy(); return; }
-      published = true; setLoaded({ pdf, key: result.key, height: viewport.height * ratio, anchors });
+      published = true; setLoaded({ pdf, key: result.key, height: viewport.height * ratio, anchors, lastPageFillRatio, lastPageLines });
     })().catch(() => { if (live) setParseError(true); });
     return () => { live = false; if (!published) void task?.destroy(); };
   }, [result.blob, result.key, unsupported, parseRetry]);
@@ -138,23 +168,88 @@ export default function PaginatedPreview({ profile, theme, scale, section, visib
     return () => cancelAnimationFrame(frame);
   }, [section, visible, loaded, scale]);
   const setDocumentTheme = useAppStore(st => st.setDocumentTheme);
+  const [preFitState, setPreFitState] = useState<{ profileId: string; theme: DocumentTheme } | null>(null);
+  const [fitFeedback, setFitFeedback] = useState<string | null>(null);
+  useEffect(() => { setFitFeedback(null); }, [profile.profileId, result.key]);
+  useEffect(() => { setPreFitState(null); }, [profile.profileId]);
   const failed = result.error || parseError;
-  const certCount = profile.certifications.data.filter(c => c.name.trim()).length;
-  const canAutoFit = Boolean(!unsupported && !failed && current && loaded && loaded.pdf.numPages === 2 && (!theme.fitOnePage || (certCount >= 4 && !theme.compactCertifications)));
+  const certCount = profile.certifications.hidden ? 0 : profile.certifications.data.filter(c => !c.hidden && c.name.trim()).length;
+  const isSpillover = Boolean(!unsupported && !failed && current && loaded && loaded.pdf.numPages >= 2 && loaded.lastPageFillRatio <= 0.38);
+  const targetCompactPages = loaded ? Math.max(1, loaded.pdf.numPages - 1) : 1;
+  const canAutoCompact = Boolean(
+    isSpillover &&
+    (targetCompactPages === 1
+      ? (!theme.fitOnePage || theme.lineSpacing !== 'compact' || theme.fontSize !== 'small' || (certCount >= 4 && !theme.compactCertifications))
+      : ((!theme.fitOnePage && (theme.pageMargins ?? 'normal') !== 'narrow') || theme.lineSpacing !== 'compact' || theme.fontSize !== 'small' || (certCount >= 4 && !theme.compactCertifications)))
+  );
+  const canAutoExpand = Boolean(
+    !unsupported && !failed && current && loaded &&
+    loaded.pdf.numPages === 1 &&
+    loaded.lastPageFillRatio > 0.08 &&
+    loaded.lastPageFillRatio <= 0.58 &&
+    (theme.fitOnePage || (theme.compactCertifications && certCount < 6) || (theme.pageMargins ?? 'normal') !== 'wide' || theme.lineSpacing !== 'relaxed' || theme.fontSize !== 'large')
+  );
+  const activePreFit = preFitState?.profileId === profile.profileId ? preFitState.theme : null;
+  const canResetFit = Boolean(!unsupported && !failed && current && (theme.fitOnePage || activePreFit));
   const applyAutoFit = () => {
-    const optimized = autoOptimizeTheme(profile, theme);
+    if (!loaded) return;
+    const optimized = autoOptimizeTheme(profile, theme, {
+      targetPages: targetCompactPages,
+      allowFitOnePage: targetCompactPages === 1,
+      allowExpand: false,
+      rollbackIfStillOver: true,
+      actualPages: loaded.pdf.numPages,
+      lastPageFillRatio: loaded.lastPageFillRatio,
+    });
     if (optimized.changed) {
+      setPreFitState({ profileId: profile.profileId, theme: { ...theme } });
+      setFitFeedback(null);
       setDocumentTheme(optimized.theme);
     } else {
-      setDocumentTheme({
-        fitOnePage: true,
-        ...(certCount >= 4 ? { compactCertifications: true } : {}),
-      });
+      setFitFeedback(`Too much content for ${targetCompactPages} ${targetCompactPages === 1 ? 'page' : 'pages'} — kept spacing readable`);
     }
   };
+  const applyRelaxedFit = () => {
+    if (!loaded) return;
+    const optimized = autoOptimizeTheme(profile, theme, {
+      allowFitOnePage: false,
+      allowExpand: true,
+      actualPages: loaded.pdf.numPages,
+      lastPageFillRatio: loaded.lastPageFillRatio,
+    });
+    if (optimized.changed) {
+      setPreFitState({ profileId: profile.profileId, theme: { ...theme } });
+      setFitFeedback(null);
+      setDocumentTheme(optimized.theme);
+    } else {
+      setFitFeedback('Already at the widest safe spacing for 1 page');
+    }
+  };
+  const resetAutoFit = () => {
+    setFitFeedback(null);
+    if (activePreFit) {
+      setDocumentTheme(activePreFit);
+      setPreFitState(null);
+    } else {
+      setDocumentTheme({ fitOnePage: false });
+    }
+  };
+  const statusDetail = !current
+    ? <><Loader2 size={13} className="spin" />Updating preview</>
+    : fitFeedback
+      ? fitFeedback
+      : isSpillover && loaded
+        ? (loaded.lastPageLines === 0
+          ? `Page ${loaded.pdf.numPages} is blank`
+          : `Page ${loaded.pdf.numPages} has ~${loaded.lastPageLines} ${loaded.lastPageLines === 1 ? 'line' : 'lines'}`)
+        : canAutoExpand && loaded
+          ? `Light page (${Math.round(loaded.lastPageFillRatio * 100)}% full)`
+          : theme.fitOnePage && loaded && loaded.pdf.numPages > 1
+            ? `Still ${loaded.pdf.numPages} pages — try hiding older entries or trimming a few bullets`
+            : 'Matches your PDF';
   return <>
     <div className={`pagination-status ${failed || unsupported ? 'pagination-warning' : ''}`} aria-live="polite" aria-atomic="true" data-pagination-current={current && !failed ? 'true' : 'false'}>
-      {unsupported ? <><AlertCircle size={15} /><span>Unpaginated · PDF fonts support Latin script only</span></> : failed ? <><AlertCircle size={15} /><span>Couldn’t update pages</span><button className="text-button" onClick={() => { setParseRetry(x => x + 1); result.retry(); }}>Retry</button></> : <><FileText size={15} /><strong>{current && loaded ? `${loaded.pdf.numPages} ${loaded.pdf.numPages === 1 ? 'page' : 'pages'} · ${theme.pageSize === 'Letter' ? 'Letter' : 'A4'}` : loaded ? 'Updating page count…' : 'Preparing pages…'}</strong><span className="pagination-detail">{current ? (theme.fitOnePage && loaded && loaded.pdf.numPages > 1 ? `Still ${loaded.pdf.numPages} pages — try compact certifications or trimming a few bullets` : 'Matches your PDF') : <><Loader2 size={13} className="spin" />Updating preview</>}</span>{(canAutoFit || (!unsupported && !failed && current && theme.fitOnePage)) && <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>{canAutoFit && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={applyAutoFit}>Auto-fit 1 page</button>}{!unsupported && !failed && current && theme.fitOnePage && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={() => setDocumentTheme({ fitOnePage: false })}>Reset fit</button>}</span>}</>}
+      {unsupported ? <><AlertCircle size={15} /><span>Unpaginated · PDF fonts support Latin script only</span></> : failed ? <><AlertCircle size={15} /><span>Couldn’t update pages</span><button className="text-button" onClick={() => { setParseRetry(x => x + 1); result.retry(); }}>Retry</button></> : <><FileText size={15} /><strong>{current && loaded ? `${loaded.pdf.numPages} ${loaded.pdf.numPages === 1 ? 'page' : 'pages'} · ${theme.pageSize === 'Letter' ? 'Letter' : 'A4'}` : loaded ? 'Updating page count…' : 'Preparing pages…'}</strong><span className="pagination-detail">{statusDetail}</span>{(canAutoCompact || canAutoExpand || canResetFit) && <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>{canAutoCompact && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={applyAutoFit}>Auto-fit {targetCompactPages} {targetCompactPages === 1 ? 'page' : 'pages'}</button>}{canAutoExpand && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={applyRelaxedFit}>Relax spacing</button>}{canResetFit && <button type="button" className="text-button" style={{ marginLeft: 0 }} onClick={resetAutoFit}>Reset fit</button>}</span>}</>}
     </div>
     <div ref={stage} className={`preview-stage paginated-stage ${!current && loaded && !unsupported ? 'preview-is-updating' : ''}`} role="region" tabIndex={0} aria-label="Paginated resume preview" aria-busy={!current && !unsupported && !failed}>
       {unsupported ? <><p className="pagination-fallback-note">Your text is kept. Accurate page breaks need PDF fonts for this script; this is a continuous preview.</p><Unpaginated profile={profile} theme={theme} scale={scale} onEdit={onEdit} /></> : loaded ? Array.from({ length: loaded.pdf.numPages }, (_, i) => <PDFPage key={`${loaded.key}-${i}`} document={loaded} number={i + 1} scale={scale} anchors={loaded.anchors.filter(a => a.page === i + 1)} root={stage.current} onEdit={onEdit} />) : <div className="page-preview-placeholder" style={{ width: WIDTH * scale, height: 1123 * scale } as CSSProperties}>{failed ? <AlertCircle size={24} /> : <Loader2 size={24} className="spin" />}<p>{failed ? 'Preview unavailable. Retry above or open PDF preview.' : `Preparing your ${theme.pageSize === 'Letter' ? 'Letter' : 'A4'} pages…`}</p></div>}

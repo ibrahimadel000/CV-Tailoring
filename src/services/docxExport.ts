@@ -1,6 +1,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { CVProfile, CustomResumeSection, DocumentTheme, ResumeHeader } from '@/types/schema';
 import {
+  formatDateRange,
   fullName,
   headline,
   orderedSections,
@@ -9,6 +10,7 @@ import {
   type SectionId,
 } from '@/components/builder/resumeModel';
 import { orderedSkillGroups } from '@/components/builder/skillPresentation';
+import { visiblePhoto } from '@/components/builder/photoModel';
 
 export interface DocxExportOptions {
   pageSize?: 'A4' | 'Letter';
@@ -72,7 +74,7 @@ export function normalizeExternalUrl(raw: string, kind: 'web' | 'email' = 'web')
 
 class RelationshipRegistry {
   private readonly byTarget = new Map<string, string>();
-  private readonly entries: { id: string; target: string }[] = [];
+  private readonly entries: { id: string; type: string; target: string; external: boolean }[] = [];
   private nextId = 2; // rId1 is reserved for styles.xml
 
   addHyperlink(target: string): string {
@@ -80,15 +82,31 @@ class RelationshipRegistry {
     if (existing) return existing;
     const id = `rId${this.nextId++}`;
     this.byTarget.set(target, id);
-    this.entries.push({ id, target });
+    this.entries.push({
+      id,
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+      target,
+      external: true,
+    });
+    return id;
+  }
+
+  addImage(target: string): string {
+    const id = `rId${this.nextId++}`;
+    this.entries.push({
+      id,
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+      target,
+      external: false,
+    });
     return id;
   }
 
   toRelsXml(): string {
     const links = this.entries
       .map(
-        ({ id, target }) =>
-          `  <Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXml(target)}" TargetMode="External"/>`,
+        ({ id, type, target, external }) =>
+          `  <Relationship Id="${id}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
       )
       .join('\n');
     return [
@@ -127,6 +145,7 @@ interface RunStyle {
   underline?: boolean;
   color?: string;
   sizeHp?: number;
+  letterSpacingTwips?: number;
   forceLtr?: boolean;
 }
 
@@ -146,6 +165,7 @@ function buildRun(text: string, style: RunStyle = {}): string {
   }
   if (style.caps && !rtl) rPrParts.push('<w:caps/>');
   if (style.color) rPrParts.push(`<w:color w:val="${style.color}"/>`);
+  if (style.letterSpacingTwips && !rtl) rPrParts.push(`<w:spacing w:val="${style.letterSpacingTwips}"/>`);
   if (style.sizeHp) rPrParts.push(`<w:sz w:val="${style.sizeHp}"/><w:szCs w:val="${style.sizeHp}"/>`);
   if (style.underline) rPrParts.push('<w:u w:val="single"/>');
   if (style.forceLtr) {
@@ -167,16 +187,17 @@ function buildHyperlinkRun(
   label: string,
   url: string,
   rels: RelationshipRegistry,
-  accentHex: string,
+  colorHex: string,
   sizeHp: number,
   inRtlParagraph: boolean,
+  underline = true,
 ): string {
   const rId = rels.addHyperlink(url);
   const rPrParts = [
     '<w:rStyle w:val="Hyperlink"/>',
-    `<w:color w:val="${accentHex}"/>`,
+    `<w:color w:val="${colorHex}"/>`,
     `<w:sz w:val="${sizeHp}"/><w:szCs w:val="${sizeHp}"/>`,
-    '<w:u w:val="single"/>',
+    underline ? '<w:u w:val="single"/>' : '<w:u w:val="none"/>',
   ];
   if (inRtlParagraph) rPrParts.push('<w:rtl w:val="0"/>');
   return `<w:hyperlink r:id="${rId}" w:history="1"><w:r><w:rPr>${rPrParts.join('')}</w:rPr><w:t xml:space="preserve">${escapeXml(label)}</w:t></w:r></w:hyperlink>`;
@@ -191,6 +212,7 @@ interface ParagraphOpts {
   keepNext?: boolean;
   keepLines?: boolean;
   pageBreakBefore?: boolean;
+  topBorder?: { color: string; sz: number; space: number };
   bottomBorder?: { color: string; sz: number; space: number };
   shadingFill?: string;
   rightTabPos?: number;
@@ -204,10 +226,15 @@ function buildParagraph(innerXml: string, opts: ParagraphOpts = {}): string {
   if (opts.keepNext) pPr.push('<w:keepNext/>');
   if (opts.keepLines) pPr.push('<w:keepLines/>');
   if (opts.pageBreakBefore) pPr.push('<w:pageBreakBefore/>');
-  if (opts.bottomBorder) {
-    pPr.push(
-      `<w:pBdr><w:bottom w:val="single" w:sz="${opts.bottomBorder.sz}" w:space="${opts.bottomBorder.space}" w:color="${opts.bottomBorder.color}"/></w:pBdr>`,
-    );
+  if (opts.topBorder || opts.bottomBorder) {
+    const bdrParts: string[] = [];
+    if (opts.topBorder) {
+      bdrParts.push(`<w:top w:val="single" w:sz="${opts.topBorder.sz}" w:space="${opts.topBorder.space}" w:color="${opts.topBorder.color}"/>`);
+    }
+    if (opts.bottomBorder) {
+      bdrParts.push(`<w:bottom w:val="single" w:sz="${opts.bottomBorder.sz}" w:space="${opts.bottomBorder.space}" w:color="${opts.bottomBorder.color}"/>`);
+    }
+    pPr.push(`<w:pBdr>${bdrParts.join('')}</w:pBdr>`);
   }
   if (opts.shadingFill) {
     pPr.push(`<w:shd w:val="clear" w:color="auto" w:fill="${opts.shadingFill}"/>`);
@@ -261,12 +288,64 @@ function collectHeaderContacts(h: ResumeHeader): ContactPiece[] {
   return pieces;
 }
 
-function buildContentTypesXml(): string {
+function decodeBase64Bytes(b64: string): Uint8Array {
+  const bin = globalThis.atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function parsePhotoDataUri(dataUri: string): { ext: 'png' | 'jpg'; mime: string; bytes: Uint8Array } | null {
+  const m = /^data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUri.trim());
+  if (!m) return null;
+  const rawType = m[1].toLowerCase();
+  const ext: 'png' | 'jpg' = rawType === 'png' ? 'png' : 'jpg';
+  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  try {
+    const bytes = decodeBase64Bytes(m[2].replace(/\s+/g, ''));
+    if (!bytes.length) return null;
+    return { ext, mime, bytes };
+  } catch {
+    return null;
+  }
+}
+
+function buildInlineImageRun(
+  relId: string,
+  sizePt: number,
+  shape: 'circle' | 'rounded' = 'rounded',
+  altText = 'Profile photo',
+): string {
+  const emu = Math.round(sizePt * 12700);
+  const geom = shape === 'circle' ? 'ellipse' : 'roundRect';
+  return (
+    '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+    `<wp:extent cx="${emu}" cy="${emu}"/>` +
+    '<wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+    `<wp:docPr id="1" name="ProfilePhoto" descr="${escapeXml(altText)}"/>` +
+    '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+    '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+    '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    `<pic:nvPicPr><pic:cNvPr id="0" name="ProfilePhoto"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu}" cy="${emu}"/></a:xfrm><a:prstGeom prst="${geom}"><a:avLst/></a:prstGeom></pic:spPr>` +
+    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
+  );
+}
+
+function buildContentTypesXml(photoExt?: 'png' | 'jpg'): string {
+  const photoType = photoExt === 'png'
+    ? '  <Default Extension="png" ContentType="image/png"/>'
+    : photoExt === 'jpg'
+      ? '  <Default Extension="jpg" ContentType="image/jpeg"/>'
+      : '';
   return [
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
     '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
     '  <Default Extension="xml" ContentType="application/xml"/>',
+    ...(photoType ? [photoType] : []),
     '  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>',
     '  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>',
     '</Types>',
@@ -351,7 +430,7 @@ export function buildResumeDocxBytes(
 
   const bodySizeHp = ptToHalfPoints(m.size);
   const smallSizeHp = Math.max(15, bodySizeHp - 2);
-  const headingSizeHp = Math.max(18, bodySizeHp);
+  const headingSizeHp = ptToHalfPoints(m.sectionTitleSize);
   const nameSizeHp = ptToHalfPoints(m.headerNameSize);
   const headlineSizeHp = ptToHalfPoints(m.headerHeadlineSize);
   const contactSizeHp = ptToHalfPoints(m.headerContactSize);
@@ -366,15 +445,39 @@ export function buildResumeDocxBytes(
 
   const isClassic = theme.layoutStyle === 'classic';
   const isMinimal = theme.layoutStyle === 'minimal';
-  const bulletColorHex = !isClassic && !isMinimal ? accentHex : '243044';
-  const headerAlign: 'center' | undefined = isClassic ? 'center' : undefined;
+  const isTechnical = theme.layoutStyle === 'technical';
+  const isExecutive = theme.layoutStyle === 'executive';
+  const isCenteredHeader = isClassic || isExecutive;
+  const italicSubtitle = isClassic || isExecutive;
+  const bulletColorHex = !isClassic && !isMinimal && !isExecutive ? accentHex : '243044';
+  const headerAlign: 'center' | undefined = isCenteredHeader ? 'center' : undefined;
 
   // ── Header ──
   const nameText = plainText(fullName(profile)).trim();
   const headlineText = plainText(headline(profile)).trim();
   const contactPieces = collectHeaderContacts(profile.resumeHeader.data);
+  const photo = visiblePhoto(profile);
+  const decodedPhoto = photo ? parsePhotoDataUri(photo.source) : null;
+  let photoMediaPath: string | null = null;
+  let photoRelId: string | null = null;
+  if (decodedPhoto) {
+    photoMediaPath = `word/media/photo.${decodedPhoto.ext}`;
+    photoRelId = rels.addImage(`media/photo.${decodedPhoto.ext}`);
+  }
+
+  if (photoRelId && isCenteredHeader) {
+    paragraphs.push(
+      buildParagraph(buildInlineImageRun(photoRelId, m.photoSize, photo?.shape ?? 'rounded', nameText ? `${nameText} photo` : 'Profile photo'), {
+        align: 'center',
+        spaceBefore: 0,
+        spaceAfter: 100,
+        keepNext: true,
+      }),
+    );
+  }
 
   if (nameText || headlineText || contactPieces.length) {
+    const headerStartIdx = paragraphs.length;
     if (nameText) {
       paragraphs.push(
         buildParagraph(
@@ -388,7 +491,7 @@ export function buildResumeDocxBytes(
             bidi: isRTLText(nameText),
             bottomBorder:
               !headlineText && !contactPieces.length
-                ? { color: accentHex, sz: isClassic ? 8 : 16, space: 6 }
+                ? { color: accentHex, sz: isClassic || isExecutive ? 8 : isTechnical ? 12 : 16, space: 6 }
                 : undefined,
           },
         ),
@@ -407,7 +510,7 @@ export function buildResumeDocxBytes(
             keepNext: true,
             bidi: isRTLText(headlineText),
             bottomBorder: !contactPieces.length
-              ? { color: accentHex, sz: isClassic ? 8 : 16, space: 6 }
+              ? { color: accentHex, sz: isClassic || isExecutive ? 8 : isTechnical ? 12 : 16, space: 6 }
               : undefined,
           },
         ),
@@ -420,7 +523,7 @@ export function buildResumeDocxBytes(
         .map((c, idx) => {
           const sep = idx > 0 ? buildRun('  ·  ', { color: mutedHex, sizeHp: contactSizeHp, forceLtr: contactRtl }) : '';
           const pieceXml = c.url
-            ? buildHyperlinkRun(c.label, c.url, rels, accentHex, contactSizeHp, contactRtl)
+            ? buildHyperlinkRun(c.label, c.url, rels, mutedHex, contactSizeHp, contactRtl, false)
             : buildRun(c.label, {
                 color: mutedHex,
                 sizeHp: contactSizeHp,
@@ -432,14 +535,38 @@ export function buildResumeDocxBytes(
       paragraphs.push(
         buildParagraph(runs, {
           align: headerAlign,
-          spaceBefore: 0,
+          spaceBefore: isExecutive ? 60 : 0,
           spaceAfter: ptToTwips(m.headerPadBottom),
           line: 260,
           bidi: contactRtl,
-          bottomBorder: { color: accentHex, sz: isClassic ? 8 : 16, space: 6 },
+          topBorder: isExecutive ? { color: 'CBD5E1', sz: 6, space: 4 } : undefined,
+          bottomBorder: isExecutive
+            ? { color: 'CBD5E1', sz: 6, space: 4 }
+            : { color: accentHex, sz: isClassic ? 8 : isTechnical ? 12 : 16, space: 6 },
         }),
       );
     }
+    if (photoRelId && !isCenteredHeader && paragraphs.length > headerStartIdx) {
+      const textPars = paragraphs.splice(headerStartIdx);
+      const photoColW = ptToTwips(m.photoSize + 14);
+      const textColW = Math.max(2000, contentWidthTwips - photoColW);
+      const photoPar = buildParagraph(
+        buildInlineImageRun(photoRelId, m.photoSize, photo?.shape ?? 'rounded', nameText ? `${nameText} photo` : 'Profile photo'),
+        { spaceBefore: 0, spaceAfter: 0 },
+      );
+      const headerRtl = isRTLText(nameText) || isRTLText(headlineText);
+      const noBorders = '<w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/>';
+      paragraphs.push(
+        `<w:tbl><w:tblPr>${headerRtl ? '<w:bidiVisual/>' : ''}<w:tblW w:w="${contentWidthTwips}" w:type="dxa"/><w:tblBorders>${noBorders}</w:tblBorders><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${photoColW}"/><w:gridCol w:w="${textColW}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${photoColW}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>${photoPar}</w:tc><w:tc><w:tcPr><w:tcW w:w="${textColW}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>${textPars.join('')}</w:tc></w:tr></w:tbl>`,
+      );
+    }
+  } else if (photoRelId && !isCenteredHeader) {
+    paragraphs.push(
+      buildParagraph(
+        buildInlineImageRun(photoRelId, m.photoSize, photo?.shape ?? 'rounded', 'Profile photo'),
+        { spaceBefore: 0, spaceAfter: ptToTwips(m.headerPadBottom) },
+      ),
+    );
   }
 
   // Helper emitters
@@ -448,7 +575,7 @@ export function buildResumeDocxBytes(
     if (!cleanTitle) return;
     paragraphs.push(
       buildParagraph(
-        buildRun(cleanTitle, { bold: true, caps: true, color: accentHex, sizeHp: headingSizeHp }),
+        buildRun(cleanTitle, { bold: true, caps: true, color: accentHex, sizeHp: headingSizeHp, letterSpacingTwips: 14 }),
         {
           styleId: 'Heading1',
           keepNext: true,
@@ -458,7 +585,10 @@ export function buildResumeDocxBytes(
           spaceAfter: 80,
           line: 240,
           bidi: isRTLText(cleanTitle),
-          bottomBorder: isMinimal ? undefined : { color: isClassic ? accentHex : 'CBD5E1', sz: 6, space: 3 },
+          topBorder: isMinimal ? { color: 'F1F5F9', sz: 18, space: 2 } : undefined,
+          bottomBorder: isMinimal
+            ? { color: 'F1F5F9', sz: 18, space: 2 }
+            : { color: isClassic || isExecutive || isTechnical ? accentHex : 'CBD5E1', sz: 6, space: 3 },
           shadingFill: isMinimal ? 'F1F5F9' : undefined,
         },
       ),
@@ -468,13 +598,17 @@ export function buildResumeDocxBytes(
   const pushTitleDateLine = (
     titleText: string,
     dateText: string,
-    opts: { spaceBefore: number; keepNext?: boolean; pageBreakBefore?: boolean },
+    opts: { spaceBefore: number; keepNext?: boolean; pageBreakBefore?: boolean; inlineSubtitle?: string; inlineSubtitleXml?: string },
   ) => {
     const t = plainText(titleText).trim();
+    const sub = opts.inlineSubtitle ? plainText(opts.inlineSubtitle).trim() : '';
     const d = plainText(dateText).trim();
-    const bidi = isRTLText(t) || isRTLText(d);
+    const bidi = isRTLText(t) || isRTLText(sub) || isRTLText(d);
     const runs =
       buildRun(t, { bold: true, color: inkHex, sizeHp: bodySizeHp }) +
+      (opts.inlineSubtitleXml
+        ? buildRun(' — ', { color: mutedHex, sizeHp: smallSizeHp }) + opts.inlineSubtitleXml
+        : sub ? buildRun(` — ${sub}`, { color: mutedHex, sizeHp: smallSizeHp }) : '') +
       (d
         ? `<w:r><w:tab/></w:r>${buildRun(d, {
             color: mutedHex,
@@ -484,6 +618,7 @@ export function buildResumeDocxBytes(
         : '');
     paragraphs.push(
       buildParagraph(runs, {
+        keepLines: true,
         keepNext: opts.keepNext,
         pageBreakBefore: opts.pageBreakBefore,
         rightTabPos: d ? contentWidthTwips : undefined,
@@ -521,11 +656,11 @@ export function buildResumeDocxBytes(
     const clean = plainText(text).trim();
     if (!clean) return;
     const lines = clean.split(/\n+/).map(x => x.trim()).filter(Boolean);
-    lines.forEach((part, idx) => {
+    lines.forEach(part => {
       paragraphs.push(
         buildParagraph(buildRun(part, { sizeHp: bodySizeHp }), {
           keepLines: true,
-          keepNext: keepNext || idx < lines.length - 1,
+          keepNext,
           spaceBefore: 0,
           spaceAfter,
           line: bodyLine,
@@ -540,6 +675,7 @@ export function buildResumeDocxBytes(
 
   for (const secId of sectionOrder) {
     if (secId === 'summary') {
+      if (profile.summary.hidden) continue;
       const text = plainText(profile.summary.data).trim();
       if (!text) continue;
       pushSectionHeading('summary', profile.summary.title || 'Profile');
@@ -548,18 +684,21 @@ export function buildResumeDocxBytes(
     }
 
     if (secId === 'experience') {
+      if (profile.experience.hidden) continue;
       const entries = profile.experience.data.filter(
         e =>
+          !e.hidden &&
+          (
           plainText(e.roleTitle).trim() ||
           plainText(e.companyName).trim() ||
           plainText(e.description || '').trim() ||
-          e.bullets.some(b => plainText(b.text).trim()),
+          e.bullets.some(b => plainText(b.text).trim())),
       );
       if (!entries.length) continue;
       const firstExpBreak = profile.pageLayout?.entries?.[entries[0].id] === 'new-page';
       pushSectionHeading('experience', profile.experience.title || 'Experience', firstExpBreak);
       entries.forEach((e, idx) => {
-        const date = [e.startDate, e.endDate].map(x => (x || '').trim()).filter(Boolean).join(' – ');
+        const date = formatDateRange(e.startDate, e.endDate);
         const subtitle = [e.companyName, e.city].map(x => plainText(x || '').trim()).filter(Boolean).join(' · ');
         const desc = plainText(e.description || '').trim();
         const bullets = e.bullets.map(b => plainText(b.text).trim()).filter(Boolean);
@@ -567,14 +706,16 @@ export function buildResumeDocxBytes(
         const pageBreak = idx > 0 && mode === 'new-page';
         const together = mode === 'together';
 
+        const inlineExpSub = isTechnical && subtitle && plainText(e.roleTitle).trim() ? subtitle : undefined;
         pushTitleDateLine(e.roleTitle || subtitle, date, {
           spaceBefore: idx === 0 ? 40 : itemGapTwips,
-          keepNext: Boolean(subtitle || desc || bullets.length),
+          keepNext: Boolean((!inlineExpSub && subtitle) || desc || bullets.length),
           pageBreakBefore: pageBreak,
+          inlineSubtitle: inlineExpSub,
         });
-        if (subtitle && e.roleTitle.trim()) {
+        if (subtitle && e.roleTitle.trim() && !inlineExpSub) {
           paragraphs.push(
-            buildParagraph(buildRun(subtitle, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
+            buildParagraph(buildRun(subtitle, { italic: italicSubtitle, color: mutedHex, sizeHp: smallSizeHp }), {
               keepNext: Boolean(desc || bullets.length),
               spaceBefore: 0,
               spaceAfter: 30,
@@ -590,12 +731,15 @@ export function buildResumeDocxBytes(
     }
 
     if (secId === 'projects') {
+      if (profile.projects.hidden) continue;
       const entries = profile.projects.data.filter(
         e =>
+          !e.hidden &&
+          (
           plainText(e.name).trim() ||
           plainText(e.role || '').trim() ||
           plainText(e.url || '').trim() ||
-          e.bullets.some(b => plainText(b.text).trim()),
+          e.bullets.some(b => plainText(b.text).trim())),
       );
       if (!entries.length) continue;
       const firstProjBreak = profile.pageLayout?.entries?.[entries[0].id] === 'new-page';
@@ -611,30 +755,32 @@ export function buildResumeDocxBytes(
         const together = mode === 'together';
         const subRole = name ? role : '';
 
+        const subBidi = isRTLText(subRole);
+        const subParts: string[] = [];
+        if (subRole) subParts.push(buildRun(subRole, { italic: italicSubtitle, color: mutedHex, sizeHp: smallSizeHp }));
+        if (subRole && rawUrl) subParts.push(buildRun(' · ', { color: mutedHex, sizeHp: smallSizeHp, forceLtr: subBidi }));
+        if (rawUrl) {
+          subParts.push(
+            normalizedUrl
+              ? buildHyperlinkRun(rawUrl, normalizedUrl, rels, mutedHex, smallSizeHp, subBidi, false)
+              : buildRun(rawUrl, { color: mutedHex, sizeHp: smallSizeHp, forceLtr: subBidi }),
+          );
+        }
+        const inlineProjXml = isTechnical && name && subParts.length ? subParts.join('') : undefined;
         pushTitleDateLine(name || role, '', {
           spaceBefore: idx === 0 ? 40 : itemGapTwips,
-          keepNext: Boolean(subRole || rawUrl || bullets.length),
+          keepNext: Boolean((!inlineProjXml && subParts.length) || bullets.length),
           pageBreakBefore: pageBreak,
+          inlineSubtitleXml: inlineProjXml,
         });
-        if (subRole || rawUrl) {
-          const bidi = isRTLText(subRole);
-          const parts: string[] = [];
-          if (subRole) parts.push(buildRun(subRole, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }));
-          if (subRole && rawUrl) parts.push(buildRun(' · ', { color: mutedHex, sizeHp: smallSizeHp, forceLtr: bidi }));
-          if (rawUrl) {
-            parts.push(
-              normalizedUrl
-                ? buildHyperlinkRun(rawUrl, normalizedUrl, rels, accentHex, smallSizeHp, bidi)
-                : buildRun(rawUrl, { color: mutedHex, sizeHp: smallSizeHp, forceLtr: bidi }),
-            );
-          }
+        if (subParts.length && !inlineProjXml) {
           paragraphs.push(
-            buildParagraph(parts.join(''), {
+            buildParagraph(subParts.join(''), {
               keepNext: Boolean(bullets.length),
               spaceBefore: 0,
               spaceAfter: 30,
               line: bodyLine,
-              bidi,
+              bidi: subBidi,
             }),
           );
         }
@@ -644,6 +790,7 @@ export function buildResumeDocxBytes(
     }
 
     if (secId === 'skills') {
+      if (profile.skills.hidden) continue;
       const groups = orderedSkillGroups(profile.skills.data);
       if (!groups.length) continue;
       pushSectionHeading('skills', profile.skills.title || 'Skills');
@@ -670,31 +817,34 @@ export function buildResumeDocxBytes(
     }
 
     if (secId === 'education') {
+      if (profile.education.hidden) continue;
       const entries = profile.education.data.filter(
-        e => plainText(e.degree).trim() || plainText(e.institution).trim(),
+        e => !e.hidden && (plainText(e.degree).trim() || plainText(e.institution).trim()),
       );
       if (!entries.length) continue;
-      pushSectionHeading('education', profile.education.title || 'Education');
+      const firstEduBreak = profile.pageLayout?.entries?.[entries[0].id] === 'new-page';
+      pushSectionHeading('education', profile.education.title || 'Education', firstEduBreak);
       entries.forEach((e, idx) => {
         const date =
-          [e.startDate, e.endDate].map(x => (x || '').trim()).filter(Boolean).join(' – ') ||
-          (e.graduationDate || '').trim();
+          formatDateRange(e.startDate, e.endDate) || (e.graduationDate || '').trim();
         const subtitle = [e.institution, e.city].map(x => plainText(x || '').trim()).filter(Boolean).join(' · ');
         const details = [
           plainText(e.description || '').trim(),
           e.gpa ? `GPA: ${plainText(e.gpa).trim()}` : '',
           e.honors?.map(h => plainText(h).trim()).filter(Boolean).join(' · ') || '',
         ].filter(Boolean);
-        const pageBreak = profile.pageLayout?.entries?.[e.id] === 'new-page';
+        const pageBreak = idx > 0 && profile.pageLayout?.entries?.[e.id] === 'new-page';
 
+        const inlineEduSub = isTechnical && subtitle && plainText(e.degree).trim() ? subtitle : undefined;
         pushTitleDateLine(e.degree || subtitle, date, {
           spaceBefore: idx === 0 ? 40 : itemGapTwips,
-          keepNext: Boolean(subtitle || details.length),
+          keepNext: Boolean((!inlineEduSub && subtitle) || details.length),
           pageBreakBefore: pageBreak,
+          inlineSubtitle: inlineEduSub,
         });
-        if (subtitle && e.degree.trim()) {
+        if (subtitle && plainText(e.degree).trim() && !inlineEduSub) {
           paragraphs.push(
-            buildParagraph(buildRun(subtitle, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
+            buildParagraph(buildRun(subtitle, { italic: italicSubtitle, color: mutedHex, sizeHp: smallSizeHp }), {
               keepNext: Boolean(details.length),
               spaceBefore: 0,
               spaceAfter: 20,
@@ -709,7 +859,8 @@ export function buildResumeDocxBytes(
     }
 
     if (secId === 'certifications') {
-      const entries = profile.certifications.data.filter(c => plainText(c.name).trim());
+      if (profile.certifications.hidden) continue;
+      const entries = profile.certifications.data.filter(c => !c.hidden && plainText(c.name).trim());
       if (!entries.length) continue;
       const firstCertBreak = profile.pageLayout?.entries?.[entries[0].id] === 'new-page';
       pushSectionHeading('certifications', profile.certifications.title || 'Certifications', firstCertBreak);
@@ -751,8 +902,9 @@ export function buildResumeDocxBytes(
           }
           rowsXml.push(`<w:tr><w:trPr><w:cantSplit/></w:trPr>${cellsXml.join('')}</w:tr>`);
         }
+        const certRtl = entries.some(c => isRTLText(c.name) || isRTLText(c.issuer || ''));
         paragraphs.push(
-          `<w:tbl><w:tblPr><w:tblW w:w="${contentWidthTwips}" w:type="dxa"/><w:tblBorders><w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/></w:tblBorders><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${halfW}"/><w:gridCol w:w="${halfW}"/></w:tblGrid>${rowsXml.join('')}</w:tbl>`,
+          `<w:tbl><w:tblPr>${certRtl ? '<w:bidiVisual/>' : ''}<w:tblW w:w="${contentWidthTwips}" w:type="dxa"/><w:tblBorders><w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/></w:tblBorders><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="60" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${halfW}"/><w:gridCol w:w="${halfW}"/></w:tblGrid>${rowsXml.join('')}</w:tbl>`,
         );
       } else {
         entries.forEach((c, idx) => {
@@ -767,7 +919,7 @@ export function buildResumeDocxBytes(
           });
           if (issuer) {
             paragraphs.push(
-              buildParagraph(buildRun(issuer, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
+              buildParagraph(buildRun(issuer, { italic: italicSubtitle, color: mutedHex, sizeHp: smallSizeHp }), {
                 keepLines: true,
                 spaceBefore: 0,
                 spaceAfter: 20,
@@ -784,28 +936,29 @@ export function buildResumeDocxBytes(
     if (secId.startsWith('custom:')) {
       const customId = secId.slice('custom:'.length);
       const custom: CustomResumeSection | undefined = (profile.customSections ?? []).find(c => c.id === customId);
-      if (!custom) continue;
+      if (!custom || custom.hidden) continue;
       if (custom.title.trim().toLowerCase() === 'imported details') continue;
 
       const kind = custom.kind ?? 'text';
       if (kind === 'experience') {
         const entries = (custom.entries ?? []).filter(
-          e => plainText(e.title).trim() || plainText(e.organization).trim() || plainText(e.description).trim(),
+          e => !e.hidden && (plainText(e.title).trim() || plainText(e.organization).trim() || plainText(e.description).trim()),
         );
         if (!entries.length) continue;
-        pushSectionHeading(secId, custom.title.trim() || 'Additional information');
+        const firstCustomBreak = profile.pageLayout?.entries?.[entries[0].id] === 'new-page';
+        pushSectionHeading(secId, custom.title.trim() || 'Additional information', firstCustomBreak);
         entries.forEach((e, idx) => {
-          const date = [e.startDate, e.endDate].map(x => (x || '').trim()).filter(Boolean).join(' – ');
+          const date = formatDateRange(e.startDate, e.endDate);
           const subtitle = [e.organization, e.location].map(x => plainText(x || '').trim()).filter(Boolean).join(' · ');
           const desc = plainText(e.description || '').trim();
           pushTitleDateLine(e.title || subtitle, date, {
             spaceBefore: idx === 0 ? 40 : itemGapTwips,
             keepNext: Boolean(subtitle || desc),
-            pageBreakBefore: profile.pageLayout?.entries?.[e.id] === 'new-page',
+            pageBreakBefore: idx > 0 && profile.pageLayout?.entries?.[e.id] === 'new-page',
           });
           if (subtitle && e.title.trim()) {
             paragraphs.push(
-              buildParagraph(buildRun(subtitle, { italic: isClassic, color: mutedHex, sizeHp: smallSizeHp }), {
+              buildParagraph(buildRun(subtitle, { italic: italicSubtitle, color: mutedHex, sizeHp: smallSizeHp }), {
                 keepNext: Boolean(desc),
                 spaceBefore: 0,
                 spaceAfter: 20,
@@ -849,7 +1002,7 @@ export function buildResumeDocxBytes(
 
   const documentXml = [
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">',
     '  <w:body>',
     ...paragraphs.map(p => `    ${p}`),
     `    ${sectPr}`,
@@ -859,13 +1012,17 @@ export function buildResumeDocxBytes(
 
   const stylesXml = buildStylesXml(latinFont, csFont, bodySizeHp, bodyLine, accentHex);
 
-  return zipSync({
-    '[Content_Types].xml': strToU8(buildContentTypesXml()),
+  const files: Record<string, Uint8Array> = {
+    '[Content_Types].xml': strToU8(buildContentTypesXml(decodedPhoto?.ext)),
     '_rels/.rels': strToU8(buildRootRelsXml()),
     'word/_rels/document.xml.rels': strToU8(rels.toRelsXml()),
     'word/styles.xml': strToU8(stylesXml),
     'word/document.xml': strToU8(documentXml),
-  });
+  };
+  if (decodedPhoto && photoMediaPath) {
+    files[photoMediaPath] = decodedPhoto.bytes;
+  }
+  return zipSync(files);
 }
 
 export function buildResumeDocxBlob(

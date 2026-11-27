@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALLOWED_MODELS, createRateLimiter, handleTailorRequest, isConfiguredApiKey } from './tailorHandler.mjs';
+import { handleImportRequest } from './importHandler.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -116,7 +117,57 @@ const server = http.createServer(async (req, res) => {
       clientIp: process.env.TRUST_PROXY === '1' ? undefined : (req.socket?.remoteAddress || 'local'),
       rateLimiter,
     });
-    console.log(`[tailor] ${req.method} model=${reqModel} status=${webRes.status} elapsed=${Date.now() - startedAt}ms`);
+    const rawResolved = webRes.headers.get('x-tailor-resolved-model') || '';
+    const resolvedModel = ALLOWED_MODELS.has(rawResolved) ? rawResolved : reqModel;
+    const rawAttempts = webRes.headers.get('x-tailor-attempts') || '';
+    const attemptsLog = /^\d+$/.test(rawAttempts) ? rawAttempts : '0';
+    console.log(`[tailor] ${req.method} model=${reqModel} resolved=${resolvedModel} attempts=${attemptsLog} status=${webRes.status} elapsed=${Date.now() - startedAt}ms`);
+    const outHeaders = {};
+    webRes.headers.forEach((v, k) => { outHeaders[k] = v; });
+    res.writeHead(webRes.status, outHeaders);
+    res.end(Buffer.from(await webRes.arrayBuffer()));
+    return;
+  }
+
+  if (url.pathname === '/api/import-cv') {
+    const abortController = new AbortController();
+    res.on('close', () => {
+      if (!res.writableEnded) abortController.abort();
+    });
+    let bodyBuf = Buffer.alloc(0);
+    if (req.method === 'POST') {
+      try {
+        bodyBuf = await readNodeBody(req, 6 * 1024 * 1024);
+      } catch (err) {
+        const status = err?.message === 'PAYLOAD_TOO_LARGE' ? 413 : 400;
+        res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: { code: status, message: 'Invalid or oversized import body (6 MB max).' } }));
+        return;
+      }
+    }
+    const headers = new Headers();
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (typeof v === 'string') headers.set(k, v);
+      else if (Array.isArray(v)) headers.set(k, v.join(', '));
+    }
+    if (!headers.has('x-forwarded-for') && req.socket?.remoteAddress) {
+      headers.set('x-forwarded-for', req.socket.remoteAddress);
+    }
+    const webReq = new Request(url.toString(), {
+      method: req.method,
+      headers,
+      body: req.method === 'POST' ? bodyBuf : undefined,
+      signal: abortController.signal,
+    });
+    const startedAt = Date.now();
+    const webRes = await handleImportRequest(webReq, {
+      apiKey: process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '',
+      accessToken: process.env.TAILOR_ACCESS_TOKEN || '',
+      allowedOrigin: process.env.TAILOR_ALLOWED_ORIGIN || '',
+      clientIp: process.env.TRUST_PROXY === '1' ? undefined : (req.socket?.remoteAddress || 'local'),
+      rateLimiter,
+    });
+    console.log(`[import-cv] ${req.method} status=${webRes.status} elapsed=${Date.now() - startedAt}ms`);
     const outHeaders = {};
     webRes.headers.forEach((v, k) => { outHeaders[k] = v; });
     res.writeHead(webRes.status, outHeaders);
